@@ -101,7 +101,7 @@ public class TabletScheduler extends MasterDaemon {
 
     private static final long SCHEDULE_INTERVAL_MS = 1000; // 1s
 
-    public static final int BALANCE_SLOT_NUM_FOR_PATH = 2;
+    public static final int BALANCE_SLOT_NUM_FOR_PATH = 32;
 
     private static final int MAX_SLOT_PER_PATH = 64;
     private static final int MIN_SLOT_PER_PATH = 2;
@@ -359,7 +359,7 @@ public class TabletScheduler extends MasterDaemon {
             // selectTabletsForBalance should depend on latest load statistics
             // do not select others balance task when there is running or pending balance tasks
             // to avoid generating repeated task
-            if (loadStatUpdated && getBalanceTabletsNumber() <= 0) {
+            if (loadStatUpdated && getBalanceTabletsNumber() < Config.max_balancing_tablets) {
                 long startTS = System.currentTimeMillis();
                 selectTabletsForBalance();
                 long usedTS = System.currentTimeMillis() - startTS;
@@ -1366,7 +1366,7 @@ public class TabletScheduler extends MasterDaemon {
     // get next batch of tablets from queue.
     private synchronized List<TabletSchedCtx> getNextTabletCtxBatch() {
         List<TabletSchedCtx> list = Lists.newArrayList();
-        int count = Math.max(MIN_BATCH_NUM, getCurrentAvailableSlotNum());
+        int count = 1000;
         while (count > 0) {
             TabletSchedCtx tablet = pendingTablets.poll();
             if (tablet == null) {
