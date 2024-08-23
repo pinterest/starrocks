@@ -116,6 +116,11 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("isSetStoragePath")
     private volatile boolean isSetStoragePath = false;
 
+    // This field is the rare piece of state associated with ComputeNodes and not backends
+    // (it should not be used in shared-nothing mode).
+    @SerializedName("res_iso_group")
+    private String resourceIsolationGroup;
+
     private volatile DataCacheMetrics dataCacheMetrics = null;
 
     private volatile int numRunningQueries = 0;
@@ -257,6 +262,13 @@ public class ComputeNode implements IComputable, Writable {
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    public String getResourceIsolationGroup() {
+        return resourceIsolationGroup;
+    }
+    public void setResourceIsolationGroup(String group) {
+        this.resourceIsolationGroup = group;
     }
 
     // for test only

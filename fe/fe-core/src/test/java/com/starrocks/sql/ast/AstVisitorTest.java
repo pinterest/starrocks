@@ -22,9 +22,9 @@ import org.junit.Test;
 public class AstVisitorTest {
     
     @Test
-    public void testVisitModifyFrontendHostClause() {
+    public void testVisitModifyFrontendClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
-        Object ret = visitor.visitModifyFrontendHostClause(null, null);
+        Object ret = visitor.visitModifyFrontendClause(null, null);
         Assert.assertNull(ret);
     }
 
@@ -32,6 +32,13 @@ public class AstVisitorTest {
     public void testVisitModifyBackendClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
         Object ret = visitor.visitModifyBackendClause(null, null);
+        Assert.assertNull(ret);
+    }
+
+    @Test
+    public void testVisitModifyComputeNodeClause() {
+        AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
+        Object ret = visitor.visitModifyComputeNodeClause(null, null);
         Assert.assertNull(ret);
     }
 }

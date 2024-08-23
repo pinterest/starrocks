@@ -831,6 +831,7 @@ alterClause
     | modifyBackendClause
     | addComputeNodeClause
     | dropComputeNodeClause
+    | modifyComputeNodeClause
     | modifyBrokerClause
     | alterLoadErrorUrlClause
     | createImageClause
@@ -881,6 +882,7 @@ dropFrontendClause
 
 modifyFrontendHostClause
   : MODIFY FRONTEND HOST string TO string
+  | MODIFY FRONTEND string SET propertyList
   ;
 
 addBackendClause
@@ -899,6 +901,10 @@ modifyBackendClause
    : MODIFY BACKEND HOST string TO string
    | MODIFY BACKEND string SET propertyList
    ;
+
+modifyComputeNodeClause
+  : MODIFY COMPUTE NODE string SET propertyList
+  ;
 
 addComputeNodeClause
    : ADD COMPUTE NODE string (',' string)*

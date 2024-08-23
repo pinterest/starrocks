@@ -17,23 +17,33 @@ package com.starrocks.analysis;
 
 import com.starrocks.ha.FrontendNodeType;
 
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Map;
 
-public class ModifyFrontendAddressClauseTest {
+public class ModifyFrontendClauseTest {
 
     @Test
     public void testCreateClause() {    
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("originalHost-test", "sandbox");
+        ModifyFrontendClause clause = new ModifyFrontendClause("originalHost-test", "sandbox");
         Assert.assertEquals("sandbox", clause.getDestHost());
         Assert.assertEquals("originalHost-test", clause.getSrcHost());
     }
 
     @Test
     public void testNormal() {
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test:1000", FrontendNodeType.FOLLOWER);
+        ModifyFrontendClause clause = new ModifyFrontendClause("test:1000", FrontendNodeType.FOLLOWER);
         Assert.assertTrue(clause.getHostPort().equals("test:1000"));
+    }
+
+    @Test
+    public void testCreateWithProperties() {
+        ModifyFrontendClause
+                clause1 = new ModifyFrontendClause("originalHost-test:port", Map.of("labels.group", "group:somegroup"), null);
+        Assert.assertEquals("originalHost-test:port", clause1.getHostPort());
+        Assert.assertEquals(Map.of("labels.group", "group:somegroup"), clause1.getProperties());
     }
 }

@@ -149,6 +149,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
+    public static final String PROPERTIES_LABELS_GROUP = "labels.group";
 
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
 
@@ -943,6 +944,16 @@ public class PropertyAnalyzer {
         return locationMap.entries().stream()
                 .map(entry -> entry.getKey() + ":" + entry.getValue())
                 .collect(Collectors.joining(","));
+    }
+
+    public static String getResourceIsolationGroupFromProperties(Map<String, String> properties)
+            throws UnsupportedOperationException {
+        String entry = properties.get(PROPERTIES_LABELS_GROUP);
+        String[] groupKV = entry.split(":");
+        if (groupKV.length != 2 || !groupKV[0].trim().equals("group")) {
+            throw new UnsupportedOperationException("the group property must be formatted 'group:<GROUP_ID>'");
+        }
+        return groupKV[1].trim();
     }
 
     public static String analyzeLocation(Map<String, String> properties, boolean removeAnalyzedProp) {

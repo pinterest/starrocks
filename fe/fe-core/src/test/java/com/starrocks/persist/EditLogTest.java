@@ -21,7 +21,9 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
@@ -154,6 +156,13 @@ public class EditLogTest {
         field2.setAccessible(true);
         field2.set(globalStateMgr, nodeMgr);
 
+        Field systemInfoField = nodeMgr.getClass().getDeclaredField("systemInfo");
+        systemInfoField.setAccessible(true);
+
+        SystemInfoService clusterInfo = new SystemInfoService();
+        clusterInfo.addComputeNode(new ComputeNode());
+        systemInfoField.set(nodeMgr, clusterInfo);
+
         return globalStateMgr;
     }
 
@@ -163,6 +172,7 @@ public class EditLogTest {
         List<Frontend> frontends = mgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
         fe.updateHostAndEditLogPort("testHost", 1000);
+        fe.setResourceIsolationGroup("somegroup2");
         JournalEntity journal = new JournalEntity();
         journal.setData(fe);
         journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
@@ -172,6 +182,23 @@ public class EditLogTest {
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
+        Assert.assertEquals("somegroup2", updatedfFe.getResourceIsolationGroup());
+    }
+
+    @Test
+    public void testOpModifyComputeNode() throws Exception {
+        GlobalStateMgr mgr = mockGlobalStateMgr();
+        List<ComputeNode> computeNodes = mgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+        ComputeNode cn = computeNodes.get(0);
+        cn.setResourceIsolationGroup("somegroup");
+        JournalEntity journal = new JournalEntity();
+        journal.setData(cn);
+        journal.setOpCode(OperationType.OP_COMPUTE_NODE_STATE_CHANGE);
+        EditLog editLog = new EditLog(null);
+        editLog.loadJournal(mgr, journal);
+        List<ComputeNode> updatedComputeNodes = mgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+        ComputeNode updatedCn = updatedComputeNodes.get(0);
+        Assert.assertEquals("somegroup", updatedCn.getResourceIsolationGroup());
     }
 
     @Test
