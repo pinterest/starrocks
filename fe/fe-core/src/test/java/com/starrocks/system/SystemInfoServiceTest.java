@@ -28,6 +28,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -128,7 +129,7 @@ public class SystemInfoServiceTest {
      * Test method for {@link SystemInfoService#modifyBackendProperty(ModifyBackendClause)}.
      */
     @Test
-    public void testModifyBackendProperty() throws DdlException {
+    public void testModifyBackendLocationProperty() throws DdlException {
         Backend be = new Backend(100, "originalHost", 1000);
         service.addBackend(be);
         Map<String, String> properties = Maps.newHashMap();
@@ -139,6 +140,30 @@ public class SystemInfoServiceTest {
         Backend backend = service.getBackendWithHeartbeatPort("originalHost", 1000);
         Assertions.assertNotNull(backend);
         Assertions.assertEquals("{rack=rack1}", backend.getLocation().toString());
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void testModifyBackendGroupPropertyThrowsException() throws DdlException {
+        Backend be = new Backend(100, "originalHost", 1000);
+        service.addBackend(be);
+        Map<String, String> properties = Maps.newHashMap();
+        String location = "rack:rack1";
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
+        ModifyBackendClause clause = new ModifyBackendClause("originalHost:1000", properties);
+        service.modifyBackendProperty(clause);
+    }
+
+    @Test
+    public void testModifyComputeNodeGroupProperty() throws DdlException {
+        ComputeNode cn = new ComputeNode(100, "originalHost", 1000);
+        service.addComputeNode(cn);
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("originalHost:1000", properties);
+        service.modifyComputeNodeProperty(clause);
+        ComputeNode computeNode = service.getComputeNodeWithHeartbeatPort("originalHost", 1000);
+        Assert.assertNotNull(computeNode);
+        Assert.assertEquals("writegroup", computeNode.getResourceIsolationGroup());
     }
 
     @Test

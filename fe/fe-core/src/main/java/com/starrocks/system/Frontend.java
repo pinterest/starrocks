@@ -62,6 +62,9 @@ public class Frontend extends JsonWriter {
     @SerializedName(value = "fid")
     private int fid = 0;
 
+    @SerializedName("res_iso_group")
+    private String resourceIsolationGroup;
+
     private int queryPort;
     private int rpcPort;
 
@@ -145,6 +148,13 @@ public class Frontend extends JsonWriter {
 
     public float getHeapUsedPercent() {
         return heapUsedPercent;
+    }
+
+    public String getResourceIsolationGroup() {
+        return resourceIsolationGroup;
+    }
+    public void setResourceIsolationGroup(String group) {
+        this.resourceIsolationGroup = group;
     }
 
     public void updateHostAndEditLogPort(String host, int editLogPort) {

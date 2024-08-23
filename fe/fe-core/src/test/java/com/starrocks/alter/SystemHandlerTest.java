@@ -23,6 +23,9 @@ import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.UserException;
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -30,10 +33,15 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import com.starrocks.system.Frontend;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +58,7 @@ public class SystemHandlerTest {
     private static FakeEditLog fakeEditLog;
     private static FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    @BeforeEach
+    @Before
     public void setUp() throws Exception {
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
@@ -59,14 +67,20 @@ public class SystemHandlerTest {
         systemHandler = new SystemHandler();
     }
 
-    @Test
-    public void testModifyBackendAddressLogic() {
-        assertThrows(RuntimeException.class, () -> {
-            ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
-            List<AlterClause> clauses = new ArrayList<>();
-            clauses.add(clause);
-            systemHandler.process(clauses, null, null);
-        });
+    @Test(expected = RuntimeException.class)
+    public void testModifyBackendAddressLogic() throws UserException {
+        ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
+        List<AlterClause> clauses = new ArrayList<>();
+        clauses.add(clause);
+        systemHandler.process(clauses, null, null);
+    }
+
+    @Test(expected = NullPointerException.class)
+    public void testModifyFrontendAddressLogic() throws UserException {
+        ModifyFrontendClause clause = new ModifyFrontendClause("127.0.0.1", "sandbox-fqdn");
+        List<AlterClause> clauses = new ArrayList<>();
+        clauses.add(clause);
+        systemHandler.process(clauses, null, null);
     }
 
     @Test
