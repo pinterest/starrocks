@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
@@ -386,6 +387,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // Return message
         return new ShowResultSet(builder.build(), messageResult);
     }
+
     public ShowResultSet modifyBackendProperty(ModifyBackendClause modifyBackendClause) throws DdlException {
         String backendHostPort = modifyBackendClause.getBackendHostPort();
         Map<String, String> properties = modifyBackendClause.getProperties();
@@ -1244,6 +1246,21 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
+    // Sets the fields relevant for both ComputeNodes and Backends
+    private void updateCommonInMemoryState(ComputeNode persistentState, ComputeNode inMemoryState) {
+        inMemoryState.setBePort(persistentState.getBePort());
+        inMemoryState.setHost(persistentState.getHost());
+        inMemoryState.setAlive(persistentState.isAlive());
+        inMemoryState.setDecommissioned(persistentState.isDecommissioned());
+        inMemoryState.setHttpPort(persistentState.getHttpPort());
+        inMemoryState.setBeRpcPort(persistentState.getBeRpcPort());
+        inMemoryState.setBrpcPort(persistentState.getBrpcPort());
+        inMemoryState.setLastUpdateMs(persistentState.getLastUpdateMs());
+        inMemoryState.setLastStartTime(persistentState.getLastStartTime());
+        inMemoryState.setBackendState(persistentState.getBackendState());
+        inMemoryState.setDecommissionType(persistentState.getDecommissionType());
+    }
+
     public void updateInMemoryStateBackend(Backend persistentState) {
         long id = persistentState.getId();
         Backend inMemoryState = getBackend(id);
@@ -1254,18 +1271,8 @@ public class SystemInfoService implements GsonPostProcessable {
             // These two operations do not guarantee the order.
             return;
         }
-        inMemoryState.setBePort(persistentState.getBePort());
-        inMemoryState.setHost(persistentState.getHost());
-        inMemoryState.setAlive(persistentState.isAlive());
-        inMemoryState.setDecommissioned(persistentState.isDecommissioned());
-        inMemoryState.setHttpPort(persistentState.getHttpPort());
-        inMemoryState.setBeRpcPort(persistentState.getBeRpcPort());
-        inMemoryState.setBrpcPort(persistentState.getBrpcPort());
-        inMemoryState.setLastUpdateMs(persistentState.getLastUpdateMs());
-        inMemoryState.setLastStartTime(persistentState.getLastStartTime());
+        updateCommonInMemoryState(persistentState, inMemoryState);
         inMemoryState.setDisks(persistentState.getDisks());
-        inMemoryState.setBackendState(persistentState.getBackendState());
-        inMemoryState.setDecommissionType(persistentState.getDecommissionType());
         inMemoryState.setLocation(persistentState.getLocation());
     }
 

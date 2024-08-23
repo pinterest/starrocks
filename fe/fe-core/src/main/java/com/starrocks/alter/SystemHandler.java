@@ -71,7 +71,9 @@ import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -152,9 +154,9 @@ public class SystemHandler extends AlterHandler {
         }
 
         @Override
-        public Void visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, Void context) {
+        public Void visitModifyFrontendClause(ModifyFrontendClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getNodeMgr().modifyFrontendHost(clause);
+                GlobalStateMgr.getCurrentState().getNodeMgr().modifyFrontend(clause);
             });
             return null;
         }
@@ -171,6 +173,14 @@ public class SystemHandler extends AlterHandler {
         public Void visitDropBackendClause(DropBackendClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(clause);
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitModifyComputeNodeClause(ModifyComputeNodeClause clause, Void context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().modifyComputeNodeProperty(clause);
             });
             return null;
         }

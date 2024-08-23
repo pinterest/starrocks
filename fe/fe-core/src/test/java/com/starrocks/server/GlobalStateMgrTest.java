@@ -43,22 +43,26 @@ import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -66,6 +70,7 @@ import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -75,6 +80,12 @@ public class GlobalStateMgrTest {
     public void setUp() {
         Config.meta_dir = UUID.randomUUID().toString();
         Config.plugin_dir = UUID.randomUUID().toString();
+        UtFrameUtils.PseudoImage.setUpImageVersion();
+    }
+
+    @After
+    public void tearDown() {
+        MetaContext.remove();
     }
 
     @Test
@@ -86,6 +97,7 @@ public class GlobalStateMgrTest {
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
         imageWriter.setOutputStream(image2.getDataOutputStream());
         globalStateMgr.saveHeader(imageWriter.getDataOutputStream());
+        MetaContext.get().setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_4);
         globalStateMgr.loadHeader(image2.getDataInputStream());
     }
 
@@ -123,11 +135,13 @@ public class GlobalStateMgrTest {
         List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
         fe.updateHostAndEditLogPort("testHost", 1000);
+        fe.setResourceIsolationGroup("somegroup");
         globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
         List<Frontend> updatedFrontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
+        Assert.assertEquals("somegroup", updatedfFe.getResourceIsolationGroup());
     }
 
     @Mocked
@@ -173,8 +187,8 @@ public class GlobalStateMgrTest {
         List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
 
-        ModifyFrontendClause clause1 = new ModifyFrontendClause(fe.getHost() + ":" + fe.getEditLogPort(),
-                Map.of("labels.resource_isolation_group", "group:somegroup"), NodePosition.ZERO);
+        ModifyFrontendClause clause1 = new ModifyFrontendClause(fe.getHost()+":"+fe.getEditLogPort(),
+                Map.of("labels.group", "group:somegroup"), NodePosition.ZERO);
         globalStateMgr.getNodeMgr().modifyFrontend(clause1);
         Assert.assertEquals("somegroup", fe.getResourceIsolationGroup());
 
@@ -186,17 +200,17 @@ public class GlobalStateMgrTest {
     @Test(expected = DdlException.class)
     public void testUpdateFeNotFoundException() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
+        ModifyFrontendClause clause = new ModifyFrontendClause("test", "sandbox-fqdn");
         // this case will occur [frontend does not exist] exception
-        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+        globalStateMgr.getNodeMgr().modifyFrontend(clause);
     }
 
     @Test(expected = DdlException.class)
     public void testUpdateModifyCurrentMasterException() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
+        ModifyFrontendClause clause = new ModifyFrontendClause("test-address", "sandbox-fqdn");
         // this case will occur [can not modify current master node] exception
-        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+        globalStateMgr.getNodeMgr().modifyFrontend(clause);
     }
 
     @Test(expected = DdlException.class)

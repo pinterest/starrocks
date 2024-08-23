@@ -306,7 +306,6 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     public String getResourceIsolationGroup() {
         return java.util.Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
-    
     public void setResourceIsolationGroup(String group) {
         this.resourceIsolationGroup = group;
     }

@@ -142,7 +142,6 @@ public class Frontend extends JsonWriter {
     public String getResourceIsolationGroup() {
         return Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
-    
     public void setResourceIsolationGroup(String group) {
         this.resourceIsolationGroup = group;
     }
