@@ -69,8 +69,6 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AddFollowerClause;
-import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.staros.StarMgrServer;
