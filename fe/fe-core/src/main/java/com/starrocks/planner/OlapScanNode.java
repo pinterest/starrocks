@@ -539,6 +539,8 @@ public class OlapScanNode extends ScanNode {
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                /* TODO(cbrennan) This would be best if it could return only replicas belonging to CNs in this FE's
+                    resource isolation group. */
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         visibleVersion, localBeId, schemaHash, warehouseId);
             } else {
@@ -607,6 +609,9 @@ public class OlapScanNode extends ScanNode {
                 internalRange.addToHosts(new TNetworkAddress(ip, port));
                 internalRange.setFill_data_cache(fillDataCache);
                 tabletIsNull = false;
+
+                // TODO(cbrennan) turn this into a debug statement once we've confirmed that we have a stable mapping for each group.
+                LOG.info("Ideally, tablet {} mapped to backend id {}", tablet.getId(), replica.getBackendId());
 
                 // for CBO
                 if (!collectedStat && replica.getRowCount() != -1) {

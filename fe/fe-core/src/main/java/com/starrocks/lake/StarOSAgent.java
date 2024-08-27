@@ -614,7 +614,15 @@ public class StarOSAgent {
     }
 
     public Set<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
+        // TODO(cbrennan) Here we'd want the shardInfo to include resource isolation group info, so we could get a
+        // different node for the shard depending on its resource isolation group. One problem is that
+        // getReplicaInfoList is a part of the staros module, which is not modifiable.
+        // Failed idea 1. Another workaround would be not filter using onlyPrimary, and then filter down later using
+        // node's resourceGroupId. However, it appears that the staros is returning only one replica even before the
+        // stream/filter on replica role
+        // Right now, seeing that we're only getting one replica for each shard.
         List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
+
         if (onlyPrimary) {
             replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
                     .collect(Collectors.toList());

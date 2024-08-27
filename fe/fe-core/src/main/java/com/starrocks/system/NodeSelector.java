@@ -23,6 +23,7 @@ import com.google.common.collect.Multimap;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections.CollectionUtils;
@@ -35,6 +36,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -91,12 +93,27 @@ public class NodeSelector {
         }
     }
 
+    public static boolean resourceIsolationGroupMatches(String rig1, String rig2) {
+        if (Objects.equals(rig1, rig2)) {
+            return true;
+        }
+        boolean unset1 = rig1 == null || rig1.isEmpty();
+        boolean unset2 = rig2 == null || rig2.isEmpty();
+        return unset1 && unset2;
+    }
+
     public List<Long> seqChooseComputeNodes(int computeNodeNum, boolean needAvailable, boolean isCreate) {
 
-        final List<ComputeNode> candidateComputeNodes =
+        List<ComputeNode> candidateComputeNodes =
                 needAvailable ? systemInfoService.getAvailableComputeNodes() : systemInfoService.getComputeNodes();
+
+        String thisFeRig = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
+        candidateComputeNodes = candidateComputeNodes.stream().
+                filter(cn -> resourceIsolationGroupMatches(cn.getResourceIsolationGroup(), thisFeRig)).
+                collect(Collectors.toList());
         if (CollectionUtils.isEmpty(candidateComputeNodes)) {
-            LOG.warn("failed to find any compute nodes, needAvailable={}", needAvailable);
+            LOG.warn("failed to find any compute nodes, needAvailable={}, resourceIsolationGroup={}",
+                    needAvailable, thisFeRig);
             return Collections.emptyList();
         }
 

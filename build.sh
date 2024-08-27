@@ -37,6 +37,12 @@ ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
 
+echo "here 1"
+if [ -z "$*" ]; then echo "No args"; fi
+echo "you passed me" $*
+
+
+
 export STARROCKS_HOME=${ROOT}
 
 if [ -z $BUILD_TYPE ]; then
@@ -110,6 +116,8 @@ Usage: $0 <options>
   "
   exit 1
 }
+echo "here 2"
+echo "$1"
 
 OPTS=$(getopt \
   -n $0 \
@@ -137,8 +145,11 @@ OPTS=$(getopt \
 if [ $? != 0 ] ; then
     usage
 fi
+echo "before eval set $1"
+
 
 eval set -- "$OPTS"
+echo "after eval set $1"
 
 BUILD_BE=
 BUILD_FE=
@@ -199,6 +210,7 @@ fi
 HELP=0
 if [ $# == 1 ] ; then
     # default. `sh build.sh``
+    echo "in here 1"
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
@@ -207,6 +219,7 @@ if [ $# == 1 ] ; then
     RUN_UT=0
 elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     # default. `sh build.sh -j 32`
+    echo "in here 1"
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
@@ -215,16 +228,20 @@ elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     RUN_UT=0
     PARALLEL=$2
 else
+    echo "in here 3, forcing just fe clean build regardless of cmd line args"
+    echo "$1"
+
     BUILD_BE=0
-    BUILD_FE=0
+    BUILD_FE=1
     BUILD_SPARK_DPP=0
     BUILD_HIVE_UDF=0
-    CLEAN=0
+    CLEAN=1
     RUN_UT=0
     while true; do
+        echo "$1"
         case "$1" in
             --be) BUILD_BE=1 ; shift ;;
-            --fe) BUILD_FE=1 ; shift ;;
+            --fe) BUILD_FE=1 ; echo "setting fe"; shift ;;
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
@@ -245,6 +262,8 @@ else
         esac
     done
 fi
+echo "here 3: "
+echo $BUILD_FE
 
 if [[ ${HELP} -eq 1 ]]; then
     usage
@@ -281,7 +300,9 @@ echo "Get params:
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
 "
-
+if [ ${CLEAN} -eq 1 ]; then
+  echo "blah"
+fi
 check_tool()
 {
     local toolname=$1
@@ -561,7 +582,7 @@ endTime=$(date +%s)
 totalTime=$((endTime - startTime))
 
 echo "***************************************"
-echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
+echo "Successfully build StarRocks ${MSG} ;"
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then
