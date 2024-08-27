@@ -644,7 +644,7 @@ public class StarOSAgent {
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
-        List<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId);
+        Set<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId, true);
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
@@ -657,7 +657,7 @@ public class StarOSAgent {
     }
 
     public long getPrimaryComputeNodeIdByShard(ShardInfo shardInfo) throws StarRocksException {
-        List<Long> ids = getAllNodeIdsByShard(shardInfo);
+        Set<Long> ids = getAllNodeIdsByShard(shardInfo, true);
         if (ids.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
@@ -679,9 +679,21 @@ public class StarOSAgent {
         }
     }
 
-    private List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {
+    public Set<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
+        // TODO(cbrennan) Here we'd want the shardInfo to include resource isolation group info, so we could get a
+        // different node for the shard depending on its resource isolation group. One problem is that
+        // getReplicaInfoList is a part of the staros module, which is not modifiable.
+        // Failed idea 1. Another workaround would be not filter using onlyPrimary, and then filter down later using
+        // node's resourceGroupId. However, it appears that the staros is returning only one replica even before the
+        // stream/filter on replica role
+        // Right now, seeing that we're only getting one replica for each shard.
         List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
-        List<Long> nodeIds = new ArrayList<>();
+
+        if (onlyPrimary) {
+            replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
+                    .collect(Collectors.toList());
+        }
+        Set<Long> nodeIds = Sets.newHashSet();
         replicas.stream()
                 .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))
                 .forEach(x -> x.ifPresent(nodeIds::add));
