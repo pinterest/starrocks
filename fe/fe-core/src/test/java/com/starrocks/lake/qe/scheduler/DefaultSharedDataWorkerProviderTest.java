@@ -37,9 +37,11 @@ import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
@@ -72,6 +74,7 @@ public class DefaultSharedDataWorkerProviderTest {
     private Map<Long, ComputeNode> id2ComputeNode;
     private Map<Long, ComputeNode> id2AllNodes;
     private DefaultSharedDataWorkerProvider.Factory factory;
+    private Frontend thisFe;
 
     private static <C extends ComputeNode> Map<Long, C> genWorkers(long startId, long endId,
                                                                    Supplier<C> factory) {
@@ -117,6 +120,16 @@ public class DefaultSharedDataWorkerProviderTest {
             }
         };
 
+        thisFe = new Frontend();
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
+                minTimes = 0;
+            }
+        };
+
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long nodeId) {
@@ -127,6 +140,8 @@ public class DefaultSharedDataWorkerProviderTest {
                 return node;
             }
         };
+
+
     }
 
     private WorkerProvider newWorkerProvider() {

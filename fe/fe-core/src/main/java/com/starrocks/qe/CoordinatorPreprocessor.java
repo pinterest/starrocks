@@ -143,6 +143,9 @@ public class CoordinatorPreprocessor {
     }
 
     private WorkerProvider.Factory newWorkerProviderFactory() {
+        // TODO(cbrennan): In a future implementation of resource isolation groups, we could create an entirely new
+        //  class and if all the compute nodes are ungrouped or no compute node matches the frontend group, we return
+        //  the Default.
         if (RunMode.isSharedDataMode()) {
             return new DefaultSharedDataWorkerProvider.Factory();
         } else {

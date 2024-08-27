@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
@@ -396,6 +397,16 @@ public class SystemInfoServiceTest {
             {
                 globalStateMgr.getAnalyzer();
                 result = analyzer;
+            }
+        };
+
+        Frontend thisFe = new Frontend();
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
+                minTimes = 0;
             }
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));

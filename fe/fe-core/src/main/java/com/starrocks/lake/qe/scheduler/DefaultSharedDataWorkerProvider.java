@@ -45,6 +45,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
 
+import static com.starrocks.system.NodeSelector.resourceIsolationGroupMatches;
+
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
  * 1. All Backends and ComputeNodes are treated the same as ComputeNodes.
@@ -71,7 +73,8 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                                int numUsedComputeNodes,
                                                ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
                                                long warehouseId) {
-
+            String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
+                    getNodeMgr().getMySelf().getResourceIsolationGroup();
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
             List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseId);
@@ -82,23 +85,27 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
 
-            ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode);
+            ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode,
+                    thisFeResourceIsolationGroup);
             if (availableComputeNodes.isEmpty()) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
 
-            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes,
+                    thisFeResourceIsolationGroup);
         }
     }
 
     /**
-     * All the compute nodes (including backends), including those that are not alive or in block list.
+     * All the compute nodes (including backends), including those that are not alive, in block list, and not matching
+     * the resource isolation group of the current frontend.
      */
     private final ImmutableMap<Long, ComputeNode> id2ComputeNode;
     /**
      * The available compute nodes, which are alive and not in the block list when creating the snapshot. It is still
      * possible that the node becomes unavailable later, it will be checked again in some of the interfaces.
+     * If we're using resource isolation groups, this only includes ComputeNodes of the same group as the frontend.
      */
     private final ImmutableMap<Long, ComputeNode> availableID2ComputeNode;
 
@@ -109,14 +116,25 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
+    private final String thisFeResourceIsolationGroup;
+
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
-                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode
+                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
+                                           String thisFeResourceIsolationGroup
     ) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
+        this.thisFeResourceIsolationGroup = thisFeResourceIsolationGroup;
         this.allComputeNodeIds = null;
+    }
+
+    @VisibleForTesting
+    public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
+                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode
+    ) {
+        this(id2ComputeNode, availableID2ComputeNode, null);
     }
 
     @Override
@@ -244,9 +262,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     public String toString() {
         StringBuilder out = new StringBuilder("compute node: ");
         id2ComputeNode.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
+                String.format("[%s alive: %b, available: %b, inBlacklist: %b, resourceIsolationGroupMatch: %b] ",
+                        backend.getHost(),
                         backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
-                        SimpleScheduler.isInBlocklist(backendID))));
+                        SimpleScheduler.isInBlocklist(backendID),
+                        resourceIsolationGroupMatches(this.thisFeResourceIsolationGroup,
+                                backend.getResourceIsolationGroup()))));
         return out.toString();
     }
 
@@ -270,10 +291,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return workers.values().asList().get(index);
     }
 
-    private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
+    private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers,
+                                                                          String thisFeResourceIsolationGroup) {
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
-            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
+            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
+                    resourceIsolationGroupMatches(thisFeResourceIsolationGroup, entry.getValue().getResourceIsolationGroup())) {
                 builder.put(entry);
             }
         }
