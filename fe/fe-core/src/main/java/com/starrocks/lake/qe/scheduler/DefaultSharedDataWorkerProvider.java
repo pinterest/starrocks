@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
 
-import static com.starrocks.system.NodeSelector.resourceIsolationGroupMatches;
+import static com.starrocks.lake.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -75,6 +75,9 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                                long warehouseId) {
             String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
                     getNodeMgr().getMySelf().getResourceIsolationGroup();
+            return captureAvailableWorkers(warehouseId, thisFeResourceIsolationGroup);
+        }
+        public DefaultSharedDataWorkerProvider captureAvailableWorkers(long warehouseId, String resourceIsolationGroup) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
             List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseId);
@@ -86,14 +89,13 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
             }
 
             ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode,
-                    thisFeResourceIsolationGroup);
+                    resourceIsolationGroup);
             if (availableComputeNodes.isEmpty()) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
-
             return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes,
-                    thisFeResourceIsolationGroup);
+                    resourceIsolationGroup);
         }
     }
 
@@ -116,17 +118,17 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
-    private final String thisFeResourceIsolationGroup;
+    private final String resourceIsolationGroup;
 
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                            ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                           String thisFeResourceIsolationGroup
+                                           String resourceIsolationGroup
     ) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
-        this.thisFeResourceIsolationGroup = thisFeResourceIsolationGroup;
+        this.resourceIsolationGroup = resourceIsolationGroup;
         this.allComputeNodeIds = null;
     }
 
@@ -266,7 +268,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                         backend.getHost(),
                         backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
                         SimpleScheduler.isInBlocklist(backendID),
-                        resourceIsolationGroupMatches(this.thisFeResourceIsolationGroup,
+                        resourceIsolationGroupMatches(this.resourceIsolationGroup,
                                 backend.getResourceIsolationGroup()))));
         return out.toString();
     }

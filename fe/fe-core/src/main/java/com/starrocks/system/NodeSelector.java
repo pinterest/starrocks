@@ -36,11 +36,12 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import static com.starrocks.lake.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
 
 /**
  * Select nodes when creating table or loading data.
@@ -93,14 +94,6 @@ public class NodeSelector {
         }
     }
 
-    public static boolean resourceIsolationGroupMatches(String rig1, String rig2) {
-        if (Objects.equals(rig1, rig2)) {
-            return true;
-        }
-        boolean unset1 = rig1 == null || rig1.isEmpty();
-        boolean unset2 = rig2 == null || rig2.isEmpty();
-        return unset1 && unset2;
-    }
 
     public List<Long> seqChooseComputeNodes(int computeNodeNum, boolean needAvailable, boolean isCreate) {
 
