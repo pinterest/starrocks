@@ -75,7 +75,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                                int numUsedComputeNodes,
                                                ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
                                                long warehouseId) {
-
+            String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
+                    getNodeMgr().getMySelf().getResourceIsolationGroup();
+            return captureAvailableWorkers(warehouseId, thisFeResourceIsolationGroup);
+        }
+        public DefaultSharedDataWorkerProvider captureAvailableWorkers(long warehouseId, String resourceIsolationGroup) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
             List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseId);
@@ -86,13 +90,14 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
 
-            ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode);
+            ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode,
+                    resourceIsolationGroup);
             if (availableComputeNodes.isEmpty()) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
-
-            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes,
+                    resourceIsolationGroup);
         }
     }
 
@@ -113,13 +118,17 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
+    private final String resourceIsolationGroup;
+
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                            ImmutableMap<Long, ComputeNode> availableID2ComputeNode
+                                           String resourceIsolationGroup
     ) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
+        this.resourceIsolationGroup = resourceIsolationGroup;
         this.allComputeNodeIds = null;
     }
 
@@ -278,9 +287,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     public String toString() {
         StringBuilder out = new StringBuilder("compute node: ");
         id2ComputeNode.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
+                String.format("[%s alive: %b, available: %b, inBlacklist: %b, resourceIsolationGroupMatch: %b] ",
+                        backend.getHost(),
                         backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
-                        SimpleScheduler.isInBlocklist(backendID))));
+                        SimpleScheduler.isInBlocklist(backendID),
+                        resourceIsolationGroupMatches(this.resourceIsolationGroup,
+                                backend.getResourceIsolationGroup()))));
         return out.toString();
     }
 
@@ -304,9 +316,8 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return workers.values().asList().get(index);
     }
 
-    private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
-        String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
-                getNodeMgr().getMySelf().getResourceIsolationGroup();
+    private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers,
+                                                                          String thisFeResourceIsolationGroup) {
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
             if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
