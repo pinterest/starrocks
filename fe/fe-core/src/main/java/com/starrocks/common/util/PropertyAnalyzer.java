@@ -150,6 +150,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
     public static final String PROPERTIES_LABELS_GROUP = "labels.group";
+    private static final String COLON_DELIMITER = ":";
+    private static final String PROPERTIES_GROUP = "group";
 
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
 
@@ -949,8 +951,8 @@ public class PropertyAnalyzer {
     public static String getResourceIsolationGroupFromProperties(Map<String, String> properties)
             throws UnsupportedOperationException {
         String entry = properties.get(PROPERTIES_LABELS_GROUP);
-        String[] groupKV = entry.split(":");
-        if (groupKV.length != 2 || !groupKV[0].trim().equals("group")) {
+        String[] groupKV = entry.split(COLON_DELIMITER);
+        if (groupKV.length != 2 || !groupKV[0].trim().equals(PROPERTIES_GROUP)) {
             throw new UnsupportedOperationException("the group property must be formatted 'group:<GROUP_ID>'");
         }
         return groupKV[1].trim();
