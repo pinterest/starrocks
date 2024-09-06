@@ -785,6 +785,10 @@ public class NodeMgr {
         if (modifyFrontendClause.getSrcHost() != null || modifyFrontendClause.getDestHost() != null) {
             throw new DdlException("Malformed ModifyFrontendClause. Shouldn't set properties and change host address.");
         }
+        Map<String, String> props = modifyFrontendClause.getProperties();
+        if (!props.containsKey(PROPERTIES_LABELS_GROUP)) {
+            throw new DdlException("Setting non-'group' property on frontend is not supported.");
+        }
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
@@ -799,10 +803,6 @@ public class NodeMgr {
             // note that we don't need to update the info in BDB since it's not relevant to BDB to which group the
             // frontend belongs.
             // step 1 update the fe information stored in memory.
-            Map<String, String> props = modifyFrontendClause.getProperties();
-            if (!props.containsKey(PROPERTIES_LABELS_GROUP)) {
-                throw new DdlException("Setting non-'group' property on frontend is not supported.");
-            }
             fe.setResourceIsolationGroup(getResourceIsolationGroupFromProperties(props));
             // step 2 editLog
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateFrontend(fe);

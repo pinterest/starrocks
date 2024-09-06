@@ -139,7 +139,6 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(100, "originalHost", 1000);
         service.addBackend(be);
         Map<String, String> properties = Maps.newHashMap();
-        String location = "rack:rack1";
         properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
         ModifyBackendClause clause = new ModifyBackendClause("originalHost:1000", properties);
         service.modifyBackendProperty(clause);
@@ -156,6 +155,28 @@ public class SystemInfoServiceTest {
         ComputeNode computeNode = service.getComputeNodeWithHeartbeatPort("originalHost", 1000);
         Assert.assertNotNull(computeNode);
         Assert.assertEquals("writegroup", computeNode.getResourceIsolationGroup());
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void testModifyComputeNodeBadGroupProperty1ThrowsException() throws DdlException {
+        ComputeNode cn = new ComputeNode(100, "originalHost", 1000);
+        service.addComputeNode(cn);
+        Map<String, String> properties = Maps.newHashMap();
+        // missing the "group:" prefix
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "writegroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("originalHost:1000", properties);
+        service.modifyComputeNodeProperty(clause);
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void testModifyComputeNodeBadGroupProperty2ThrowsException() throws DdlException {
+        ComputeNode cn = new ComputeNode(100, "originalHost", 1000);
+        service.addComputeNode(cn);
+        Map<String, String> properties = Maps.newHashMap();
+        // bad spaces
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, " group : writegroup ");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("originalHost:1000", properties);
+        service.modifyComputeNodeProperty(clause);
     }
 
     @Test

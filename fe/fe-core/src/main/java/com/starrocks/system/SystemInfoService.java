@@ -305,7 +305,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // check compute node existence
         ComputeNode computeNode = getComputeNodeWithHeartbeatPort(computeNodeHostPort.split(":")[0],
                 Integer.parseInt(computeNodeHostPort.split(":")[1]));
-        if (null == computeNode) {
+        if (computeNode == null) {
             throw new DdlException(String.format("computeNode [%s] not found", computeNodeHostPort));
         }
 
@@ -321,9 +321,12 @@ public class SystemInfoService implements GsonPostProcessable {
                     computeNode.setResourceIsolationGroup(DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
                     continue;
                 }
-                computeNode.setResourceIsolationGroup(getResourceIsolationGroupFromProperties(properties));
-                String opMessage = String.format("%s:%d's group has been modified to %s",
-                        computeNode.getHost(), computeNode.getHeartbeatPort(), properties);
+                String oldResourceIsolationGroup = computeNode.getResourceIsolationGroup();
+                String newResourceIsolationGroup = getResourceIsolationGroupFromProperties(properties);
+                computeNode.setResourceIsolationGroup(newResourceIsolationGroup);
+                String opMessage = String.format("%s:%d's group has been modified from %s to %s",
+                        computeNode.getHost(), computeNode.getHeartbeatPort(),
+                        oldResourceIsolationGroup, newResourceIsolationGroup);
                 messageResult.add(Collections.singletonList(opMessage));
             } else {
                 throw new UnsupportedOperationException("unsupported property: " + entry.getKey());
@@ -1155,6 +1158,8 @@ public class SystemInfoService implements GsonPostProcessable {
             // 1. SystemHandler drop the decommission backend
             // 2. at same time, user try to cancel the decommission of that backend.
             // These two operations do not guarantee the order.
+            LOG.warn(String.format("Not updating in memory state for backend, could be legitimate reason or bug: [%s]",
+                    persistentState));
             return;
         }
         updateCommonInMemoryState(persistentState, inMemoryState);
@@ -1170,6 +1175,8 @@ public class SystemInfoService implements GsonPostProcessable {
             // 1. SystemHandler drop the decommission compute node
             // 2. at same time, user try to cancel the decommission of that compute node.
             // These two operations do not guarantee the order.
+            LOG.warn(String.format("Not updating in memory state for compute node, could be legitimate reason or bug:" +
+                    " [%s]", persistentState));
             return;
         }
         updateCommonInMemoryState(persistentState, inMemoryState);

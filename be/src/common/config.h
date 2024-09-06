@@ -95,11 +95,15 @@ CONF_Int32(push_worker_count_high_priority, "3");
 
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
+// The min count of thread to publish version per transaction
+CONF_mInt32(transaction_publish_version_thread_pool_num_min, "0");
 
 // The count of thread to apply rowset in primary key table
 // 0 means apply worker count is equal to cpu core count
 CONF_mInt32(transaction_apply_worker_count, "0");
 CONF_mInt32(get_pindex_worker_count, "0");
+CONF_mInt32(transaction_apply_thread_pool_num_min, "0");
+CONF_Int32(transaction_apply_worker_idle_time_ms, "500");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -1319,17 +1323,20 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
 CONF_mBool(enable_json_flat, "false");
 
-// extract flat json column when row_num * null_factor < null_row_num
+// enable compaction is base on flat json, not whole json
+CONF_mBool(enable_compaction_flat_json, "true");
+
+// direct read flat json
+CONF_mBool(enable_lazy_dynamic_flat_json, "true");
+
+// extract flat json column when row_num * null_factor > null_row_num
 CONF_mDouble(json_flat_null_factor, "0.3");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
 CONF_mDouble(json_flat_sparsity_factor, "0.9");
 
-// only flatten json when the number of sub-field in the JSON exceeds the limit
-CONF_mInt32(json_flat_internal_column_min_limit, "5");
-
 // the maximum number of extracted JSON sub-field
-CONF_mInt32(json_flat_column_max, "20");
+CONF_mInt32(json_flat_column_max, "100");
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
@@ -1372,10 +1379,6 @@ CONF_mBool(enable_pk_strict_memcheck, "false");
 
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
-// When the keys that we want to delete, number of them is larger than this config,
-// we will fallback and using `DeleteRange` in rocksdb.
-CONF_mInt32(rocksdb_opt_delete_range_limit, "10000");
-
 CONF_mBool(skip_lake_pk_preload, "false");
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "false");
@@ -1411,5 +1414,11 @@ CONF_mInt32(thrift_max_frame_size, "16384000");
 // The RecursionLimit defines, how deep structures may be nested into each other. The default named DEFAULT_RECURSION_DEPTH
 // allows for structures nested up to 64 levels deep.
 CONF_mInt32(thrift_max_recursion_depth, "64");
+
+// if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
+// for now, only support non-pk LAKE compaction in size tierd compaction.
+CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// chunk size used by lake compaction
+CONF_mInt32(lake_compaction_chunk_size, "4096");
 
 } // namespace starrocks::config

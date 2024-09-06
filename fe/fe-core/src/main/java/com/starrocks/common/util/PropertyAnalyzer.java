@@ -150,6 +150,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
     public static final String PROPERTIES_LABELS_GROUP = "labels.group";
+    private static final String COLON_DELIMITER = ":";
+    private static final String PROPERTIES_GROUP = "group";
 
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
 
@@ -169,6 +171,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
+    public static final String PROPERTIES_MUTABLE_BUCKET_NUM = "mutable_bucket_num";
 
     public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
 
@@ -424,6 +428,23 @@ public class PropertyAnalyzer {
             return bucketSize;
         } else {
             throw new SemanticException("Bucket size is not set");
+        }
+    }
+
+    public static long analyzeMutableBucketNum(Map<String, String> properties) {
+        long mutableBucketNum = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_MUTABLE_BUCKET_NUM)) {
+            try {
+                mutableBucketNum = Long.parseLong(properties.get(PROPERTIES_MUTABLE_BUCKET_NUM));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Mutable bucket num: " + e.getMessage());
+            }
+            if (mutableBucketNum < 0) {
+                throw new SemanticException("Illegal mutable bucket num: " + mutableBucketNum);
+            }
+            return mutableBucketNum;
+        } else {
+            throw new SemanticException("Mutable bucket num is not set");
         }
     }
 
@@ -949,8 +970,8 @@ public class PropertyAnalyzer {
     public static String getResourceIsolationGroupFromProperties(Map<String, String> properties)
             throws UnsupportedOperationException {
         String entry = properties.get(PROPERTIES_LABELS_GROUP);
-        String[] groupKV = entry.split(":");
-        if (groupKV.length != 2 || !groupKV[0].trim().equals("group")) {
+        String[] groupKV = entry.split(COLON_DELIMITER);
+        if (groupKV.length != 2 || !groupKV[0].trim().equals(PROPERTIES_GROUP)) {
             throw new UnsupportedOperationException("the group property must be formatted 'group:<GROUP_ID>'");
         }
         return groupKV[1].trim();
