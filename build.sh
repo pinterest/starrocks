@@ -98,11 +98,7 @@ Usage: $0 <options>
      --output-compile-time
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
-     --with-tenann
-                        build with vector index tenann library
-     --with-compress-debug-symbol {ON|OFF}
-                        build with compressing debug symbol. (default: $WITH_COMPRESS)
-     -h,--help          Show this help message
+
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
@@ -117,7 +113,8 @@ Usage: $0 <options>
 
 OPTS=$(getopt \
   -n $0 \
-  -o 'hj:' \
+  -o '' \
+  -o 'h' \
   -l 'be' \
   -l 'fe' \
   -l 'spark-dpp' \
@@ -129,12 +126,11 @@ OPTS=$(getopt \
   -l 'without-gcov' \
   -l 'without-java-ext' \
   -l 'without-starcache' \
-  -l 'with-brpc-keepalive' \
   -l 'use-staros' \
+  -l 'with-brpc-keepalive' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
-  -l 'with-tenann' \
-  -l 'with-compress-debug-symbol:' \
+  -o 'j:' \
   -l 'help' \
   -- "$@")
 
@@ -158,7 +154,6 @@ WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-WITH_TENANN=OFF
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -178,10 +173,6 @@ if [[ -z ${JEMALLOC_DEBUG} ]]; then
 fi
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
-fi
-
-if [[ -z ${WITH_TENANN} ]]; then
-  WITH_TENANN=ON
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -246,8 +237,6 @@ else
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
-            --with-tenann) WITH_TENANN=ON; shift ;;
-            --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -268,30 +257,29 @@ if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${B
 fi
 
 echo "Get params:
-    BUILD_BE                    -- $BUILD_BE
-    BE_CMAKE_TYPE               -- $BUILD_TYPE
-    BUILD_FE                    -- $BUILD_FE
-    BUILD_SPARK_DPP             -- $BUILD_SPARK_DPP
-    BUILD_HIVE_UDF              -- $BUILD_HIVE_UDF
-    CCACHE                      -- ${CCACHE}
-    CLEAN                       -- $CLEAN
-    RUN_UT                      -- $RUN_UT
-    WITH_GCOV                   -- $WITH_GCOV
-    WITH_BENCH                  -- $WITH_BENCH
-    WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
-    WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
-    WITH_STARCACHE              -- $WITH_STARCACHE
-    ENABLE_SHARED_DATA          -- $USE_STAROS
-    USE_AVX2                    -- $USE_AVX2
-    USE_AVX512                  -- $USE_AVX512
-    USE_SSE4_2                  -- $USE_SSE4_2
-    JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
-    PARALLEL                    -- $PARALLEL
-    ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
-    ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
-    BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
-    OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
-    WITH_TENANN                 -- $WITH_TENANN
+    BUILD_BE            -- $BUILD_BE
+    BE_CMAKE_TYPE       -- $BUILD_TYPE
+    BUILD_FE            -- $BUILD_FE
+    BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
+    BUILD_HIVE_UDF      -- $BUILD_HIVE_UDF
+    CCACHE              -- ${CCACHE}
+    CLEAN               -- $CLEAN
+    RUN_UT              -- $RUN_UT
+    WITH_GCOV           -- $WITH_GCOV
+    WITH_BENCH          -- $WITH_BENCH
+    WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
+    WITH_COMPRESS       -- $WITH_COMPRESS
+    WITH_STARCACHE      -- $WITH_STARCACHE
+    ENABLE_SHARED_DATA  -- $USE_STAROS
+    USE_AVX2            -- $USE_AVX2
+    USE_AVX512          -- $USE_AVX512
+    USE_SSE4_2          -- $USE_SSE4_2
+    JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
+    PARALLEL            -- $PARALLEL
+    ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
+    ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
+    OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
 "
 
 check_tool()
@@ -328,7 +316,6 @@ cd ${STARROCKS_HOME}
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
-    WITH_TENANN=OFF
 else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
@@ -392,7 +379,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
-                  -DWITH_TENANN=${WITH_TENANN}                          \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -486,7 +472,6 @@ fi
 if [ ${BUILD_BE} -eq 1 ]; then
     rm -rf ${STARROCKS_OUTPUT}/be/lib/*
     mkdir -p ${STARROCKS_OUTPUT}/be/lib/jni-packages
-    mkdir -p ${STARROCKS_OUTPUT}/be/lib/py-packages
 
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
@@ -563,8 +548,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/avro-1.9.2.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/avro-1.9.2.jar
-
-    cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
 
     MSG="${MSG} √ ${MSG_BE}"
 fi
