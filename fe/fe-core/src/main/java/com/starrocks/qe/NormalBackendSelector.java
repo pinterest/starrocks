@@ -81,13 +81,16 @@ public class NormalBackendSelector implements BackendSelector {
                 if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
                     if (workerProvider.allowUsingBackupNode()) {
                         long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id());
-                        LOG.debug("Select a backup node:{} for node:{}", backupNodeId, location.getBackend_id());
                         if (backupNodeId > 0) {
                             // using the backupNode to generate a new ScanRangeLocation
                             TScanRangeLocation backupLocation = new TScanRangeLocation();
                             backupLocation.setBackend_id(backupNodeId);
                             backupLocation.setServer(workerProvider.getWorkerById(backupNodeId).getAddress());
                             backupLocations.add(backupLocation);
+                            // TODO(cbrennan) turn into a debug statement and move it back up when done testing
+                            LOG.info("Select a backup node:{} for node:{} {}", backupNodeId,
+                                    location.getBackend_id(),
+                                    backupLocation.getServer());
                         }
                     }
                     continue;

@@ -100,6 +100,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.starrocks.common.util.PropertyAnalyzer.getResourceIsolationGroupFromProperties;
+import static com.starrocks.lake.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
 
 public class SystemInfoService implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
@@ -108,6 +109,8 @@ public class SystemInfoService implements GsonPostProcessable {
     @SerializedName(value = "be")
     protected volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
 
+    // TODO(cbrennan) Trace all usages of the ComputeNode references, make sure their resource isolation group
+    //  information is being used appropriately.
     @SerializedName(value = "ce")
     protected volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 
@@ -315,7 +318,7 @@ public class SystemInfoService implements GsonPostProcessable {
             if (entry.getKey().equals(AlterSystemStmtAnalyzer.PROP_KEY_GROUP)) {
                 // "" means clean group label
                 if (entry.getValue().isEmpty()) {
-                    computeNode.setResourceIsolationGroup("");
+                    computeNode.setResourceIsolationGroup(DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
                     continue;
                 }
                 String oldResourceIsolationGroup = computeNode.getResourceIsolationGroup();

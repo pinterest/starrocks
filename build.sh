@@ -95,7 +95,7 @@ Usage: $0 <options>
      --without-starcache
                         build Backend without starcache library
      -j                 build Backend parallel
-     --output-compile-time 
+     --output-compile-time
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
 
@@ -350,7 +350,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       fi
       export STARLET_INSTALL_DIR
     fi
-    
+
     if [ "${OUTPUT_COMPILE_TIME}" == "ON" ]; then
         rm -f ${ROOT}/compile_times.txt
         CXX_COMPILER_LAUNCHER=${ROOT}/build-support/compile_time.sh

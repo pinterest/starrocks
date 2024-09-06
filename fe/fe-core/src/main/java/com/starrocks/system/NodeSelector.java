@@ -23,6 +23,7 @@ import com.google.common.collect.Multimap;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections.CollectionUtils;
@@ -39,6 +40,8 @@ import java.util.Random;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import static com.starrocks.lake.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
 
 /**
  * Select nodes when creating table or loading data.
@@ -91,12 +94,19 @@ public class NodeSelector {
         }
     }
 
+
     public List<Long> seqChooseComputeNodes(int computeNodeNum, boolean needAvailable, boolean isCreate) {
 
-        final List<ComputeNode> candidateComputeNodes =
+        List<ComputeNode> candidateComputeNodes =
                 needAvailable ? systemInfoService.getAvailableComputeNodes() : systemInfoService.getComputeNodes();
+
+        String thisFeRig = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
+        candidateComputeNodes = candidateComputeNodes.stream().
+                filter(cn -> resourceIsolationGroupMatches(cn.getResourceIsolationGroup(), thisFeRig)).
+                collect(Collectors.toList());
         if (CollectionUtils.isEmpty(candidateComputeNodes)) {
-            LOG.warn("failed to find any compute nodes, needAvailable={}", needAvailable);
+            LOG.warn("failed to find any compute nodes, needAvailable={}, resourceIsolationGroup={}",
+                    needAvailable, thisFeRig);
             return Collections.emptyList();
         }
 
