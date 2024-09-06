@@ -280,7 +280,8 @@ import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyStorageVolumePropertiesClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -3854,7 +3855,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitModifyFrontendHostClause(StarRocksParser.ModifyFrontendHostClauseContext context) {
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new ModifyFrontendAddressClause(clusters.get(0), clusters.get(1), createPos(context));
+        if (context.HOST() != null) {
+            return new ModifyFrontendClause(clusters.get(0), clusters.get(1), createPos(context));
+        } else {
+            String frontendHostPort = clusters.get(0);
+            Map<String, String> properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+            return new ModifyFrontendClause(frontendHostPort, properties, createPos(context));
+        }
     }
 
     @Override
@@ -3893,6 +3904,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             return new ModifyBackendClause(backendHostPort, properties, createPos(context));
         }
+    }
+
+    @Override
+    public ParseNode visitModifyComputeNodeClause(StarRocksParser.ModifyComputeNodeClauseContext context) {
+        String backendHostPort = ((StringLiteral) visit(context.string())).getStringValue();
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new ModifyComputeNodeClause(backendHostPort, properties, createPos(context));
     }
 
     @Override

@@ -58,6 +58,9 @@ public class Frontend implements Writable {
     @SerializedName(value = "e")
     private int editLogPort;
 
+    @SerializedName("res_iso_group")
+    private String resourceIsolationGroup;
+
     private int queryPort;
     private int rpcPort;
 
@@ -127,6 +130,13 @@ public class Frontend implements Writable {
 
     public String getFeVersion() {
         return feVersion;
+    }
+
+    public String getResourceIsolationGroup() {
+        return resourceIsolationGroup;
+    }
+    public void setResourceIsolationGroup(String group) {
+        this.resourceIsolationGroup = group;
     }
 
     public void updateHostAndEditLogPort(String host, int editLogPort) {

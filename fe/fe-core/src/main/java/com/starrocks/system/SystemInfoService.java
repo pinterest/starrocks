@@ -76,6 +76,7 @@ import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
@@ -97,6 +98,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static com.starrocks.common.util.PropertyAnalyzer.getResourceIsolationGroupFromProperties;
 
 public class SystemInfoService implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
@@ -288,6 +291,49 @@ public class SystemInfoService implements GsonPostProcessable {
         builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
         List<List<String>> messageResult = new ArrayList<>();
         messageResult.add(Collections.singletonList(opMessage));
+        return new ShowResultSet(builder.build(), messageResult);
+    }
+
+
+    public ShowResultSet modifyComputeNodeProperty(ModifyComputeNodeClause modifyComputeNodeClause) throws DdlException {
+        String computeNodeHostPort = modifyComputeNodeClause.getComputeNodeHostPort();
+        Map<String, String> properties = modifyComputeNodeClause.getProperties();
+
+        // check compute node existence
+        ComputeNode computeNode = getComputeNodeWithHeartbeatPort(computeNodeHostPort.split(":")[0],
+                Integer.parseInt(computeNodeHostPort.split(":")[1]));
+        if (computeNode == null) {
+            throw new DdlException(String.format("computeNode [%s] not found", computeNodeHostPort));
+        }
+
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        List<List<String>> messageResult = new ArrayList<>();
+
+        // update backend based on properties
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equals(AlterSystemStmtAnalyzer.PROP_KEY_GROUP)) {
+                // "" means clean group label
+                if (entry.getValue().isEmpty()) {
+                    computeNode.setResourceIsolationGroup("");
+                    continue;
+                }
+                String oldResourceIsolationGroup = computeNode.getResourceIsolationGroup();
+                String newResourceIsolationGroup = getResourceIsolationGroupFromProperties(properties);
+                computeNode.setResourceIsolationGroup(newResourceIsolationGroup);
+                String opMessage = String.format("%s:%d's group has been modified from %s to %s",
+                        computeNode.getHost(), computeNode.getHeartbeatPort(),
+                        oldResourceIsolationGroup, newResourceIsolationGroup);
+                messageResult.add(Collections.singletonList(opMessage));
+            } else {
+                throw new UnsupportedOperationException("unsupported property: " + entry.getKey());
+            }
+        }
+
+        // persistence
+        GlobalStateMgr.getCurrentState().getEditLog().logComputeNodeStateChange(computeNode);
+
+        // Return message
         return new ShowResultSet(builder.build(), messageResult);
     }
 
@@ -1086,16 +1132,8 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
-    public void updateInMemoryStateBackend(Backend persistentState) {
-        long id = persistentState.getId();
-        Backend inMemoryState = getBackend(id);
-        if (inMemoryState == null) {
-            // backend may already be dropped. this may happen when
-            // 1. SystemHandler drop the decommission backend
-            // 2. at same time, user try to cancel the decommission of that backend.
-            // These two operations do not guarantee the order.
-            return;
-        }
+    // Sets the fields relevant for both ComputeNodes and Backends
+    private void updateCommonInMemoryState(ComputeNode persistentState, ComputeNode inMemoryState) {
         inMemoryState.setBePort(persistentState.getBePort());
         inMemoryState.setHost(persistentState.getHost());
         inMemoryState.setAlive(persistentState.isAlive());
@@ -1105,10 +1143,42 @@ public class SystemInfoService implements GsonPostProcessable {
         inMemoryState.setBrpcPort(persistentState.getBrpcPort());
         inMemoryState.setLastUpdateMs(persistentState.getLastUpdateMs());
         inMemoryState.setLastStartTime(persistentState.getLastStartTime());
-        inMemoryState.setDisks(persistentState.getDisks());
         inMemoryState.setBackendState(persistentState.getBackendState());
         inMemoryState.setDecommissionType(persistentState.getDecommissionType());
+    }
+
+    public void updateInMemoryStateBackend(Backend persistentState) {
+        long id = persistentState.getId();
+        Backend inMemoryState = getBackend(id);
+        if (inMemoryState == null) {
+            // backend may already be dropped. this may happen when
+            // 1. SystemHandler drop the decommission backend
+            // 2. at same time, user try to cancel the decommission of that backend.
+            // These two operations do not guarantee the order.
+            LOG.warn(String.format("Not updating in memory state for backend, could be legitimate reason or bug: [%s]",
+                    persistentState));
+            return;
+        }
+        updateCommonInMemoryState(persistentState, inMemoryState);
+        inMemoryState.setDisks(persistentState.getDisks());
         inMemoryState.setLocation(persistentState.getLocation());
+    }
+
+    public void updateInMemoryStateComputeNode(ComputeNode persistentState) {
+        long id = persistentState.getId();
+        ComputeNode inMemoryState = getComputeNode(id);
+        if (inMemoryState == null) {
+            // ComputeNode may already be dropped. this may happen when
+            // 1. SystemHandler drop the decommission compute node
+            // 2. at same time, user try to cancel the decommission of that compute node.
+            // These two operations do not guarantee the order.
+            LOG.warn(String.format("Not updating in memory state for compute node, could be legitimate reason or bug:" +
+                    " [%s]", persistentState));
+            return;
+        }
+        updateCommonInMemoryState(persistentState, inMemoryState);
+        // The difference between this function and updateInMemoryState is that we set group and not location nor disks
+        inMemoryState.setResourceIsolationGroup(persistentState.getResourceIsolationGroup());
     }
 
     public long getClusterAvailableCapacityB() {

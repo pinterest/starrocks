@@ -836,6 +836,10 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_BACKEND_STATE_CHANGE_V2 = 13026;
 
+    // TODO(cbrennan), when merging with new versions, make sure this doesn't conflict with another new operation
+    @IgnorableOnReplayFailed
+    public static final short OP_COMPUTE_NODE_STATE_CHANGE = 17095;
+
     public static final short OP_ADD_FRONTEND_V2 = 13027;
 
     public static final short OP_ADD_FIRST_FRONTEND_V2 = 13028;

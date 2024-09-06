@@ -70,7 +70,7 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -99,6 +99,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_LABELS_GROUP;
+import static com.starrocks.common.util.PropertyAnalyzer.getResourceIsolationGroupFromProperties;
 
 public class NodeMgr {
     private static final Logger LOG = LogManager.getLogger(NodeMgr.class);
@@ -774,9 +777,44 @@ public class NodeMgr {
         }
     }
 
-    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
-        String fqdn = modifyFrontendAddressClause.getDestHost();
+    public void modifyFrontend(ModifyFrontendClause modifyFrontendClause) throws DdlException {
+        if (modifyFrontendClause.getProperties() == null || modifyFrontendClause.getProperties().isEmpty()) {
+            modifyFrontendHost(modifyFrontendClause);
+            return;
+        }
+        if (modifyFrontendClause.getSrcHost() != null || modifyFrontendClause.getDestHost() != null) {
+            throw new DdlException("Malformed ModifyFrontendClause. Shouldn't set properties and change host address.");
+        }
+        Map<String, String> props = modifyFrontendClause.getProperties();
+        if (!props.containsKey(PROPERTIES_LABELS_GROUP)) {
+            throw new DdlException("Setting non-'group' property on frontend is not supported.");
+        }
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+        }
+        try {
+            Pair<String, Integer> pair = SystemInfoService
+                    .validateHostAndPort(modifyFrontendClause.getHostPort(), false);
+            String toBeModifyHost = pair.first;
+            Frontend fe = getFeByHost(toBeModifyHost);
+            if (fe == null) {
+                throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
+            }
+            // note that we don't need to update the info in BDB since it's not relevant to BDB to which group the
+            // frontend belongs.
+            // step 1 update the fe information stored in memory.
+            fe.setResourceIsolationGroup(getResourceIsolationGroupFromProperties(props));
+            // step 2 editLog
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateFrontend(fe);
+            LOG.info("send update fe editlog success, fe info is [{}]", fe.toString());
+        } finally {
+            unlock();
+        }
+    }
+
+    private void modifyFrontendHost(ModifyFrontendClause modifyFrontendClause) throws DdlException {
+        String toBeModifyHost = modifyFrontendClause.getSrcHost();
+        String fqdn = modifyFrontendClause.getDestHost();
         if (toBeModifyHost.equals(selfNode.first) && role == FrontendNodeType.LEADER) {
             throw new DdlException("can not modify current master node.");
         }
@@ -893,6 +931,7 @@ public class NodeMgr {
                 return;
             }
             fe.updateHostAndEditLogPort(frontend.getHost(), frontend.getEditLogPort());
+            fe.setResourceIsolationGroup(frontend.getResourceIsolationGroup());
             frontends.put(fe.getNodeName(), fe);
             LOG.info("update fe successfully, fe info is [{}]", frontend.toString());
         } finally {

@@ -36,7 +36,8 @@ import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.FrontendClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
@@ -51,10 +52,15 @@ import java.util.regex.Pattern;
 
 public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext> {
     public static final String PROP_KEY_LOCATION = PropertyAnalyzer.PROPERTIES_LABELS_LOCATION;
-    private static final Set<String> PROPS_SUPPORTED = new HashSet<>();
+    public static final String PROP_KEY_GROUP = PropertyAnalyzer.PROPERTIES_LABELS_GROUP;
+    private static final Set<String> FRONTEND_PROPS_SUPPORTED = new HashSet<>();
+    private static final Set<String> COMPUTE_NODE_PROPS_SUPPORTED = new HashSet<>();
+    private static final Set<String> BACKEND_PROPS_SUPPORTED = new HashSet<>();
 
     static {
-        PROPS_SUPPORTED.add(PROP_KEY_LOCATION);
+        FRONTEND_PROPS_SUPPORTED.add(PROP_KEY_GROUP);
+        COMPUTE_NODE_PROPS_SUPPORTED.add(PROP_KEY_GROUP);
+        BACKEND_PROPS_SUPPORTED.add(PROP_KEY_LOCATION);
     }
 
     public void analyze(DdlStmt ddlStmt, ConnectContext session) {
@@ -117,8 +123,13 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
     }
 
     @Override
-    public Void visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, ConnectContext context) {
-        checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
+    public Void visitModifyFrontendClause(ModifyFrontendClause clause, ConnectContext context) {
+        if (clause.getSrcHost() != null) {
+            checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
+        } else {
+            SystemInfoService.validateHostAndPort(clause.getHostPort(), false);
+            analyzeProperties(clause.getProperties(), FRONTEND_PROPS_SUPPORTED);
+        }
         return null;
     }
 
@@ -128,18 +139,25 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
             checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
         } else {
             SystemInfoService.validateHostAndPort(clause.getBackendHostPort(), false);
-            analyzeBackendProperties(clause.getProperties());
+            analyzeProperties(clause.getProperties(), BACKEND_PROPS_SUPPORTED);
         }
         return null;
     }
 
-    private void analyzeBackendProperties(Map<String, String> properties) {
+    @Override
+    public Void visitModifyComputeNodeClause(ModifyComputeNodeClause clause, ConnectContext context) {
+        SystemInfoService.validateHostAndPort(clause.getComputeNodeHostPort(), false);
+        analyzeProperties(clause.getProperties(), COMPUTE_NODE_PROPS_SUPPORTED);
+        return null;
+    }
+
+    private void analyzeProperties(Map<String, String> properties, Set<String> supportedProperties) {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String propKey = entry.getKey();
-            if (!PROPS_SUPPORTED.contains(propKey)) {
+            if (!supportedProperties.contains(propKey)) {
                 throw new SemanticException("unsupported property: " + propKey);
             }
-            if (propKey.equals(PROP_KEY_LOCATION)) {
+            if (propKey.equals(PROP_KEY_LOCATION) || propKey.equals(PROP_KEY_GROUP)) {
                 String propVal = entry.getValue();
                 if (propVal.isEmpty()) {
                     continue;
@@ -147,7 +165,7 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
                 // Support single level location label for now
                 String regex = "(\\s*[a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*)";
                 if (!Pattern.compile(regex).matcher(propVal).matches()) {
-                    throw new SemanticException("invalid location format: " + propVal +
+                    throw new SemanticException("invalid 'location' or 'group' format: " + propVal +
                             ", should be like: 'key:val'");
                 }
             }

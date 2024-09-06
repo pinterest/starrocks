@@ -18,23 +18,32 @@ package com.starrocks.sql.ast;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ModifyFrontendAddressClause extends FrontendClause {
+import java.util.Map;
+
+public class ModifyFrontendClause extends FrontendClause {
 
     protected String srcHost;
     protected String destHost;
 
-    public ModifyFrontendAddressClause(String hostPort, FrontendNodeType role) {
+    private Map<String, String> properties;
+
+    public ModifyFrontendClause(String hostPort, FrontendNodeType role) {
         super(hostPort, role, NodePosition.ZERO);
     }
 
-    public ModifyFrontendAddressClause(String srcHost, String destHost) {
+    public ModifyFrontendClause(String srcHost, String destHost) {
         this(srcHost, destHost, NodePosition.ZERO);
     }
 
-    public ModifyFrontendAddressClause(String srcHost, String destHost, NodePosition pos) {
+    public ModifyFrontendClause(String srcHost, String destHost, NodePosition pos) {
         super("", FrontendNodeType.UNKNOWN, pos);
         this.srcHost = srcHost;
         this.destHost = destHost;
+    }
+
+    public ModifyFrontendClause(String frontendHostPort, Map<String, String> properties, NodePosition pos) {
+        super(frontendHostPort, FrontendNodeType.UNKNOWN, pos);
+        this.properties = properties;
     }
 
     public String getSrcHost() {
@@ -45,8 +54,12 @@ public class ModifyFrontendAddressClause extends FrontendClause {
         return destHost;
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyFrontendHostClause(this, context);
+        return visitor.visitModifyFrontendClause(this, context);
     }
 }

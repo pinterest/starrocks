@@ -496,6 +496,11 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
                     break;
                 }
+                case OperationType.OP_COMPUTE_NODE_STATE_CHANGE: {
+                    ComputeNode cn = (ComputeNode) journal.getData();
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateComputeNode(cn);
+                    break;
+                }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
                 case OperationType.OP_ADD_FIRST_FRONTEND_V2:
                 case OperationType.OP_ADD_FRONTEND:
@@ -1494,6 +1499,10 @@ public class EditLog {
 
     public void logBackendStateChange(Backend be) {
         logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, be);
+    }
+
+    public void logComputeNodeStateChange(ComputeNode cn) {
+        logJsonObject(OperationType.OP_COMPUTE_NODE_STATE_CHANGE, cn);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
