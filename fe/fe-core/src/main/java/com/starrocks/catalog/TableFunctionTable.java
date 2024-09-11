@@ -423,7 +423,7 @@ public class TableFunctionTable extends Table {
         TNetworkAddress address;
         List<Long> nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
         if (RunMode.isSharedDataMode()) {
-            nodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(true));
+            nodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
         }
         if (nodeIds.isEmpty()) {
             if (RunMode.isSharedNothingMode()) {

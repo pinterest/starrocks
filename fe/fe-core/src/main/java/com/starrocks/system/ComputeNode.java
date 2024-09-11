@@ -47,6 +47,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+
 /**
  * This class extends the primary identifier of a compute node with computing capabilities
  * and no storage capacity。
@@ -265,7 +267,7 @@ public class ComputeNode implements IComputable, Writable {
     }
 
     public String getResourceIsolationGroup() {
-        return resourceIsolationGroup;
+        return java.util.Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
     public void setResourceIsolationGroup(String group) {
         this.resourceIsolationGroup = group;
