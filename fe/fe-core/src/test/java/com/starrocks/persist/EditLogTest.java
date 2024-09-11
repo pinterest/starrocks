@@ -14,20 +14,15 @@
 
 package com.starrocks.persist;
 
-import com.google.api.client.util.Maps;
 import com.starrocks.common.io.Text;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
-import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
-import com.starrocks.system.ResourceIsolationGroupUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
 import mockit.Expectations;
@@ -41,7 +36,6 @@ import org.junit.Test;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;

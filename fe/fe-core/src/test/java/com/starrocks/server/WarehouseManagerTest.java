@@ -14,7 +14,6 @@
 
 package com.starrocks.server;
 
-import com.google.api.client.util.Maps;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
@@ -22,18 +21,14 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
-import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
-import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -52,7 +47,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
