@@ -14,7 +14,6 @@
 
 package com.starrocks.server;
 
-import com.google.api.client.util.Maps;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
@@ -22,19 +21,14 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
-import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
-import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -46,14 +40,13 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import org.junit.Assert;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -81,14 +74,14 @@ public class WarehouseManagerTest {
                 () -> mgr.getAllComputeNodeIds("a"));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getAllComputeNodeIds(1L));
+        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse name: a not exist.",
+                () -> mgr.getComputeNodeId("a", null));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getComputeNodeId(1L, null));
-        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-                () -> mgr.getAliveComputeNodeId(1L, null));
     }
 
     @Test
-    public void testGetAliveComputeNodes() throws StarRocksException {
+    public void testGetAliveComputeNodes() throws UserException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public NodeMgr getNodeMgr() {
@@ -100,22 +93,6 @@ public class WarehouseManagerTest {
             @Mock
             public SystemInfoService getClusterInfo() {
                 return systemInfo;
-            }
-        };
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
-                    throws StarRocksException {
-                throw new StarRocksException("get all node ids by shard failure");
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-                minTimes = 0;
-                result = Lists.newArrayList(10003L, 10004L);
             }
         };
 
@@ -131,44 +108,24 @@ public class WarehouseManagerTest {
                 node.setAlive(true);
                 return node;
             }
-
-            @Mock
-            public boolean shouldUseInternalTabletToCnMapper() {
-                return tabletComputeNodeMapper.trackingNonDefaultResourceIsolationGroup();
-            }
-
-            @Mock
-            public TabletComputeNodeMapper internalTabletMapper() {
-                return tabletComputeNodeMapper;
-            }
         };
 
-        // We want to make sure we never call StarOSAgent if we're using resource isolation groups
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getStarOSAgent();
-                maxTimes = 0;
+                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                minTimes = 0;
+                result = Lists.newArrayList(10003L, 10004L);
             }
->>>>>>> 3aa54868956 (Charles's comments, check rig in WorkerProvider, rethink some stuff in tabletcomputenodemapper)
         };
 
         WarehouseManager mgr = new WarehouseManager();
         mgr.initDefaultWarehouse();
 
         List<Long> nodeIds = mgr.getAllComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assertions.assertEquals(2, nodeIds.size());
+        Assert.assertEquals(2, nodeIds.size());
 
         List<ComputeNode> nodes = mgr.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assertions.assertEquals(1, nodes.size());
-
-        LakeTablet tablet = new LakeTablet(1L);
-        Long nodeId = mgr.getAliveComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, tablet);
-        Assertions.assertNull(nodeId);
-    }
-
-    @Test
-    public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws StarRocksException {
-        // Original test - keeping for compatibility
+        Assert.assertEquals(1, nodes.size());
     }
 
     @Test
@@ -254,7 +211,6 @@ public class WarehouseManagerTest {
 
     @Test
     public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws UserException {
->>>>>>> 687120fc64c (node selection by resource group id)
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(true);
@@ -288,7 +244,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -317,21 +273,21 @@ public class WarehouseManagerTest {
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
         Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assertions.assertFalse(workerGroupId.isEmpty());
-        Assertions.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
+        Assert.assertFalse(workerGroupId.isEmpty());
+        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
 
         try {
             workerGroupId = Optional.ofNullable(null);
             workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(1111L);
-            Assertions.assertEquals(1, 2);   // can not be here
+            Assert.assertEquals(1, 2);   // can not be here
         } catch (ErrorReportException e) {
-            Assertions.assertTrue(workerGroupId.isEmpty());
-            Assertions.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
+            Assert.assertTrue(workerGroupId.isEmpty());
+            Assert.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
         }
     }
 
     @Test
-    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws StarRocksException {
+    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws UserException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(false);
@@ -365,7 +321,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -392,9 +348,9 @@ public class WarehouseManagerTest {
             WarehouseManager warehouseManager = new WarehouseManager();
             warehouseManager.initDefaultWarehouse();
             Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-            Assertions.assertTrue(workerGroupId.isEmpty());
+            Assert.assertTrue(workerGroupId.isEmpty());
         } catch (ErrorReportException e) {
-            Assertions.assertEquals(1, 2);   // can not be here
+            Assert.assertEquals(1, 2);   // can not be here
         }
 
         new MockUp<RunMode>() {
@@ -405,89 +361,11 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, 456, "aaa", null, null);
+        Partition partition = new Partition(123, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
-        ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class,
-                () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
-                        index, Collections.emptyList(), 1));
-        Assertions.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
-    }
-
-    @Test
-    public void testSelectWorkerGroupByWarehouseId_checkAliveNodesOnce(@Mocked WarehouseManager mockWarehouseMgr)
-            throws StarRocksException {
-        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
-        b1.setBePort(9060);
-        b1.setAlive(false);
-        b1.setWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-
-        new MockUp<NodeMgr>() {
-            @Mock
-            public SystemInfoService getClusterInfo() {
-                return systemInfo;
-            }
-        };
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ComputeNode getBackendOrComputeNode(long nodeId) {
-                return b1;
-            }
-        };
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
-                if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
-                    return Lists.newArrayList(b1.getId());
-                }
-                return Lists.newArrayList();
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public NodeMgr getNodeMgr() {
-                return nodeMgr;
-            }
-
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-
-            @Mock
-            public WarehouseManager getWarehouseMgr() {
-                return mockWarehouseMgr;
-            }
-
-        };
-
-        ComputeNode livingCn = new ComputeNode();
-        livingCn.setAlive(true);
-        new Expectations() {
-            {
-                // This is the point of the test -- we only want to call this once even though we're calling
-                // addScanRangeLocations multiple times.
-                mockWarehouseMgr.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-                times = 1;
-                result = Lists.newArrayList(livingCn);
-            }
-        };
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, 456, "aaa", null, null);
-        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
-        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
-        // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
-        // getAliveComputeNodes.
-        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
+        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
+                () -> scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1));
+        Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
     }
 
     private OlapScanNode newOlapScanNode() {
