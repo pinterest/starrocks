@@ -49,6 +49,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -150,6 +151,19 @@ public class WarehouseManager implements Writable {
     }
 
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
+        // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        if (systemInfoService.usingResourceIsolationGroups()) {
+
+            if (warehouseId != DEFAULT_WAREHOUSE_ID || workerGroupId != StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
+                // Note that workerGroupId is not the same as resourceIsolationGroupId
+                throw new IllegalArgumentException(String.format("Cannot use resource groups with non-default" +
+                        " warehouse %d or non-default worker group id %d", warehouseId, workerGroupId));
+            }
+            return systemInfoService.getAvailableComputeNodeIds();
+        }
+
+
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
@@ -194,7 +208,11 @@ public class WarehouseManager implements Writable {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
         }
 
+<<<<<<< HEAD
         Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouseId, tabletId);
+=======
+        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouseId, tablet);
+>>>>>>> 687120fc64c (node selection by resource group id)
         if (ids != null && !ids.isEmpty()) {
             return ids.iterator().next();
         } else {
@@ -203,6 +221,7 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+<<<<<<< HEAD
         Warehouse warehouse = getWarehouse(warehouseName);
 
         try {
@@ -220,11 +239,38 @@ public class WarehouseManager implements Writable {
                 return null;
             }
         } catch (StarClientException e) {
+=======
+        Warehouse warehouse = nameToWh.get(warehouseName);
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+        }
+        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouse.getId(), tablet);
+        if (ids != null && !ids.isEmpty()) {
+            return ids.iterator().next();
+        } else {
+>>>>>>> 687120fc64c (node selection by resource group id)
             return null;
         }
     }
 
+<<<<<<< HEAD
     private Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, Long tabletId) {
+=======
+    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        if (systemInfoService.usingResourceIsolationGroups()) {
+            if (warehouseId != DEFAULT_WAREHOUSE_ID) {
+                throw new IllegalArgumentException(String.format("Cannot use resource groups with non-default" +
+                        " warehouse %d", warehouseId));
+            }
+            List<Long> computeNodeIds = systemInfoService.internalTabletMapper().computeNodesForTablet(tablet);
+            if (computeNodeIds == null) {
+                return null;
+            }
+            return new HashSet<>(computeNodeIds);
+        }
+>>>>>>> 687120fc64c (node selection by resource group id)
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()

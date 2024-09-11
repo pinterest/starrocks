@@ -33,6 +33,11 @@
 // under the License.
 package com.starrocks.system;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Tablet;
+import com.starrocks.lake.LakeTablet;
+>>>>>>> 687120fc64c (node selection by resource group id)
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import mockit.Expectations;
@@ -41,15 +46,22 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+=======
+import java.util.List;
+>>>>>>> 687120fc64c (node selection by resource group id)
 import java.util.Set;
 
 public class TabletComputeNodeMapperTest {
     private Frontend thisFe;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 687120fc64c (node selection by resource group id)
     @Before
     public void setUp() {
         thisFe = new Frontend();
@@ -69,6 +81,7 @@ public class TabletComputeNodeMapperTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void modifyComputeNodeEdgeCases() throws Exception {
         Long arbitraryTablet = 9000L;
         Long arbitraryStarOsPreferredCn = 10L;
@@ -103,11 +116,23 @@ public class TabletComputeNodeMapperTest {
         // Check that the mapper returns the added compute nodes
         mapper.addComputeNode(1L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
         Assert.assertEquals(List.of(1L), mapper.backupComputeNodesForTablet(arbitraryTablet, arbitraryStarOsPreferredCn, 1));
+=======
+    public void testGroupManagement() throws Exception {
+        TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
+        Assert.assertEquals(0, mapper.numResourceIsolationGroups());
+
+        Tablet arbitraryTablet = new LakeTablet(1000L);
+
+        // Check that the mapper returns the added compute nodes
+        mapper.addComputeNode(1L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        Assert.assertEquals(List.of(1L), mapper.computeNodesForTablet(arbitraryTablet));
+>>>>>>> 687120fc64c (node selection by resource group id)
 
         mapper.addComputeNode(2L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
         // Check that the mapper accurately reports the single resource isolation group.
         Assert.assertEquals(1, mapper.numResourceIsolationGroups());
         // Check that the default number of replicas is 1.
+<<<<<<< HEAD
         Assert.assertEquals(1, mapper.backupComputeNodesForTablet(arbitraryTablet, arbitraryStarOsPreferredCn, 1).size());
 
         // check that if we set num replicas to 3 replicas,
@@ -131,12 +156,43 @@ public class TabletComputeNodeMapperTest {
 
         // Check that removing the only CN from otherGroup again reflects the count correctly
         mapper.modifyComputeNode(2L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID, otherGroup);
+=======
+        Assert.assertEquals(1, mapper.computeNodesForTablet(arbitraryTablet).size());
+
+        // check that if we set num replicas to 3 replicas,
+        // we get all the nodes in the group as long as num compute nodes in the group is <= 3.
+        mapper.setNumReplicas(ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID, 3);
+        Assert.assertEquals(2, mapper.computeNodesForTablet(arbitraryTablet).size());
+
+        mapper.addComputeNode(3L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        mapper.addComputeNode(4L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        Assert.assertEquals(3, mapper.computeNodesForTablet(arbitraryTablet).size());
+
+
+
+        String otherGroup = "someothergroup";
+        mapper.modifyComputeNode(2L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID,
+                otherGroup);
+        // Check that assigning the compute node to another group is reflected in the count
+        Assert.assertEquals(2, mapper.numResourceIsolationGroups());
+
+        // Check that moving the only CN from otherGroup back to the default group again reflects the count correctly
+        mapper.modifyComputeNode(2L, otherGroup,
+                ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        Assert.assertEquals(1, mapper.numResourceIsolationGroups());
+
+
+        // Check that removing the only CN from otherGroup again reflects the count correctly
+        mapper.modifyComputeNode(2L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID,
+                otherGroup);
+>>>>>>> 687120fc64c (node selection by resource group id)
         Assert.assertEquals(2, mapper.numResourceIsolationGroups());
         mapper.removeComputeNode(2L, otherGroup);
         Assert.assertEquals(1, mapper.numResourceIsolationGroups());
     }
 
     @Test
+<<<<<<< HEAD
     public void testTabletTracking() throws Exception {
         TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
         String thisRig = ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
@@ -188,16 +244,33 @@ public class TabletComputeNodeMapperTest {
 
         // Set up mapper for group1 and group2 to have their own CN
         String group1 = "group1id";
+=======
+    public void testTabletToCnMapping() throws Exception {
+        TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
+
+        Set<Long> group1Cn = Set.of(0L, 1L, 2L);
+        Set<Long> group2Cn = Set.of(3L, 4L, 5L);
+        int[] cnChoiceCount = new int[6];
+
+        // Set up mapper for group1 and group2 to have their own CN
+        String group1 = "group1id";
+        mapper.setNumReplicas(group1, 1);
+>>>>>>> 687120fc64c (node selection by resource group id)
         for (Long cnId : group1Cn) {
             mapper.addComputeNode(cnId, group1);
         }
         String group2 = "group2id";
+<<<<<<< HEAD
+=======
+        mapper.setNumReplicas(group2, 2);
+>>>>>>> 687120fc64c (node selection by resource group id)
         for (Long cnId : group2Cn) {
             mapper.addComputeNode(cnId, group2);
         }
 
         Assert.assertEquals(2, mapper.numResourceIsolationGroups());
 
+<<<<<<< HEAD
         int tabletsToTry = 10000;
         long[] tabletIdToGroup2Primary = new long[tabletsToTry];
         long[] tabletIdToGroup2Backup = new long[tabletsToTry];
@@ -206,6 +279,17 @@ public class TabletComputeNodeMapperTest {
             // Ensure that mapper chooses cn from right pool for fe in group1
             thisFe.setResourceIsolationGroup(group1);
             List<Long> chosenCn = mapper.backupComputeNodesForTablet(tabletId, arbitraryCnToExclude, 1);
+=======
+
+        int tabletsToTry = 1000;
+        long[] tabletIdToGroup2Primary = new long[tabletsToTry];
+        long[] tabletIdToGroup2Backup = new long[tabletsToTry];
+        for (long tabletId = 0; tabletId < tabletsToTry; tabletId++) {
+            Tablet arbitraryTablet = new LakeTablet(tabletId);
+            // Ensure that mapper chooses cn from right pool for fe in group1
+            thisFe.setResourceIsolationGroup(group1);
+            List<Long> chosenCn = mapper.computeNodesForTablet(arbitraryTablet);
+>>>>>>> 687120fc64c (node selection by resource group id)
             Assert.assertEquals(1, chosenCn.size());
             Assert.assertTrue(group1Cn.contains(chosenCn.get(0)));
             // Track that the cn has been chosen for later
@@ -213,8 +297,14 @@ public class TabletComputeNodeMapperTest {
 
             // Ensure that mapper chooses cn from right pool for fe in group2
             thisFe.setResourceIsolationGroup(group2);
+<<<<<<< HEAD
             chosenCn = mapper.backupComputeNodesForTablet(tabletId, arbitraryCnToExclude, 2);
             // Make sure mapper respects replicas
+=======
+            chosenCn = mapper.computeNodesForTablet(arbitraryTablet);
+            // Make sure mapper respects replicas
+            Assert.assertEquals(2, chosenCn.size());
+>>>>>>> 687120fc64c (node selection by resource group id)
             Assert.assertTrue(group2Cn.contains(chosenCn.get(0)));
             Assert.assertTrue(group2Cn.contains(chosenCn.get(1)));
             // Track that the cn have been chosen for later
@@ -227,20 +317,29 @@ public class TabletComputeNodeMapperTest {
         for (long cnId : group1Cn) {
             int chosenCount = cnChoiceCount[(int) cnId];
             float chosenRate = (float) chosenCount / tabletsToTry;
+<<<<<<< HEAD
             // (1/num_cn_in_group_1) +- a little bit
             Assert.assertTrue(chosenRate > .31 && chosenRate < .35);
+=======
+            Assert.assertTrue(chosenRate > .3 && chosenRate < .36);
+>>>>>>> 687120fc64c (node selection by resource group id)
         }
         for (long cnId : group2Cn) {
             int chosenCount = cnChoiceCount[(int) cnId];
             float chosenRate = (float) chosenCount / tabletsToTry;
+<<<<<<< HEAD
             // 2 * (1/num_cn_in_group_2) +- a little bit
             Assert.assertTrue(chosenRate > .18 && chosenRate < .22);
+=======
+            Assert.assertTrue(chosenRate > .6 && chosenRate < .72);
+>>>>>>> 687120fc64c (node selection by resource group id)
         }
 
         // Check on remapping behavior after removing some CN
         long cnIdToRemove = 4L;
         Assert.assertTrue(group2Cn.contains(cnIdToRemove));
         mapper.removeComputeNode(cnIdToRemove, group2);
+<<<<<<< HEAD
         group2Cn.remove(cnIdToRemove);
         thisFe.setResourceIsolationGroup(group2);
         Map<Long, Integer> backupForRemovedCnToCount = new HashMap<>();
@@ -254,6 +353,16 @@ public class TabletComputeNodeMapperTest {
                 Integer occurrenceCount =
                         backupForRemovedCnToCount.containsKey(newPrimary) ? backupForRemovedCnToCount.get(newPrimary) + 1 : 1;
                 backupForRemovedCnToCount.put(newPrimary, occurrenceCount);
+=======
+        thisFe.setResourceIsolationGroup(group2);
+        for (long tabletId = 0; tabletId < tabletsToTry; tabletId++) {
+            Tablet arbitraryTablet = new LakeTablet(tabletId);
+            List<Long> chosenCn = mapper.computeNodesForTablet(arbitraryTablet);
+            Assert.assertEquals(2, chosenCn.size());
+            if (tabletIdToGroup2Primary[(int) tabletId] == cnIdToRemove) {
+                // If the removed node used to be the primary, check that the old secondary is now the primary
+                Assert.assertEquals(tabletIdToGroup2Backup[(int) tabletId], (long) chosenCn.get(0));
+>>>>>>> 687120fc64c (node selection by resource group id)
             } else if (tabletIdToGroup2Backup[(int) tabletId] == cnIdToRemove) {
                 // If the removed node used to be the backup, check that the primary is the same and the new secondary is
                 // not the removed node.
@@ -265,6 +374,7 @@ public class TabletComputeNodeMapperTest {
                 Assert.assertEquals(tabletIdToGroup2Backup[(int) tabletId], (long) chosenCn.get(1));
             }
         }
+<<<<<<< HEAD
         // Check that all CN in group2 are being used as backups similarly often (within 1 stddev of average).
         Assert.assertTrue(backupForRemovedCnToCount.size() > 1);
         int cnt = backupForRemovedCnToCount.values().stream().reduce(Integer::sum).get();
@@ -274,5 +384,7 @@ public class TabletComputeNodeMapperTest {
             Assert.assertTrue(Math.abs(count - avg) < stddev);
         }
 
+=======
+>>>>>>> 687120fc64c (node selection by resource group id)
     }
 }

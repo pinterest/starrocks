@@ -57,7 +57,9 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.NodeSelector;
+import com.starrocks.system.ResourceIsolationGroupUtils;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -421,6 +423,15 @@ public class SystemInfoServiceTest {
             {
                 globalStateMgr.getAnalyzer();
                 result = analyzer;
+            }
+        };
+        Frontend thisFe = new Frontend();
+        thisFe.setResourceIsolationGroup(ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
+                minTimes = 1;
             }
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));

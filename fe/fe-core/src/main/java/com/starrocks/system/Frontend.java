@@ -47,6 +47,13 @@ import com.starrocks.system.HeartbeatResponse.HbStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.Objects;
+
+import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+
 public class Frontend extends JsonWriter {
     public static final Logger LOG = LogManager.getLogger(Frontend.class);
 
@@ -58,6 +65,9 @@ public class Frontend extends JsonWriter {
     private String host;
     @SerializedName(value = "e")
     private int editLogPort;
+
+    @SerializedName(value = "rig")
+    private String resourceIsolationGroup = null;
 
     private int queryPort;
     private int rpcPort;
@@ -130,6 +140,14 @@ public class Frontend extends JsonWriter {
 
     public String getFeVersion() {
         return feVersion;
+    }
+
+    public String getResourceIsolationGroup() {
+        return Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+    }
+    
+    public void setResourceIsolationGroup(String group) {
+        this.resourceIsolationGroup = group;
     }
 
     public float getHeapUsedPercent() {

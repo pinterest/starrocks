@@ -15,16 +15,22 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
+import com.google.common.collect.Lists;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import mockit.Expectations;
 import mockit.Mock;
@@ -134,6 +140,43 @@ public class SystemInfoServiceTest {
         Assert.assertEquals("{rack=rack1}", backend.getLocation().toString());
     }
 
+<<<<<<< HEAD
+=======
+    @Test(expected = UnsupportedOperationException.class)
+    public void testModifyBackendGroupPropertyThrowsException() throws DdlException {
+        Backend be = new Backend(100, "originalHost", 1000);
+        service.addBackend(be);
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
+        ModifyBackendClause clause = new ModifyBackendClause("originalHost:1000", properties);
+        service.modifyBackendProperty(clause);
+    }
+
+    @Test
+    public void testModifyComputeNodeGroupProperty() throws DdlException {
+        ComputeNode cn = new ComputeNode(100, "originalHost", 1000);
+        service.addComputeNode(cn);
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("originalHost:1000", properties);
+        service.modifyComputeNodeProperty(clause);
+        ComputeNode computeNode = service.getComputeNodeWithHeartbeatPort("originalHost", 1000);
+        Assert.assertNotNull(computeNode);
+        Assert.assertEquals("writegroup", computeNode.getResourceIsolationGroup());
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void testModifyComputeNodeBadGroupProperty1ThrowsException() throws DdlException {
+        ComputeNode cn = new ComputeNode(100, "originalHost", 1000);
+        service.addComputeNode(cn);
+        Map<String, String> properties = Maps.newHashMap();
+        // missing the "group:" prefix
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "writegroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("originalHost:1000", properties);
+        service.modifyComputeNodeProperty(clause);
+    }
+
+>>>>>>> 687120fc64c (node selection by resource group id)
     @Test
     public void testUpdateBackend() throws Exception {
         Backend be = new Backend(10001, "newHost", 1000);
@@ -380,12 +423,26 @@ public class SystemInfoServiceTest {
         Assert.assertTrue(beIP3 == null);
     }
 
+<<<<<<< HEAD
     @Test(expected = DdlException.class)
     public void testUpdateBackendAddressInSharedDataMode() throws Exception {
         new MockUp<RunMode>() {
             @Mock
             public boolean isSharedDataMode() {
                 return true;
+=======
+    @Test
+    public void addComputeNodeTest() throws AnalysisException {
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropAllBackend();
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+
+        com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
+                com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+>>>>>>> 687120fc64c (node selection by resource group id)
             }
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
@@ -424,7 +481,14 @@ public class SystemInfoServiceTest {
                 returns(1L, 2L, 3L);
             }
         };
+<<<<<<< HEAD
         service.addComputeNodes(List.of(Pair.create("host1", 1000), Pair.create("host2", 1000), Pair.create("host3", 1000)));
+=======
+        service.addComputeNodes(List.of(Pair.create("host1", 1000),
+                                        Pair.create("host2", 1000),
+                                        Pair.create("host3", 1000)));
+        Assert.assertFalse(service.usingResourceIsolationGroups());
+>>>>>>> 687120fc64c (node selection by resource group id)
         List<ComputeNode> allComputeNodes = service.getComputeNodes();
         // Set all compute nodes as alive for sake of testing
         for (ComputeNode cn : allComputeNodes) {
@@ -439,6 +503,10 @@ public class SystemInfoServiceTest {
         properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:othergroup");
         ModifyComputeNodeClause clause = new ModifyComputeNodeClause("host3:1000", properties);
         service.modifyComputeNodeProperty(clause);
+<<<<<<< HEAD
+=======
+        Assert.assertTrue(service.usingResourceIsolationGroups());
+>>>>>>> 687120fc64c (node selection by resource group id)
         Assert.assertEquals(List.of(1L, 2L), service.getAvailableComputeNodeIds());
 
         // Reassign this FE and ensure it knows which compute node is available
@@ -446,7 +514,11 @@ public class SystemInfoServiceTest {
         Assert.assertEquals(List.of(3L), service.getAvailableComputeNodeIds());
 
         service.dropComputeNode("host3", 1000);
+<<<<<<< HEAD
 >>>>>>> 733b7282580 (manage worker groups for RIG, use StarOs for primary tablet->CN assignment)
+=======
+        Assert.assertFalse(service.usingResourceIsolationGroups());
+>>>>>>> 687120fc64c (node selection by resource group id)
     }
 
 }

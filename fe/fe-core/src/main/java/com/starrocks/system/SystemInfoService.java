@@ -104,6 +104,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.common.util.PropertyAnalyzer.getResourceIsolationGroupFromProperties;
+import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+import static com.starrocks.system.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
+
+>>>>>>> 687120fc64c (node selection by resource group id)
 public class SystemInfoService implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
     public static final String DEFAULT_CLUSTER = "default_cluster";
@@ -118,6 +125,9 @@ public class SystemInfoService implements GsonPostProcessable {
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
 
     private final NodeSelector nodeSelector;
+    // The TabletComputeNodeMapper must be updated any time a compute node is added, removed,
+    // or has its resource isolation group modified.
+    private final TabletComputeNodeMapper tabletComputeNodeMapper;
 
     public SystemInfoService() {
         idToBackendRef = new ConcurrentHashMap<>();
@@ -127,6 +137,14 @@ public class SystemInfoService implements GsonPostProcessable {
         pathHashToDishInfoRef = ImmutableMap.of();
 
         nodeSelector = new NodeSelector(this);
+        tabletComputeNodeMapper = new TabletComputeNodeMapper();
+    }
+
+    public boolean usingResourceIsolationGroups() {
+        return tabletComputeNodeMapper.numResourceIsolationGroups() > 1;
+    }
+    public TabletComputeNodeMapper internalTabletMapper() {
+        return tabletComputeNodeMapper;
     }
 
     public TabletComputeNodeMapper internalTabletMapper() {
@@ -162,6 +180,8 @@ public class SystemInfoService implements GsonPostProcessable {
      */
     public void addComputeNode(ComputeNode computeNode) {
         idToComputeNodeRef.put(computeNode.getId(), computeNode);
+        tabletComputeNodeMapper.addComputeNode(computeNode.getId(),
+                DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
 
     /**
@@ -169,6 +189,8 @@ public class SystemInfoService implements GsonPostProcessable {
      */
     public void dropComputeNode(ComputeNode computeNode) {
         idToComputeNodeRef.remove(computeNode.getId());
+        tabletComputeNodeMapper.removeComputeNode(computeNode.getId(),
+                DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
 
     // Final entry of adding compute node
@@ -179,6 +201,8 @@ public class SystemInfoService implements GsonPostProcessable {
 
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
 
+        tabletComputeNodeMapper.addComputeNode(newComputeNode.getId(),
+                DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
@@ -336,6 +360,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 if (!entry.getValue().isEmpty()) {
                     newResourceIsolationGroup = getResourceIsolationGroupFromProperties(properties);
                 }
+<<<<<<< HEAD
                 // Step 1: Communicate with staros that we're dropping the CN from the old worker group.
                 String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(), computeNode.getStarletPort());
                 LOG.info("Trying to modify compute node {}: cnid: {}, old rig: {}, new rig: {}, original wgid: {}, ", workerAddr,
@@ -361,6 +386,16 @@ public class SystemInfoService implements GsonPostProcessable {
                         computeNode.getHost(), computeNode.getHeartbeatPort(), oldResourceIsolationGroup,
                         newResourceIsolationGroup, originalWorkerGroupId, workerGroupId);
                 LOG.info(opMessage);
+=======
+                // Step 1: update in-memory representation of compute node
+                computeNode.setResourceIsolationGroup(newResourceIsolationGroup);
+                // Step 2: update internal table mapper to reflect the new membership of compute node
+                tabletComputeNodeMapper.modifyComputeNode(computeNode.getId(),
+                        oldResourceIsolationGroup, newResourceIsolationGroup);
+                String opMessage = String.format("%s:%d's group has been modified from %s to %s",
+                        computeNode.getHost(), computeNode.getHeartbeatPort(),
+                        oldResourceIsolationGroup, newResourceIsolationGroup);
+>>>>>>> 687120fc64c (node selection by resource group id)
                 messageResult.add(Collections.singletonList(opMessage));
             } else {
                 throw new UnsupportedOperationException("unsupported property: " + entry.getKey());
@@ -472,10 +507,13 @@ public class SystemInfoService implements GsonPostProcessable {
         // drop from internal tablet mapper
         tabletComputeNodeMapper.removeComputeNode(dropComputeNode.getId(), dropComputeNode.getResourceIsolationGroup());
 
+<<<<<<< HEAD
         if (!existsSomeCnInResourceIsolationGroup(dropComputeNode.getResourceIsolationGroup())) {
             GlobalStateMgr.getCurrentState().getWorkerGroupMgr().dropResourceIsolationGroup(
                     dropComputeNode.getResourceIsolationGroup());
         }
+=======
+>>>>>>> 687120fc64c (node selection by resource group id)
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
@@ -745,6 +783,7 @@ public class SystemInfoService implements GsonPostProcessable {
     public void dropAllComputeNode() {
         // update idToComputeNodeRef
         idToComputeNodeRef.clear();
+        tabletComputeNodeMapper.clear();
     }
 
     public Backend getBackend(long backendId) {
@@ -998,12 +1037,15 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Long> getAvailableComputeNodeIds() {
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
+                getResourceIsolationGroup();
         List<Long> computeNodeIds = Lists.newArrayList(idToComputeNodeRef.keySet());
 
         Iterator<Long> iter = computeNodeIds.iterator();
         while (iter.hasNext()) {
             ComputeNode cn = this.getComputeNode(iter.next());
-            if (cn == null || !cn.isAvailable()) {
+            if (cn == null || !cn.isAvailable() ||
+                    !resourceIsolationGroupMatches(cn.getResourceIsolationGroup(), thisResourceIsolationGroup)) {
                 iter.remove();
             }
         }
@@ -1035,8 +1077,11 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<ComputeNode> getAvailableComputeNodes() {
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
+                getResourceIsolationGroup();
         return getComputeNodes().stream()
                 .filter(ComputeNode::isAvailable)
+                .filter(cn -> resourceIsolationGroupMatches(cn.getResourceIsolationGroup(), thisResourceIsolationGroup))
                 .collect(Collectors.toList());
     }
 
@@ -1139,6 +1184,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         newComputeNode.setBackendState(BackendState.using);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
+        tabletComputeNodeMapper.addComputeNode(newComputeNode.getId(), DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
 
     public void replayAddBackend(Backend newBackend) {
@@ -1174,11 +1220,14 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // remove from internal mapping from tablet to compute node
         tabletComputeNodeMapper.removeComputeNode(cn.getId(), cn.getResourceIsolationGroup());
+<<<<<<< HEAD
 
         if (!existsSomeCnInResourceIsolationGroup(cn.getResourceIsolationGroup())) {
             GlobalStateMgr.getCurrentState().getWorkerGroupMgr().dropResourceIsolationGroup(
                     cn.getResourceIsolationGroup());
         }
+=======
+>>>>>>> 687120fc64c (node selection by resource group id)
     }
 
     public void replayDropBackend(Backend backend) {
