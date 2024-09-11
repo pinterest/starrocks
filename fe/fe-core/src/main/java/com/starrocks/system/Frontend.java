@@ -47,10 +47,16 @@ import com.starrocks.system.HeartbeatResponse.HbStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class Frontend extends JsonWriter {
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.Objects;
+
+import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+
+public class Frontend implements Writable {
     public static final Logger LOG = LogManager.getLogger(Frontend.class);
     public static final String HEARTBEAT_MSG_SHUTTING_DOWN = "shutting down";
-    
     @SerializedName(value = "r")
     private FrontendNodeType role;
     @SerializedName(value = "n")
@@ -151,7 +157,7 @@ public class Frontend extends JsonWriter {
     }
 
     public String getResourceIsolationGroup() {
-        return resourceIsolationGroup;
+        return Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
     public void setResourceIsolationGroup(String group) {
         this.resourceIsolationGroup = group;
@@ -288,6 +294,27 @@ public class Frontend extends JsonWriter {
     // Only for test
     public void setHeapUsedPercent(float heapUsedPercent) {
         this.heapUsedPercent = heapUsedPercent;
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        com.starrocks.common.io.Text.writeString(out, role.name());
+        com.starrocks.common.io.Text.writeString(out, host);
+        out.writeInt(editLogPort);
+        com.starrocks.common.io.Text.writeString(out, nodeName);
+    }
+
+    public void readFields(DataInput in) throws IOException {
+        role = FrontendNodeType.valueOf(com.starrocks.common.io.Text.readString(in));
+        host = com.starrocks.common.io.Text.readString(in);
+        editLogPort = in.readInt();
+        nodeName = com.starrocks.common.io.Text.readString(in);
+    }
+
+    public static Frontend read(DataInput in) throws IOException {
+        Frontend frontend = new Frontend();
+        frontend.readFields(in);
+        return frontend;
     }
 
     @Override

@@ -239,7 +239,6 @@ public class EditLogTest {
         List<ComputeNode> updatedComputeNodes = mgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
         ComputeNode updatedCn = updatedComputeNodes.get(0);
         Assert.assertEquals("somegroup", updatedCn.getResourceIsolationGroup());
->>>>>>> 02c44a34d64 (parsing sql statements and passing assigned group to Frontend and ComputeNode classes)
     }
 
     @Test

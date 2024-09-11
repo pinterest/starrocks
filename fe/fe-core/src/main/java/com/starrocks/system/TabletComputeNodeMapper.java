@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/system/SystemInfoService.java
+
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -34,8 +37,10 @@ package com.starrocks.system;
 import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import org.jetbrains.annotations.TestOnly;
 
@@ -45,7 +50,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
 
@@ -67,19 +71,19 @@ import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_
 public class TabletComputeNodeMapper {
 
     private static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 256;
-    private static final Long ARBITRARY_FAKE_TABLET = 1L;
-    // We prefer to keep one replica of the data cached, unless otherwise requested with a CACHE SELECT STATEMENT.
-    private static final int DEFAULT_NUM_REPLICAS = 1;
+    private static final Tablet ARBITRARY_FAKE_TABLET = new LakeTablet(1L);
 
     private class TabletMap {
-        private final HashRing<Long, Long> tabletToComputeNodeId;
+        private final HashRing<Tablet, Long> tabletToComputeNodeId;
+        private int numReplicas;
+
         TabletMap() {
             tabletToComputeNodeId = new ConsistentHashRing<>(
-                    Hashing.murmur3_128(), new LongIdFunnel(), new LongIdFunnel(),
+                    Hashing.murmur3_128(), new TabletFunnel(), new ComputeNodeIdFunnel(),
                     Collections.emptyList(), CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
+            numReplicas = 1;
         }
 
-        // Returns whether any single compute node has been added to this TabletMap
         private boolean tracksSomeComputeNode() {
             return !tabletToComputeNodeId.get(ARBITRARY_FAKE_TABLET, 1).isEmpty();
         }
@@ -111,14 +115,20 @@ public class TabletComputeNodeMapper {
         return numGroups > 1 || !resourceIsolationGroupToTabletMapping.containsKey(DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
 
-    private String remapResourceIsolationGroupIfNull(String resourceIsolationGroup) {
-        return resourceIsolationGroup == null ? DEFAULT_RESOURCE_ISOLATION_GROUP_ID : resourceIsolationGroup;
+    public void setNumReplicas(String resourceIsolationGroup, int numReplicas) {
+        resourceIsolationGroup = remapResourceIsolationGroupIfNull(resourceIsolationGroup);
+        writeLock.lock();
+        try {
+            maybeInitResourceIsolationGroup(resourceIsolationGroup);
+            TabletMap map = resourceIsolationGroupToTabletMapping.get(resourceIsolationGroup);
+            map.numReplicas = numReplicas;
+        } finally {
+            writeLock.unlock();
+        }
     }
 
-    public String debugString() {
-        return resourceIsolationGroupToTabletMapping.entrySet().stream()
-                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue()))
-                .collect(Collectors.joining("\n"));
+    private String remapResourceIsolationGroupIfNull(String resourceIsolationGroup) {
+        return resourceIsolationGroup == null ? DEFAULT_RESOURCE_ISOLATION_GROUP_ID : resourceIsolationGroup;
     }
 
     public void addComputeNode(Long computeNodeId, String resourceIsolationGroup) {
@@ -181,11 +191,7 @@ public class TabletComputeNodeMapper {
         }
     }
 
-    public List<Long> computeNodesForTablet(Long tabletId) {
-        return computeNodesForTablet(tabletId, DEFAULT_NUM_REPLICAS);
-    }
-
-    public List<Long> computeNodesForTablet(Long tabletId, int count) {
+    public List<Long> computeNodesForTablet(Tablet tablet) {
         readLock.lock();
         try {
             String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
@@ -195,17 +201,23 @@ public class TabletComputeNodeMapper {
                 return null;
             }
             TabletMap m = this.resourceIsolationGroupToTabletMapping.get(thisResourceIsolationGroup);
-            return m.tabletToComputeNodeId.get(tabletId, count);
+            return m.tabletToComputeNodeId.get(tablet, m.numReplicas);
         } finally {
             readLock.unlock();
         }
     }
 
-    class LongIdFunnel implements Funnel<Long> {
+    class ComputeNodeIdFunnel implements Funnel<Long> {
         @Override
-        public void funnel(Long id, PrimitiveSink primitiveSink) {
-            primitiveSink.putLong(id);
+        public void funnel(Long computeNodeId, PrimitiveSink primitiveSink) {
+            primitiveSink.putLong(computeNodeId);
         }
     }
 
+    class TabletFunnel implements Funnel<Tablet> {
+        @Override
+        public void funnel(Tablet tablet, PrimitiveSink primitiveSink) {
+            primitiveSink.putLong(tablet.getId());
+        }
+    }
 }
