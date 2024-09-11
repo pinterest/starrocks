@@ -14,27 +14,19 @@
 
 package com.starrocks.persist;
 
-<<<<<<< HEAD
-import com.starrocks.common.io.DataOutputBuffer;
-=======
 import com.google.api.client.util.Maps;
->>>>>>> 687120fc64c (node selection by resource group id)
+import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.encryption.KeyMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-<<<<<<< HEAD
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyTypePB;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
-import com.starrocks.system.Frontend;
-=======
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
@@ -44,7 +36,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.ResourceIsolationGroupUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
->>>>>>> 687120fc64c (node selection by resource group id)
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
@@ -184,24 +175,6 @@ public class EditLogTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testOpAddKeyJournalEntity() throws Exception {
-        EncryptionKeyPB pb = new EncryptionKeyPB();
-        pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);
-        pb.algorithm = EncryptionAlgorithmPB.AES_128;
-        pb.plainKey = new byte[16];
-        pb.type = EncryptionKeyTypePB.NORMAL_KEY;
-        pb.createTime = 3L;
-        DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        JournalEntity entity = new JournalEntity();
-        entity.setOpCode(OperationType.OP_ADD_KEY);
-        entity.setData(new Text(GsonUtils.GSON.toJson(pb)));
-        entity.write(buffer);
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        JournalEntity replayEntry = new JournalEntity();
-        replayEntry.readFields(in);
-        Assert.assertEquals(OperationType.OP_ADD_KEY, replayEntry.getOpCode());
-=======
     public void testOpUpdateFrontend() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
         List<Frontend> frontends = mgr.getNodeMgr().getFrontends(null);
@@ -220,23 +193,11 @@ public class EditLogTest {
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
         Assert.assertEquals("somegroup2", updatedfFe.getResourceIsolationGroup());
->>>>>>> 687120fc64c (node selection by resource group id)
     }
 
     @Test
-    public void testOpAddKey() throws Exception {
+    public void testOpComputeNodeStateChange() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
-<<<<<<< HEAD
-        EncryptionKeyPB pb = new EncryptionKeyPB();
-        pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);
-        pb.algorithm = EncryptionAlgorithmPB.AES_128;
-        pb.plainKey = new byte[16];
-        pb.type = EncryptionKeyTypePB.NORMAL_KEY;
-        pb.createTime = 3L;
-        JournalEntity journal = new JournalEntity();
-        journal.setOpCode(OperationType.OP_ADD_KEY);
-        journal.setData(new Text(GsonUtils.GSON.toJson(pb)));
-=======
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         ComputeNode cnInMemory =  systemInfoService.getComputeNodes().get(0);
         ComputeNode cnToWrite = new ComputeNode(cnInMemory.getId(), cnInMemory.getHost(), cnInMemory.getHeartbeatPort());
@@ -244,7 +205,6 @@ public class EditLogTest {
         JournalEntity journal = new JournalEntity();
         journal.setData(cnToWrite);
         journal.setOpCode(OperationType.OP_COMPUTE_NODE_STATE_CHANGE);
->>>>>>> 687120fc64c (node selection by resource group id)
         EditLog editLog = new EditLog(null);
 
         TabletComputeNodeMapper tabletComputeNodeMapper = systemInfoService.internalTabletMapper();
@@ -255,13 +215,9 @@ public class EditLogTest {
             }
         };
         editLog.loadJournal(mgr, journal);
-<<<<<<< HEAD
-        Assert.assertEquals(1, mgr.getKeyMgr().numKeys());
-=======
         List<ComputeNode> updatedComputeNodes = systemInfoService.getComputeNodes();
         ComputeNode updatedCn = updatedComputeNodes.get(0);
         Assert.assertEquals("somegroup", updatedCn.getResourceIsolationGroup());
->>>>>>> 687120fc64c (node selection by resource group id)
     }
 
     @Test

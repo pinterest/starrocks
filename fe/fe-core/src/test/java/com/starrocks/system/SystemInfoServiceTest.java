@@ -25,13 +25,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -127,7 +127,7 @@ public class SystemInfoServiceTest {
      * Test method for {@link SystemInfoService#modifyBackendProperty(ModifyBackendClause)}.
      */
     @Test
-    public void testModifyBackendProperty() throws DdlException {
+    public void testModifyBackendLocationProperty() throws DdlException {
         Backend be = new Backend(100, "originalHost", 1000);
         service.addBackend(be);
         Map<String, String> properties = Maps.newHashMap();
@@ -140,8 +140,6 @@ public class SystemInfoServiceTest {
         Assert.assertEquals("{rack=rack1}", backend.getLocation().toString());
     }
 
-<<<<<<< HEAD
-=======
     @Test(expected = UnsupportedOperationException.class)
     public void testModifyBackendGroupPropertyThrowsException() throws DdlException {
         Backend be = new Backend(100, "originalHost", 1000);
@@ -176,7 +174,6 @@ public class SystemInfoServiceTest {
         service.modifyComputeNodeProperty(clause);
     }
 
->>>>>>> 687120fc64c (node selection by resource group id)
     @Test
     public void testUpdateBackend() throws Exception {
         Backend be = new Backend(10001, "newHost", 1000);
@@ -224,9 +221,6 @@ public class SystemInfoServiceTest {
 
         LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
 
-        WarehouseManager warehouseManager = new WarehouseManager();
-        warehouseManager.initDefaultWarehouse();
-
         new Expectations() {
             {
                 service.getBackendWithHeartbeatPort("newHost", 1000);
@@ -236,16 +230,12 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
-
-                globalStateMgr.getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
             }
         };
 
         service.addBackend(be);
         be.setStarletPort(1001);
-        service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+        service.dropBackend("newHost", 1000, false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
     }
@@ -366,7 +356,7 @@ public class SystemInfoServiceTest {
 
         Assert.assertEquals(10L, version.get());
     }
-
+    
     @Test
     public void testGetHostAndPort() {
         String ipv4 = "192.168.1.2:9050";
@@ -423,14 +413,6 @@ public class SystemInfoServiceTest {
         Assert.assertTrue(beIP3 == null);
     }
 
-<<<<<<< HEAD
-    @Test(expected = DdlException.class)
-    public void testUpdateBackendAddressInSharedDataMode() throws Exception {
-        new MockUp<RunMode>() {
-            @Mock
-            public boolean isSharedDataMode() {
-                return true;
-=======
     @Test
     public void addComputeNodeTest() throws AnalysisException {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropAllBackend();
@@ -442,7 +424,6 @@ public class SystemInfoServiceTest {
             {
                 globalStateMgr.getAnalyzer();
                 result = analyzer;
->>>>>>> 687120fc64c (node selection by resource group id)
             }
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
@@ -481,14 +462,10 @@ public class SystemInfoServiceTest {
                 returns(1L, 2L, 3L);
             }
         };
-<<<<<<< HEAD
-        service.addComputeNodes(List.of(Pair.create("host1", 1000), Pair.create("host2", 1000), Pair.create("host3", 1000)));
-=======
         service.addComputeNodes(List.of(Pair.create("host1", 1000),
                                         Pair.create("host2", 1000),
                                         Pair.create("host3", 1000)));
         Assert.assertFalse(service.usingResourceIsolationGroups());
->>>>>>> 687120fc64c (node selection by resource group id)
         List<ComputeNode> allComputeNodes = service.getComputeNodes();
         // Set all compute nodes as alive for sake of testing
         for (ComputeNode cn : allComputeNodes) {
@@ -503,10 +480,7 @@ public class SystemInfoServiceTest {
         properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:othergroup");
         ModifyComputeNodeClause clause = new ModifyComputeNodeClause("host3:1000", properties);
         service.modifyComputeNodeProperty(clause);
-<<<<<<< HEAD
-=======
         Assert.assertTrue(service.usingResourceIsolationGroups());
->>>>>>> 687120fc64c (node selection by resource group id)
         Assert.assertEquals(List.of(1L, 2L), service.getAvailableComputeNodeIds());
 
         // Reassign this FE and ensure it knows which compute node is available
@@ -514,14 +488,7 @@ public class SystemInfoServiceTest {
         Assert.assertEquals(List.of(3L), service.getAvailableComputeNodeIds());
 
         service.dropComputeNode("host3", 1000);
-<<<<<<< Updated upstream
-<<<<<<< HEAD
->>>>>>> 733b7282580 (manage worker groups for RIG, use StarOs for primary tablet->CN assignment)
-=======
         Assert.assertFalse(service.usingResourceIsolationGroups());
->>>>>>> 687120fc64c (node selection by resource group id)
-=======
->>>>>>> Stashed changes
     }
 
 }

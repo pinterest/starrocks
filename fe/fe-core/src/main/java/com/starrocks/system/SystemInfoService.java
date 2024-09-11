@@ -104,13 +104,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-<<<<<<< HEAD
-=======
 import static com.starrocks.common.util.PropertyAnalyzer.getResourceIsolationGroupFromProperties;
 import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
 import static com.starrocks.system.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
-
->>>>>>> 687120fc64c (node selection by resource group id)
 public class SystemInfoService implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
     public static final String DEFAULT_CLUSTER = "default_cluster";
@@ -143,10 +139,7 @@ public class SystemInfoService implements GsonPostProcessable {
     public boolean usingResourceIsolationGroups() {
         return tabletComputeNodeMapper.numResourceIsolationGroups() > 1;
     }
-    public TabletComputeNodeMapper internalTabletMapper() {
-        return tabletComputeNodeMapper;
-    }
-
+    
     public TabletComputeNodeMapper internalTabletMapper() {
         return tabletComputeNodeMapper;
     }
@@ -360,33 +353,6 @@ public class SystemInfoService implements GsonPostProcessable {
                 if (!entry.getValue().isEmpty()) {
                     newResourceIsolationGroup = getResourceIsolationGroupFromProperties(properties);
                 }
-<<<<<<< HEAD
-                // Step 1: Communicate with staros that we're dropping the CN from the old worker group.
-                String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(), computeNode.getStarletPort());
-                LOG.info("Trying to modify compute node {}: cnid: {}, old rig: {}, new rig: {}, original wgid: {}, ", workerAddr,
-                        computeNode.getId(), oldResourceIsolationGroup, newResourceIsolationGroup,
-                        computeNode.getWorkerGroupId());
-                Long originalWorkerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
-                if (computeNode.getStarletPort() != 0) {
-                    originalWorkerGroupId = computeNode.getWorkerGroupId();
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, originalWorkerGroupId);
-                }
-                // Step 2: update in-memory representation of compute node.
-                computeNode.setResourceIsolationGroup(newResourceIsolationGroup);
-                // Step 3: update internal table mapper to reflect the new membership of compute node
-                tabletComputeNodeMapper.modifyComputeNode(computeNode.getId(), oldResourceIsolationGroup,
-                        newResourceIsolationGroup);
-                // Step 4: use WorkerGroupManager to get associated worker group, set it in the compute node state.
-                Long workerGroupId =
-                        GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getOrCreateWorkerGroup(newResourceIsolationGroup);
-                computeNode.setWorkerGroupId(workerGroupId);
-                // Step 5 (in background) StarOs will be updated of new worker group information in heartbeat mgr
-                String opMessage = String.format(
-                        "%s:%d's group has been modified from %s to %s, and worker group has been changed from %d to %d",
-                        computeNode.getHost(), computeNode.getHeartbeatPort(), oldResourceIsolationGroup,
-                        newResourceIsolationGroup, originalWorkerGroupId, workerGroupId);
-                LOG.info(opMessage);
-=======
                 // Step 1: update in-memory representation of compute node
                 computeNode.setResourceIsolationGroup(newResourceIsolationGroup);
                 // Step 2: update internal table mapper to reflect the new membership of compute node
@@ -395,7 +361,6 @@ public class SystemInfoService implements GsonPostProcessable {
                 String opMessage = String.format("%s:%d's group has been modified from %s to %s",
                         computeNode.getHost(), computeNode.getHeartbeatPort(),
                         oldResourceIsolationGroup, newResourceIsolationGroup);
->>>>>>> 687120fc64c (node selection by resource group id)
                 messageResult.add(Collections.singletonList(opMessage));
             } else {
                 throw new UnsupportedOperationException("unsupported property: " + entry.getKey());
@@ -506,14 +471,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // drop from internal tablet mapper
         tabletComputeNodeMapper.removeComputeNode(dropComputeNode.getId(), dropComputeNode.getResourceIsolationGroup());
-
-<<<<<<< HEAD
-        if (!existsSomeCnInResourceIsolationGroup(dropComputeNode.getResourceIsolationGroup())) {
-            GlobalStateMgr.getCurrentState().getWorkerGroupMgr().dropResourceIsolationGroup(
-                    dropComputeNode.getResourceIsolationGroup());
-        }
-=======
->>>>>>> 687120fc64c (node selection by resource group id)
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
@@ -1220,14 +1177,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // remove from internal mapping from tablet to compute node
         tabletComputeNodeMapper.removeComputeNode(cn.getId(), cn.getResourceIsolationGroup());
-<<<<<<< HEAD
-
-        if (!existsSomeCnInResourceIsolationGroup(cn.getResourceIsolationGroup())) {
-            GlobalStateMgr.getCurrentState().getWorkerGroupMgr().dropResourceIsolationGroup(
-                    cn.getResourceIsolationGroup());
-        }
-=======
->>>>>>> 687120fc64c (node selection by resource group id)
     }
 
     public void replayDropBackend(Backend backend) {

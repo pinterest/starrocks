@@ -208,11 +208,7 @@ public class WarehouseManager implements Writable {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
         }
 
-<<<<<<< HEAD
         Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouseId, tabletId);
-=======
-        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouseId, tablet);
->>>>>>> 687120fc64c (node selection by resource group id)
         if (ids != null && !ids.isEmpty()) {
             return ids.iterator().next();
         } else {
@@ -221,25 +217,6 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-<<<<<<< HEAD
-        Warehouse warehouse = getWarehouse(warehouseName);
-
-        try {
-            long workerGroupId = selectWorkerGroupInternal(warehouse.getId()).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), workerGroupId);
-
-            Long nodeId;
-            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(shardInfo, true);
-            if (!ids.isEmpty()) {
-                nodeId = ids.iterator().next();
-                return nodeId;
-            } else {
-                return null;
-            }
-        } catch (StarClientException e) {
-=======
         Warehouse warehouse = nameToWh.get(warehouseName);
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
@@ -248,14 +225,10 @@ public class WarehouseManager implements Writable {
         if (ids != null && !ids.isEmpty()) {
             return ids.iterator().next();
         } else {
->>>>>>> 687120fc64c (node selection by resource group id)
             return null;
         }
     }
 
-<<<<<<< HEAD
-    private Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, Long tabletId) {
-=======
     public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -270,7 +243,6 @@ public class WarehouseManager implements Writable {
             }
             return new HashSet<>(computeNodeIds);
         }
->>>>>>> 687120fc64c (node selection by resource group id)
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
