@@ -132,7 +132,9 @@ public class SystemInfoService implements GsonPostProcessable {
         tabletComputeNodeMapper = new TabletComputeNodeMapper();
     }
 
-    public boolean usingResourceIsolationGroups() {
+    public boolean shouldUseInternalTabletToCnMapper() {
+        // We prefer to use the TabletComputeNodeMapper rather than delegating to StarOS/StarMgr for tablet->CN mappings
+        // if and only if we're using resource isolation groups.
         return tabletComputeNodeMapper.numResourceIsolationGroups() > 1;
     }
     public TabletComputeNodeMapper internalTabletMapper() {

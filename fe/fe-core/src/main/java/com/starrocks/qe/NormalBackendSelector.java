@@ -30,6 +30,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
+
+import static com.starrocks.qe.scheduler.Utils.maybeGetTabletId;
 
 public class NormalBackendSelector implements BackendSelector {
     private static final Logger LOG = LogManager.getLogger(NormalBackendSelector.class);
@@ -72,6 +75,7 @@ public class NormalBackendSelector implements BackendSelector {
         }
 
         for (TScanRangeLocations scanRangeLocations : locations) {
+            Optional<Long> optTabletId = maybeGetTabletId(scanRangeLocations.scan_range);
             // assign this scan range to the host w/ the fewest assigned row count
             Long minRowCount = Long.MAX_VALUE;
             TScanRangeLocation minLocation = null;
@@ -80,7 +84,7 @@ public class NormalBackendSelector implements BackendSelector {
             for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
                 if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
                     if (workerProvider.allowUsingBackupNode()) {
-                        long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id());
+                        long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id(), optTabletId);
                         LOG.debug("Select a backup node:{} for node:{}", backupNodeId, location.getBackend_id());
                         if (backupNodeId > 0) {
                             // using the backupNode to generate a new ScanRangeLocation

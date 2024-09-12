@@ -131,8 +131,7 @@ public class WarehouseManager implements Writable {
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
         // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        if (systemInfoService.usingResourceIsolationGroups()) {
-
+        if (systemInfoService.shouldUseInternalTabletToCnMapper()) {
             if (warehouseId != DEFAULT_WAREHOUSE_ID || workerGroupId != StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                 // Note that workerGroupId is not the same as resourceIsolationGroupId
                 throw new IllegalArgumentException(String.format("Cannot use resource groups with non-default" +
@@ -202,12 +201,12 @@ public class WarehouseManager implements Writable {
     public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        if (systemInfoService.usingResourceIsolationGroups()) {
+        if (systemInfoService.shouldUseInternalTabletToCnMapper()) {
             if (warehouseId != DEFAULT_WAREHOUSE_ID) {
                 throw new IllegalArgumentException(String.format("Cannot use resource groups with non-default" +
                         " warehouse %d", warehouseId));
             }
-            List<Long> computeNodeIds = systemInfoService.internalTabletMapper().computeNodesForTablet(tablet);
+            List<Long> computeNodeIds = systemInfoService.internalTabletMapper().computeNodesForTablet(tablet.getId());
             if (computeNodeIds == null) {
                 return null;
             }
