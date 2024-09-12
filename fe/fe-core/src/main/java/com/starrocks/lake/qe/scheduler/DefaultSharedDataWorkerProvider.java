@@ -31,6 +31,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,6 +41,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -242,8 +244,14 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
      */
     @Override
     public long selectBackupWorker(long workerId, Optional<Long> tabletId) {
-        if (availableID2ComputeNode.isEmpty()) {
-            LOG.info("availableID2ComputeNode is empty when looking for backup for worker: {}", workerId);
+        // Simplified initial validation combining both approaches
+        if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
+            if (availableID2ComputeNode.isEmpty()) {
+                LOG.info("availableID2ComputeNode is empty when looking for backup for worker: {}", workerId);
+            }
+            if (!id2ComputeNode.containsKey(workerId)) {
+                LOG.error("cannot select backup because list of all cn does not contain worker id {}: {}", workerId, id2ComputeNode);
+            }
             return -1;
         }
 
@@ -263,15 +271,13 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                             " id.");
         }
 
-        if (!id2ComputeNode.containsKey(workerId)) {
-            LOG.error("cannot select backup because list of all cn does not contain worker id {}: {}", workerId, id2ComputeNode);
-            return -1;
-        }
         if (allComputeNodeIds == null) {
             createAvailableIdList();
         }
         Preconditions.checkNotNull(allComputeNodeIds);
         Preconditions.checkState(allComputeNodeIds.contains(workerId));
+
+        // Standard backup selection logic (fallback when RIG doesn't work)
 
         int startPos = allComputeNodeIds.indexOf(workerId);
         int attempts = allComputeNodeIds.size();

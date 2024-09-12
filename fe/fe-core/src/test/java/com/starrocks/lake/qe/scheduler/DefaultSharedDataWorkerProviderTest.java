@@ -26,6 +26,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
+import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.ColocatedBackendSelector;
@@ -37,10 +38,13 @@ import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
@@ -67,6 +71,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FakeGlobalStateMgr.getNodeMgr;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class DefaultSharedDataWorkerProviderTest {
@@ -382,7 +387,7 @@ public class DefaultSharedDataWorkerProviderTest {
         for (long id : id2AllNodes.keySet()) {
             long backupId = -1;
             for (int j = 0; j < 100; ++j) {
-                long selectedId = workerProvider.selectBackupWorker(id);
+                long selectedId = workerProvider.selectBackupWorker(id, Optional.empty());
                 Assert.assertTrue(selectedId > 0);
                 // cannot choose itself
                 Assert.assertNotEquals(id, selectedId);
@@ -424,7 +429,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         while (selectCount < availList.size() * 2 + 1) { // make sure the while loop will stop
             Assert.assertFalse(provider.isDataNodeAvailable(unavailWorkerId));
-            long alterNodeId = provider.selectBackupWorker(unavailWorkerId);
+            long alterNodeId = provider.selectBackupWorker(unavailWorkerId, Optional.empty());
             if (alterNodeId == -1) {
                 break;
             }
@@ -434,7 +439,7 @@ public class DefaultSharedDataWorkerProviderTest {
             Assert.assertFalse(selectedNodeId.contains(alterNodeId));
 
             for (int j = 0; j < 10; ++j) {
-                long selectAgainId = provider.selectBackupWorker(unavailWorkerId);
+                long selectAgainId = provider.selectBackupWorker(unavailWorkerId, Optional.empty());
                 Assert.assertEquals(alterNodeId, selectAgainId);
             }
             ++selectCount;
@@ -443,7 +448,7 @@ public class DefaultSharedDataWorkerProviderTest {
             selectedNodeId.add(alterNodeId);
         }
         // all nodes are in block list, no nodes can be selected anymore
-        Assert.assertEquals(-1, provider.selectBackupWorker(unavailWorkerId));
+        Assert.assertEquals(-1, provider.selectBackupWorker(unavailWorkerId, Optional.empty()));
         // all the nodes are selected ever
         Assert.assertEquals(selectedNodeId.size(), availList.size());
 
@@ -489,6 +494,11 @@ public class DefaultSharedDataWorkerProviderTest {
             }
 
             @Mock
+            public boolean shouldUseInternalTabletToCnMapper() {
+                return true;
+            }
+
+            @Mock
             public TabletComputeNodeMapper internalTabletMapper() {
                 return tabletComputeNodeMapper;
             }
@@ -504,17 +514,29 @@ public class DefaultSharedDataWorkerProviderTest {
         };
 
         long cnToBlock = 1;
+        Set<Long> tabletsToTryGetBackup = new HashSet<>();
+        for (long tabletId = 0; tabletId < 1000; tabletId++) {
+            List<Long> cnsInOrder = tabletComputeNodeMapper.computeNodesForTablet(tabletId, totalNumComputeNodes);
+            for (long cnId : cnsInOrder) {
+                Assert.assertEquals("FE in group2 should only return these cn", 1, cnId % 3);
+            }
+            if (cnsInOrder.get(0) == cnToBlock) {
+                tabletsToTryGetBackup.add(tabletId);
+            }
+        }
         // Block some CN and check that the right backup is chosen for each tablet
         SimpleScheduler.getHostBlacklist().add(cnToBlock);
-        DefaultSharedDataWorkerProvider provider =
-                factory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, -1,
-                        ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        DefaultSharedDataWorkerProvider provider = factory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
+                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertFalse(tabletsToTryGetBackup.isEmpty()); // make sure we're testing something below
         Set<Long> chosenBackups = new HashSet<>();
-        for (long tabletId = 1L; tabletId < 1000; tabletId++) {
-            List<Long> cnsInOrder = tabletComputeNodeMapper.backupComputeNodesForTablet(tabletId, cnToBlock, 2);
-            Assert.assertEquals((long) cnsInOrder.get(0), provider.selectBackupWorker(cnToBlock, Optional.of(tabletId)));
-            Assert.assertNotEquals(cnToBlock, (long) cnsInOrder.get(0));
-            chosenBackups.add(cnsInOrder.get(0));
+        for (long tabletId : tabletsToTryGetBackup) {
+            List<Long> cnsInOrder = tabletComputeNodeMapper.computeNodesForTablet(tabletId, 2);
+            Assert.assertEquals(cnToBlock, (long) cnsInOrder.get(0)); // check consistency
+            Assert.assertEquals((long) cnsInOrder.get(1), provider.selectBackupWorker(cnToBlock, Optional.of(tabletId)));
+            chosenBackups.add(cnsInOrder.get(1));
         }
         // check that we're not using the same backup for every tablet
         Assert.assertTrue(chosenBackups.size() > 1);

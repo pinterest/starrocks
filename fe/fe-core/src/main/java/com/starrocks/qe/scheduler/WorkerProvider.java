@@ -20,6 +20,7 @@ import com.starrocks.system.SystemInfoService;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * WorkerProvider provides available workers to a job scheduler, and records the selected workers.
@@ -100,5 +101,5 @@ public interface WorkerProvider {
      *
      * @return -1, no available backup worker
      */
-    long selectBackupWorker(long workerId);
+    long selectBackupWorker(long workerId, Optional<Long> tabletId);
 }
