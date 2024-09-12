@@ -223,7 +223,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
      * e.g. also in BlockList, then try the next one in the list, until all nodes have benn tried.
      */
     @Override
-    public long selectBackupWorker(long workerId) {
+    public long selectBackupWorker(long workerId, Optional<Long> tabletId) {
         if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
             return -1;
         }
@@ -233,9 +233,6 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         Preconditions.checkNotNull(allComputeNodeIds);
         Preconditions.checkState(allComputeNodeIds.contains(workerId));
 
-        // Note: tabletId parameter will be added in a later commit when WorkerProvider interface is updated
-        // For now, this logic is disabled since tabletId is not available
-        Optional<Long> tabletId = Optional.empty();
         if (tabletId.isPresent()) {
             // If we've been provided the relevant tablet id, we try to select a backup that's based on the "next best"
             // compute node for the tablet. This way, when we need a backup for some dead compute node, we don't send
@@ -249,20 +246,19 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 List<Long> cnIdsOrderedByPreference = mapper.computeNodesForTablet(
                         tabletId.get(), availableID2ComputeNode.size());
                 if (cnIdsOrderedByPreference == null) {
-                    LOG.warn(String.format("The internal tablet mapper doesn't seem to know about the resource" +
-                                    " isolation group %s. Its state is %s.",
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup(),
-                            mapper.debugString()));
+                    LOG.warn(String.format(
+                            "The internal tablet mapper doesn't seem to know about the resource isolation group %s",
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup()));
                     return -1;
                 }
                 for (Long possibleBackup : cnIdsOrderedByPreference) {
-                    if (possibleBackup != workerId && availableID2ComputeNode.containsKey(possibleBackup)) {
+                    if (possibleBackup != workerId && availableID2ComputeNode.containsKey(possibleBackup) &&
+                            !SimpleScheduler.isInBlocklist(possibleBackup)) {
                         return possibleBackup;
                     }
                 }
                 LOG.warn(String.format("Tried to use internal tablet to CN mapper but it failed to find an available" +
                         " cn for the given tablet %d", tabletId.get()));
-                return -1;
             }
         }
         int startPos = allComputeNodeIds.indexOf(workerId);

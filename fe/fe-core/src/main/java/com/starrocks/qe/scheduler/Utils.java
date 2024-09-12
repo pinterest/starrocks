@@ -19,8 +19,7 @@ import com.starrocks.thrift.TScanRange;
 import java.util.Optional;
 
 public class Utils {
-    // We can only get the tablet id for an internal scan.
-    public static Optional<Long> getOptionalTabletId(TScanRange scanRange) {
+    public static Optional<Long> maybeGetTabletId(TScanRange scanRange) {
         Optional<Long> optTabletId = Optional.empty();
         if (scanRange.internal_scan_range != null) {
             optTabletId = Optional.of(scanRange.internal_scan_range.tablet_id);
@@ -28,4 +27,3 @@ public class Utils {
         return optTabletId;
     }
 }
-

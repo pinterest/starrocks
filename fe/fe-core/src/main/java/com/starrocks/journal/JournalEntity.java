@@ -965,5 +965,4 @@ public record JournalEntity(short opCode, Writable data) {
         } // end switch
         Preconditions.checkState(isRead);
     }
->>>>>>> 02c44a34d64 (parsing sql statements and passing assigned group to Frontend and ComputeNode classes)
 }
