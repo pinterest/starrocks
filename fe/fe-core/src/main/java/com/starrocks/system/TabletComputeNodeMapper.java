@@ -34,7 +34,6 @@ package com.starrocks.system;
 import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.server.GlobalStateMgr;
