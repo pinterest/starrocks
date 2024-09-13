@@ -33,8 +33,6 @@
 // under the License.
 package com.starrocks.system;
 
-import com.starrocks.catalog.Tablet;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import mockit.Expectations;
@@ -43,13 +41,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BinaryOperator;
-import java.util.stream.Collectors;
 
 public class TabletComputeNodeMapperTest {
     private Frontend thisFe;

@@ -26,7 +26,6 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
-import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.ColocatedBackendSelector;
@@ -463,9 +462,6 @@ public class DefaultSharedDataWorkerProviderTest {
         Assertions.assertEquals(selectedNodeId.size(), availList.size());
 
         // a random workerId that doesn't exist in workerProvider
-<<<<<<< HEAD
-        Assertions.assertEquals(-1, provider.selectBackupWorker(15678));
-=======
         Assert.assertEquals(-1, provider.selectBackupWorker(15678, Optional.empty()));
     }
 
