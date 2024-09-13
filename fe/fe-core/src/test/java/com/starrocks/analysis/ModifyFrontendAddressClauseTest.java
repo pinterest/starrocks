@@ -35,4 +35,12 @@ public class ModifyFrontendAddressClauseTest {
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test:1000", FrontendNodeType.FOLLOWER);
         Assert.assertTrue(clause.getHostPort().equals("test:1000"));
     }
+
+    @Test
+    public void testCreateWithProperties() {
+        ModifyFrontendClause
+                clause1 = new ModifyFrontendClause("originalHost-test:port", Map.of("labels.resource_isolation_group", "group:somegroup"), null);
+        Assert.assertEquals("originalHost-test:port", clause1.getHostPort());
+        Assert.assertEquals(Map.of("labels.resource_isolation_group", "group:somegroup"), clause1.getProperties());
+    }
 }

@@ -172,8 +172,15 @@ public class GlobalStateMgrTest {
         globalStateMgr.setEditLog(editLog);
         List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(fe.getHost(), "sandbox-fqdn");
-        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+
+        ModifyFrontendClause clause1 = new ModifyFrontendClause(fe.getHost() + ":" + fe.getEditLogPort(),
+                Map.of("labels.resource_isolation_group", "group:somegroup"), NodePosition.ZERO);
+        globalStateMgr.getNodeMgr().modifyFrontend(clause1);
+        Assert.assertEquals("somegroup", fe.getResourceIsolationGroup());
+
+        ModifyFrontendClause clause2 = new ModifyFrontendClause(fe.getHost(), "sandbox-fqdn");
+        globalStateMgr.getNodeMgr().modifyFrontend(clause2);
+        Assert.assertEquals("sandbox-fqdn", fe.getHost());
     }
 
     @Test(expected = DdlException.class)

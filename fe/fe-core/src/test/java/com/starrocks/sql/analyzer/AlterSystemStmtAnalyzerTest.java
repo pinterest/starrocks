@@ -83,8 +83,44 @@ public class AlterSystemStmtAnalyzerTest {
     public void testVisitModifyFrontendHostClause() {
         mockNet();
         AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
-        Void result = visitor.visitModifyFrontendHostClause(clause, null);
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("test:1",
+                Map.of("labels.resource_isolation_group", "group:1"));
+        Void result = visitor.visitModifyComputeNodeClause(clause, null);
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testVisitModifyComputeNodeClauseException() {
+        mockNet();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("test",
+                Map.of("labels.location", "rack:1"));
+        Void result = visitor.visitModifyComputeNodeClause(clause, null);
+    }
+
+    @Test
+    public void testVisitModifyFrontendPropertiesClause() {
+        mockNet();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+        ModifyFrontendClause clause = new ModifyFrontendClause("test:1",
+                Map.of("labels.resource_isolation_group", "group:1"), null);
+        Void result = visitor.visitModifyFrontendClause(clause, null);
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testVisitModifyFrontendPropertiesClauseException() {
+        mockNet();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+        ModifyFrontendClause clause = new ModifyFrontendClause("test:1",
+                Map.of("labels.location", "rack:1"), null);
+        Void result = visitor.visitModifyFrontendClause(clause, null);
+    }
+
+    @Test
+    public void testVisitModifyFrontendClause() {
+        mockNet();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+        ModifyFrontendClause clause = new ModifyFrontendClause("test", "fqdn");
+        Void result = visitor.visitModifyFrontendClause(clause, null);
     }
 
     @Test(expected = SemanticException.class)
