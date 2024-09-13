@@ -79,6 +79,7 @@ import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.persist.ColumnIdExpr;
@@ -111,6 +112,7 @@ import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
+import com.starrocks.sql.ast.ShowResourceIsolationGroupStatement;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
@@ -124,6 +126,7 @@ import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
@@ -979,9 +982,9 @@ public class ShowExecutorTest {
         }
         List<List<String>> rows = resultSet.getResultRows();
         Assert.assertEquals(3, rows.size());
-        Assert.assertEquals(" 1 fe5 1 4", String.join(" ", rows.get(0)));
-        Assert.assertEquals("somegroup 3 fe1,fe2,fe3 2 1,2", String.join(" ", rows.get(1)));
-        Assert.assertEquals("someothergroup 1 fe4 1 3", String.join(" ", rows.get(2)));
+        Assert.assertEquals(" fe5 1 4 1", String.join(" ", rows.get(0)));
+        Assert.assertEquals("somegroup fe1,fe2,fe3 3 1,2 2", String.join(" ", rows.get(1)));
+        Assert.assertEquals("someothergroup fe4 1 3 1", String.join(" ", rows.get(2)));
     }
 
     @Test

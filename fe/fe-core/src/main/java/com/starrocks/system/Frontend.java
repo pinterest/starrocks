@@ -54,6 +54,8 @@ import java.util.Objects;
 
 import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
 
+import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+
 public class Frontend implements Writable {
     public static final Logger LOG = LogManager.getLogger(Frontend.class);
     public static final String HEARTBEAT_MSG_SHUTTING_DOWN = "shutting down";

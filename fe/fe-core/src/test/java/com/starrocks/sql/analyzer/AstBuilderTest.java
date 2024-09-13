@@ -109,7 +109,8 @@ public class AstBuilderTest {
     @Test
     public void testModifyComputeNodeGroup() throws NoSuchFieldException, SecurityException,
             IllegalArgumentException, IllegalAccessException {
-        String sql = "ALTER SYSTEM MODIFY COMPUTE NODE '127.0.0.1:9050' set ('labels.resource_isolation_group' = 'group:somegroup')";
+        String sql = "ALTER SYSTEM MODIFY COMPUTE NODE '127.0.0.1:9050' set " +
+                "('labels.resource_isolation_group' = 'group:somegroup')";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);

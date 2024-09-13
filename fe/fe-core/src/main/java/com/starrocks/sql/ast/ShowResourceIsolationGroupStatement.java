@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 public class ShowResourceIsolationGroupStatement extends ShowStmt {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("ResourceIsolationGroupId").add("FeCount").add("FeIds").add("CnCount").add("CnIds")
+            .add("ResourceIsolationGroupId").add("FeIds").add("FeCount").add("CnIds").add("CnCount")
             .build();
     public ShowResourceIsolationGroupStatement() {
         this(NodePosition.ZERO);
@@ -77,15 +77,15 @@ public class ShowResourceIsolationGroupStatement extends ShowStmt {
             List<String> row = new ArrayList<>();
             row.add(rig);
             if (rigToFeIds.containsKey(rig)) {
-                row.add(String.format("%d", rigToFeIds.get(rig).size()));
                 row.add(String.join(",", rigToFeIds.get(rig)));
+                row.add(String.format("%d", rigToFeIds.get(rig).size()));
             } else {
                 row.add("");
                 row.add("");
             }
             if (rigToCnIds.containsKey(rig)) {
-                row.add(String.format("%d", rigToCnIds.get(rig).size()));
                 row.add(String.join(",", rigToCnIds.get(rig)));
+                row.add(String.format("%d", rigToCnIds.get(rig).size()));
             } else {
                 row.add("");
                 row.add("");

@@ -134,6 +134,7 @@ statement
     | alterSystemStatement
     | cancelAlterSystemStatement
     | showComputeNodesStatement
+    | showResourceIsolationGroupsStatement
 
     // Analyze Statement
     | analyzeStatement
@@ -786,6 +787,9 @@ showComputeNodesStatement
     : SHOW COMPUTE NODES
     ;
 
+showResourceIsolationGroupsStatement
+    : SHOW RESOURCE ISOLATION GROUPS
+    ;
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
 
 createExternalCatalogStatement
