@@ -89,7 +89,7 @@ public class AlterSystemStmtAnalyzerTest {
         mockNet();
         AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyComputeNodeClause clause = new ModifyComputeNodeClause("test:1",
-                Map.of("labels.group", "group:1"));
+                Map.of("labels.resource_isolation_group", "group:1"));
         Void result = visitor.visitModifyComputeNodeClause(clause, null);
     }
 
@@ -107,7 +107,7 @@ public class AlterSystemStmtAnalyzerTest {
         mockNet();
         AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyFrontendClause clause = new ModifyFrontendClause("test:1",
-                Map.of("labels.group", "group:1"), null);
+                Map.of("labels.resource_isolation_group", "group:1"), null);
         Void result = visitor.visitModifyFrontendClause(clause, null);
     }
 

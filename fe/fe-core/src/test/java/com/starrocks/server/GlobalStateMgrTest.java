@@ -188,7 +188,7 @@ public class GlobalStateMgrTest {
         Frontend fe = frontends.get(0);
 
         ModifyFrontendClause clause1 = new ModifyFrontendClause(fe.getHost() + ":" + fe.getEditLogPort(),
-                Map.of("labels.group", "group:somegroup"), NodePosition.ZERO);
+                Map.of("labels.resource_isolation_group", "group:somegroup"), NodePosition.ZERO);
         globalStateMgr.getNodeMgr().modifyFrontend(clause1);
         Assert.assertEquals("somegroup", fe.getResourceIsolationGroup());
 
