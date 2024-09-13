@@ -167,12 +167,14 @@ public class TabletComputeNodeMapperTest {
         for (long cnId : group1Cn) {
             int chosenCount = cnChoiceCount[(int) cnId];
             float chosenRate = (float) chosenCount / tabletsToTry;
-            Assert.assertTrue(chosenRate > .3 && chosenRate < .36);
+            // (1/num_cn_in_group_1) +- a little bit
+            Assert.assertTrue(chosenRate > .31 && chosenRate < .35);
         }
         for (long cnId : group2Cn) {
             int chosenCount = cnChoiceCount[(int) cnId];
             float chosenRate = (float) chosenCount / tabletsToTry;
-            Assert.assertTrue(chosenRate > .16 && chosenRate < .32);
+            // 2 * (1/num_cn_in_group_2) +- a little bit
+            Assert.assertTrue(chosenRate > .18 && chosenRate < .22);
         }
 
         // Check on remapping behavior after removing some CN
