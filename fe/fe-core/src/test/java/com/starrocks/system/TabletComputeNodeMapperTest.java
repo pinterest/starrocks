@@ -43,8 +43,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.BinaryOperator;
+import java.util.stream.Collectors;
 
 public class TabletComputeNodeMapperTest {
     private Frontend thisFe;
@@ -117,9 +122,9 @@ public class TabletComputeNodeMapperTest {
     public void testTabletToCnMapping() throws Exception {
         TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
 
-        Set<Long> group1Cn = Set.of(0L, 1L, 2L);
-        Set<Long> group2Cn = Set.of(3L, 4L, 5L);
-        int[] cnChoiceCount = new int[6];
+        Set<Long> group1Cn = new java.util.HashSet<>(Set.of(0L, 1L, 2L));
+        Set<Long> group2Cn = new java.util.HashSet<>(Set.of(3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L));
+        int[] cnChoiceCount = new int[group1Cn.size()+group2Cn.size()];
 
         // Set up mapper for group1 and group2 to have their own CN
         String group1 = "group1id";
@@ -134,7 +139,7 @@ public class TabletComputeNodeMapperTest {
         Assert.assertEquals(2, mapper.numResourceIsolationGroups());
 
 
-        int tabletsToTry = 1000;
+        int tabletsToTry = 10000;
         long[] tabletIdToGroup2Primary = new long[tabletsToTry];
         long[] tabletIdToGroup2Backup = new long[tabletsToTry];
         for (long tabletId = 0; tabletId < tabletsToTry; tabletId++) {
@@ -167,20 +172,26 @@ public class TabletComputeNodeMapperTest {
         for (long cnId : group2Cn) {
             int chosenCount = cnChoiceCount[(int) cnId];
             float chosenRate = (float) chosenCount / tabletsToTry;
-            Assert.assertTrue(chosenRate > .6 && chosenRate < .72);
+            Assert.assertTrue(chosenRate > .16 && chosenRate < .32);
         }
 
         // Check on remapping behavior after removing some CN
         long cnIdToRemove = 4L;
         Assert.assertTrue(group2Cn.contains(cnIdToRemove));
         mapper.removeComputeNode(cnIdToRemove, group2);
+        group2Cn.remove(cnIdToRemove);
         thisFe.setResourceIsolationGroup(group2);
+        Map<Long, Integer> backupForRemovedCnToCount = new HashMap<>();
         for (long tabletId = 0; tabletId < tabletsToTry; tabletId++) {
             List<Long> chosenCn = mapper.computeNodesForTablet(tabletId, 2);
             Assert.assertEquals(2, chosenCn.size());
             if (tabletIdToGroup2Primary[(int) tabletId] == cnIdToRemove) {
+                Long newPrimary = chosenCn.get(0);
                 // If the removed node used to be the primary, check that the old secondary is now the primary
-                Assert.assertEquals(tabletIdToGroup2Backup[(int) tabletId], (long) chosenCn.get(0));
+                Assert.assertEquals(tabletIdToGroup2Backup[(int) tabletId], (long) newPrimary);
+                Integer occurrenceCount = backupForRemovedCnToCount.containsKey(newPrimary) ?
+                        backupForRemovedCnToCount.get(newPrimary) + 1 : 1;
+                backupForRemovedCnToCount.put(newPrimary, occurrenceCount);
             } else if (tabletIdToGroup2Backup[(int) tabletId] == cnIdToRemove) {
                 // If the removed node used to be the backup, check that the primary is the same and the new secondary is
                 // not the removed node.
@@ -192,5 +203,15 @@ public class TabletComputeNodeMapperTest {
                 Assert.assertEquals(tabletIdToGroup2Backup[(int) tabletId], (long) chosenCn.get(1));
             }
         }
+        // Check that all CN in group2 are being used as backups similarly often (within 1 stddev of average).
+        Assert.assertTrue(backupForRemovedCnToCount.size() > 1);
+        int cnt = backupForRemovedCnToCount.values().stream().reduce(Integer::sum).get();
+        double avg = (double) cnt / backupForRemovedCnToCount.size();
+        double stddev =
+                backupForRemovedCnToCount.values().stream().mapToDouble(val -> Math.pow(val - avg, 2)).sum();
+        for (Integer count : backupForRemovedCnToCount.values()) {
+            Assert.assertTrue(Math.abs(count-avg) < stddev);
+        }
+
     }
 }
