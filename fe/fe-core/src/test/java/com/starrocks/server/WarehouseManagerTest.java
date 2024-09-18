@@ -121,6 +121,25 @@ public class WarehouseManagerTest {
                 node.setAlive(true);
                 return node;
             }
+
+            @Mock
+            public boolean shouldUseInternalTabletToCnMapper() {
+                return tabletComputeNodeMapper.trackingNonDefaultResourceIsolationGroup();
+            }
+
+            @Mock
+            public TabletComputeNodeMapper internalTabletMapper() {
+                return tabletComputeNodeMapper;
+            }
+        };
+
+        // We want to make sure we never call StarOSAgent if we're using resource isolation groups
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent();
+                maxTimes = 0;
+            }
+>>>>>>> 3aa54868956 (Charles's comments, check rig in WorkerProvider, rethink some stuff in tabletcomputenodemapper)
         };
 
         WarehouseManager mgr = new WarehouseManager();

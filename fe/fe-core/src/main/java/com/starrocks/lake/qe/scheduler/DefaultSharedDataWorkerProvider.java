@@ -47,6 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
+import static com.starrocks.system.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -320,9 +321,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
+        String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
+                getNodeMgr().getMySelf().getResourceIsolationGroup();
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
-            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
+            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
+                    resourceIsolationGroupMatches(thisFeResourceIsolationGroup, entry.getValue().getResourceIsolationGroup())) {
                 builder.put(entry);
             }
         }

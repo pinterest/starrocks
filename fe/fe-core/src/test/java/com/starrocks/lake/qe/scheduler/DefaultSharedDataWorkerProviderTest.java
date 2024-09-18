@@ -67,13 +67,12 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 public class DefaultSharedDataWorkerProviderTest {
     private Map<Long, ComputeNode> id2Backend;
     private Map<Long, ComputeNode> id2ComputeNode;
     private Map<Long, ComputeNode> id2AllNodes;
     private DefaultSharedDataWorkerProvider.Factory factory;
+    private Frontend thisFe;
 
     private static <C extends ComputeNode> Map<Long, C> genWorkers(long startId, long endId,
                                                                    Supplier<C> factory) {
@@ -115,6 +114,16 @@ public class DefaultSharedDataWorkerProviderTest {
             {
                 warehouseManager.getAllComputeNodeIds(anyLong);
                 result = Lists.newArrayList(id2AllNodes.keySet());
+                minTimes = 0;
+            }
+        };
+
+        thisFe = new Frontend();
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
                 minTimes = 0;
             }
         };

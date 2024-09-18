@@ -84,6 +84,7 @@ import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import com.starrocks.system.Backend.BackendState;
+import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
@@ -122,6 +123,9 @@ public class SystemInfoService implements GsonPostProcessable {
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
 
     private final NodeSelector nodeSelector;
+    // The TabletComputeNodeMapper must be updated any time a compute node is added, removed,
+    // or has its resource isolation group modified.
+    private final TabletComputeNodeMapper tabletComputeNodeMapper;
 
     public SystemInfoService() {
         idToBackendRef = new ConcurrentHashMap<>();
@@ -131,6 +135,17 @@ public class SystemInfoService implements GsonPostProcessable {
         pathHashToDishInfoRef = ImmutableMap.of();
 
         nodeSelector = new NodeSelector(this);
+        tabletComputeNodeMapper = new TabletComputeNodeMapper();
+    }
+
+    public boolean shouldUseInternalTabletToCnMapper() {
+        // We prefer to use the TabletComputeNodeMapper rather than delegating to StarOS/StarMgr for tablet->CN mappings
+        // if and only if we're using resource isolation groups.
+        return tabletComputeNodeMapper.trackingNonDefaultResourceIsolationGroup();
+    }
+
+    public TabletComputeNodeMapper internalTabletMapper() {
+        return tabletComputeNodeMapper;
     }
 
     public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
