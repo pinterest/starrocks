@@ -47,6 +47,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
 
+import static com.starrocks.system.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
+
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
  * 1. All Backends and ComputeNodes are treated the same as ComputeNodes.
@@ -240,9 +242,10 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 List<Long> cnIdsOrderedByPreference = mapper.computeNodesForTablet(
                         tabletId.get(), availableID2ComputeNode.size());
                 if (cnIdsOrderedByPreference == null) {
-                    LOG.warn(String.format(
-                            "The internal tablet mapper doesn't seem to know about the resource isolation group %s",
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup()));
+                    LOG.warn(String.format("The internal tablet mapper doesn't seem to know about the resource" +
+                                    " isolation group %s. Its state is %s.",
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup(),
+                            mapper.DebugString()));
                     return -1;
                 }
                 for (Long possibleBackup : cnIdsOrderedByPreference) {
@@ -302,9 +305,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
+        String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
+                getNodeMgr().getMySelf().getResourceIsolationGroup();
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
-            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
+            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
+                    resourceIsolationGroupMatches(thisFeResourceIsolationGroup, entry.getValue().getResourceIsolationGroup())) {
                 builder.put(entry);
             }
         }

@@ -169,8 +169,8 @@ public class WarehouseManagerTest {
             }
 
             @Mock
-            public boolean usingResourceIsolationGroups() {
-                return true;
+            public boolean shouldUseInternalTabletToCnMapper() {
+                return tabletComputeNodeMapper.trackingNonDefaultResourceIsolationGroup();
             }
 
             @Mock
