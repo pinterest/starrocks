@@ -47,6 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
+import static com.starrocks.system.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -262,9 +263,26 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
             // Currently, this is only enabled in the case that we're using resource isolation groups, which is when we
             // prefer to use the internal mapping, in the TabletComputeNodeMapper, rather than delegating to StarOS for
             // the tablet to compute node mapping.
-            Optional<Long> possibleBackup = useInternalTabletMapperToSelectBackup(workerId, tabletId.get());
-            if (possibleBackup.isPresent()) {
-                return possibleBackup.get();
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (systemInfoService.shouldUseInternalTabletToCnMapper()) {
+                TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
+                List<Long> cnIdsOrderedByPreference = mapper.computeNodesForTablet(
+                        tabletId.get(), availableID2ComputeNode.size());
+                if (cnIdsOrderedByPreference == null) {
+                    LOG.warn(String.format("The internal tablet mapper doesn't seem to know about the resource" +
+                                    " isolation group %s. Its state is %s.",
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup(),
+                            mapper.DebugString()));
+                    return -1;
+                }
+                for (Long possibleBackup : cnIdsOrderedByPreference) {
+                    if (possibleBackup != workerId && availableID2ComputeNode.containsKey(possibleBackup) &&
+                            !SimpleScheduler.isInBlocklist(possibleBackup)) {
+                        return possibleBackup;
+                    }
+                }
+                LOG.warn(String.format("Tried to use internal tablet to CN mapper but it failed to find an available" +
+                        " cn for the given tablet %d", tabletId.get()));
             }
             LOG.warn(
                     "Tablet id was present but TabletComputeNodeMapper failed to return backup, trying backup selection by node" +
@@ -331,9 +349,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
+        String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
+                getNodeMgr().getMySelf().getResourceIsolationGroup();
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
-            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
+            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
+                    resourceIsolationGroupMatches(thisFeResourceIsolationGroup, entry.getValue().getResourceIsolationGroup())) {
                 builder.put(entry);
             }
         }

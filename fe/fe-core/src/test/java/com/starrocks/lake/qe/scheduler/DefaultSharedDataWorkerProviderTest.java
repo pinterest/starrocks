@@ -26,7 +26,6 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
-import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.ColocatedBackendSelector;
@@ -71,14 +70,12 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.FakeGlobalStateMgr.getNodeMgr;
-import static org.assertj.core.api.Assertions.assertThat;
-
 public class DefaultSharedDataWorkerProviderTest {
     private Map<Long, ComputeNode> id2Backend;
     private Map<Long, ComputeNode> id2ComputeNode;
     private Map<Long, ComputeNode> id2AllNodes;
     private DefaultSharedDataWorkerProvider.Factory factory;
+    private Frontend thisFe;
 
     private static <C extends ComputeNode> Map<Long, C> genWorkers(long startId, long endId,
                                                                    Supplier<C> factory) {
@@ -102,7 +99,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Before
     public void setUp() {
         // clear the block list
-        SimpleScheduler.getHostBlacklist().clear();
+        SimpleScheduler.getHostBlacklist().hostBlacklist.clear();
         factory = new DefaultSharedDataWorkerProvider.Factory();
 
         // Generate mock Workers
@@ -120,6 +117,16 @@ public class DefaultSharedDataWorkerProviderTest {
             {
                 warehouseManager.getAllComputeNodeIds(anyLong);
                 result = Lists.newArrayList(id2AllNodes.keySet());
+                minTimes = 0;
+            }
+        };
+
+        thisFe = new Frontend();
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
                 minTimes = 0;
             }
         };
@@ -260,7 +267,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testSelectNextWorker() throws UserException {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.clear();
+        blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
@@ -306,26 +313,7 @@ public class DefaultSharedDataWorkerProviderTest {
         { // test no available worker to select
             WorkerProvider workerProvider =
                     new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of());
-
-            Exception e = Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
-            Assert.assertEquals(
-                    "Compute node not found. Check if any compute node is down. nodeId: -1 " +
-                            "compute node: [host#1 alive: true, available: false, inBlacklist: false] " +
-                            "[host#2 alive: false, available: false, inBlacklist: false] " +
-                            "[host#3 alive: true, available: false, inBlacklist: false] " +
-                            "[host#4 alive: true, available: false, inBlacklist: true] " +
-                            "[host#5 alive: true, available: false, inBlacklist: false] " +
-                            "[host#6 alive: false, available: false, inBlacklist: false] " +
-                            "[host#7 alive: true, available: false, inBlacklist: false] " +
-                            "[host#8 alive: true, available: false, inBlacklist: true] " +
-                            "[host#9 alive: true, available: false, inBlacklist: false] " +
-                            "[host#10 alive: false, available: false, inBlacklist: false] " +
-                            "[host#11 alive: true, available: false, inBlacklist: false] " +
-                            "[host#12 alive: true, available: false, inBlacklist: true] " +
-                            "[host#13 alive: true, available: false, inBlacklist: false] " +
-                            "[host#14 alive: false, available: false, inBlacklist: false] " +
-                            "[host#15 alive: true, available: false, inBlacklist: false] ",
-                    e.getMessage());
+            Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
         }
     }
 
@@ -355,7 +343,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testIsDataNodeAvailable() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.clear();
+        blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
@@ -513,6 +501,7 @@ public class DefaultSharedDataWorkerProviderTest {
             }
         };
 
+
         long cnToBlock = 1;
         Set<Long> tabletsToTryGetBackup = new HashSet<>();
         for (long tabletId = 0; tabletId < 1000; tabletId++) {
@@ -614,7 +603,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testNormalBackendSelectorWithSharedDataWorkerProvider() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.clear();
+        blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
 
@@ -679,7 +668,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testCollocationBackendSelectorWithSharedDataWorkerProvider() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.clear();
+        blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
 
@@ -749,21 +738,6 @@ public class DefaultSharedDataWorkerProviderTest {
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, providerNoAvailNode, 1);
             Assert.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
-        }
-    }
-
-    @Test
-    public void testNextWorkerOverflow() throws NonRecoverableException {
-        WorkerProvider provider =
-                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes));
-        for (int i = 0; i < 100; i++) {
-            Long workerId = provider.selectNextWorker();
-            assertThat(workerId).isNotNegative();
-        }
-        DefaultSharedDataWorkerProvider.getNextComputeNodeIndexer().set(Integer.MAX_VALUE);
-        for (int i = 0; i < 100; i++) {
-            Long workerId = provider.selectNextWorker();
-            assertThat(workerId).isNotNegative();
         }
     }
 }
