@@ -228,6 +228,25 @@ public class TabletComputeNodeMapper {
         }
     }
 
+    public List<Long> computeNodesForTablet(Long tabletId, int count) {
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
+                getResourceIsolationGroup();
+        return computeNodesForTablet(tabletId, count, thisResourceIsolationGroup);
+    }
+
+    public List<Long> computeNodesForTablet(Long tabletId, int count, String resourceIsolationGroup) {
+        readLock.lock();
+        try {
+            if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
+                return null;
+            }
+            TabletMap m = this.resourceIsolationGroupToTabletMapping.get(resourceIsolationGroup);
+            return m.tabletToComputeNodeId.get(tabletId, count);
+        } finally {
+            readLock.unlock();
+        }
+    }
+
     // Number of times that this mapper has returned the given compute node as the return value for `backupComputeNodesForTablet`.
     public Long getComputeNodeReturnCount(Long computeNodeId) {
         return computeNodeReturnCount.getOrDefault(computeNodeId, new AtomicLong(0)).get();

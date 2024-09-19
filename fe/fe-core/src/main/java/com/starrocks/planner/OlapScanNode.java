@@ -651,6 +651,7 @@ public class OlapScanNode extends ScanNode {
                 internalRange.setSkip_disk_cache(skipDiskCache);
                 tabletIsNull = false;
 
+                LOG.debug("Ideally, tablet {} mapped to backend id {}", tablet.getId(), replica.getBackendId());
                 // for CBO
                 if (!collectedStat && replica.getRowCount() != -1) {
                     actualRows += replica.getRowCount();
