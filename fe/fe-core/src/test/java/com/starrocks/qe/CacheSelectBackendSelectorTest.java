@@ -22,8 +22,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.thrift.TInternalScanRange;
@@ -105,6 +107,23 @@ public class CacheSelectBackendSelectorTest {
     }
 
     @Test
+    public void testDefaultParams(@Mocked NodeMgr nodeMgr) {
+        Frontend fe = new Frontend();
+        fe.setResourceIsolationGroup("something");
+        new Expectations() {
+            {
+                nodeMgr.getMySelf();
+                result = fe;
+                times = 1;
+            }
+        };
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(null, -1);
+        Assert.assertEquals(List.of("something"), props.resourceIsolationGroups);
+        Assert.assertEquals(1, props.numReplicasDesired);
+    }
+
+    @Test
     public void testSelectBackendKnownTabletIdAndInternalMapping(@Mocked WarehouseManager warehouseManager,
                                                                  @Mocked SystemInfoService systemInfoService) {
         ScanNode scanNode = newOlapScanNode(1, 1);
@@ -174,6 +193,82 @@ public class CacheSelectBackendSelectorTest {
             Assert.assertEquals(expectedAssignment, assignment);
         }
     }
+
+    @Test
+    public void testSelectBackendKnownTabletIdNoInternalTabletMapper(@Mocked WarehouseManager warehouseManager,
+                                                 @Mocked SystemInfoService systemInfoService) {
+        ScanNode scanNode = newOlapScanNode(1, 1);
+        Map<Long, ComputeNode> nodes = new HashMap<>();
+        List<Long> nodeIds = new ArrayList<>();
+        int totalCnCount = 100;
+        for (long computeNodeId = 0; computeNodeId < totalCnCount; computeNodeId++) {
+            ComputeNode cn = new ComputeNode(computeNodeId, "whatever", 100);
+            cn.setAlive(true);
+            if (computeNodeId % 3 == 0) {
+                cn.setResourceIsolationGroup("group1");
+            } else if (computeNodeId % 3 == 1) {
+                cn.setResourceIsolationGroup("group2");
+            } else {
+                cn.setResourceIsolationGroup("group3");
+            }
+            nodes.put(computeNodeId, cn);
+            nodeIds.add(computeNodeId);
+            long finalComputeNodeId = computeNodeId;
+            new Expectations() {
+                {
+                    systemInfoService.getBackendOrComputeNode(finalComputeNodeId);
+                    result = cn;
+                }
+            };
+        }
+        new Expectations() {
+            {
+                warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
+                result = nodeIds;
+            }
+        };
+
+        new Expectations() {
+            {
+                systemInfoService.shouldUseInternalTabletToCnMapper();
+                times = 2; // Once per resource isolation group
+                result = false;
+            }
+        };
+
+        // Note the internal scan is true, meaning we will know the tablet
+        List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
+        // Confirm our assumption that the TScanRangeLocations we used in the test has the 0th CN assigned.
+        Assert.assertEquals(0, locations.get(0).locations.get(0).backend_id);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
+        CacheSelectBackendSelector selector =
+                new CacheSelectBackendSelector(scanNode, locations, assignment, props, DEFAULT_WAREHOUSE_ID);
+
+        try {
+            selector.computeScanRangeAssignment();
+        } catch (UserException e) {
+            throw new RuntimeException(e);
+        } finally {
+            // For group1, CNs 0, 3, 6 will be assigned
+            // For group3, CNs 2, 5, 8 should be assigned.
+            Assert.assertEquals(Set.of(0L, 3L, 6L, 2L, 5L, 8L), selector.getSelectedWorkerIds());
+
+            int givenScanNodeId = scanNode.getId().asInt();
+            TScanRangeParams givenRangeParams = new TScanRangeParams(locations.get(0).scan_range);
+            FragmentScanRangeAssignment expectedAssignment = new FragmentScanRangeAssignment();
+            expectedAssignment.put(0L, givenScanNodeId, givenRangeParams);
+            expectedAssignment.put(3L, givenScanNodeId, givenRangeParams);
+            expectedAssignment.put(6L, givenScanNodeId, givenRangeParams);
+            expectedAssignment.put(2L, givenScanNodeId, givenRangeParams);
+            expectedAssignment.put(5L, givenScanNodeId, givenRangeParams);
+            expectedAssignment.put(8L, givenScanNodeId, givenRangeParams);
+            Assert.assertEquals(expectedAssignment, assignment);
+        }
+    }
+
 
     @Test
     public void testSelectBackendUnknownTabletId(@Mocked WarehouseManager warehouseManager,

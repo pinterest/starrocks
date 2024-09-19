@@ -19,6 +19,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 // Describes how a CACHE SELECT statement should choose compute nodes to populate with the data.
+// Defaults:
+// if resource isolation groups are not specified in the CACHE SELECT statement, we assume the request intends to
+// populate the data cache for the current FE's resource isolation group.
+// If number of replicas is not specified in the CACHE SELECT statement, we assume the request intends to cache 1 replica.
 public class CacheSelectComputeNodeSelectionProperties {
     public List<String> resourceIsolationGroups;
     public int numReplicasDesired;
@@ -31,6 +35,6 @@ public class CacheSelectComputeNodeSelectionProperties {
         } else {
             this.resourceIsolationGroups = resourceIsolationGroups;
         }
-        this.numReplicasDesired = numReplicasDesired;
+        this.numReplicasDesired = Math.max(numReplicasDesired, 1);
     }
 }
