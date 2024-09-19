@@ -124,8 +124,9 @@ public class Utils {
 
         List<Long> rebuildPindexTabletIds = new ArrayList<>();
         for (Tablet tablet : tablets) {
-            // TODO(cbrennan) I believe this is where we should enforce group matching for version vacuuming.
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+>>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
             if (computeNode == null) {
                 LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
                 computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),

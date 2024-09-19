@@ -22,12 +22,12 @@ import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+>>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
 
 import java.util.List;
 import java.util.Optional;
@@ -169,9 +169,23 @@ public class DataCacheStmtAnalyzerTest {
         Assertions.assertEquals(24 * 3600, stmt.getTTLSeconds());
 
         stmt = (DataCacheSelectStatement) analyzeSuccess(
+<<<<<<< HEAD
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", " +
                         "\"TTL\"=\"P1DT1S\")");
         Assertions.assertEquals(1, stmt.getPriority());
         Assertions.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
+=======
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1DT1S\")");
+        Assert.assertEquals(1, stmt.getPriority());
+        Assert.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
+        Assert.assertEquals(1, stmt.getNumReplicasDesired());
+        Assert.assertNull(stmt.getResourceIsolationGroups());
+
+        stmt = (DataCacheSelectStatement) analyzeSuccess("cache select * from" +
+                " hive0.datacache_db.multi_partition_table properties(\"resource_isolation_groups\"=\"somegroup1,somegroup2\"," +
+                " \"num_replicas\"=\"2\")");
+        Assert.assertEquals(2, stmt.getNumReplicasDesired());
+        Assert.assertEquals(List.of("somegroup1", "somegroup2"), stmt.getResourceIsolationGroups());
+>>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
     }
 }

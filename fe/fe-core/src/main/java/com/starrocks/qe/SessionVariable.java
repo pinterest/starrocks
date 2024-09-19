@@ -2050,6 +2050,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private boolean enableCacheSelect = false;
 
+    private List<String> datacacheSelectResourceGroups = null;
+    private int numDesiredDatacacheReplicas = -1;
+
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
 
@@ -5062,6 +5065,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableDropTableCheckMvDependency(boolean enableDropTableCheckMvDependency) {
         this.enableDropTableCheckMvDependency = enableDropTableCheckMvDependency;
+=======
+    public List<String> getDatacacheSelectResourceGroups() {
+        return datacacheSelectResourceGroups;
+    }
+
+    public void setDatacacheSelectResourceGroups(List<String> datacacheSelectResourceGroups) {
+        this.datacacheSelectResourceGroups = datacacheSelectResourceGroups;
+    }
+
+    public int getNumDesiredDatacacheReplicas() {
+        return numDesiredDatacacheReplicas;
+    }
+
+    public void setNumDesiredDatacacheReplicas(int numDesiredDatacacheReplicas) {
+        this.numDesiredDatacacheReplicas = numDesiredDatacacheReplicas;
+>>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
     }
 
     // Serialize to thrift object

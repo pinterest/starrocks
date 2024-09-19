@@ -90,16 +90,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
 
-<<<<<<< HEAD
-            String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
-                    getNodeMgr().getMySelf().getResourceIsolationGroup();
             ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode,
                     resourceIsolationGroup);
             if (availableComputeNodes.isEmpty()) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
-<<<<<<< HEAD
 
             return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, warehouseId,
                     resourceIsolationGroup);
@@ -324,17 +320,6 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
     private String computeNodesToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("compute node: ");
-<<<<<<< HEAD
-
-        id2ComputeNode.forEach((backendID, backend) -> {
-            if (allowNormalNodes || !backend.isAlive() || !availableID2ComputeNode.containsKey(backendID) ||
-                    SimpleScheduler.isInBlocklist(backendID)) {
-                out.append(
-                        String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
-                                backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
-                                SimpleScheduler.isInBlocklist(backendID)));
-            }
-        });
         id2ComputeNode.forEach((backendID, backend) -> out.append(
                 String.format("[%s alive: %b, available: %b, inBlacklist: %b, resourceIsolationGroupMatch: %b] ",
                         backend.getHost(),
@@ -362,11 +347,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers,
-<<<<<<< HEAD
-                                                                          String resourceIsolationGroup) {
-=======
                                                                           String thisFeResourceIsolationGroup) {
->>>>>>> 7f87cc8580a (small refactor of resoure isolation group utilities)
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
             if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
