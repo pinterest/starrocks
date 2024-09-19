@@ -14,17 +14,14 @@
 package com.starrocks.qe;
 
 import com.google.api.client.util.Lists;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -35,13 +32,10 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import oshi.SystemInfo;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,13 +44,11 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
-import static org.junit.jupiter.api.Assertions.*;
 
 public class CacheSelectBackendSelectorTest {
 
@@ -146,7 +138,6 @@ public class CacheSelectBackendSelectorTest {
             result = tabletComputeNodeMapper;
         }};
 
-
         // Internal scans do have tabletIds and should therefore use the internalTabletMapper.
         List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
         // Confirm our assumption that the TScanRangeLocations we used in the test has the 0th CN assigned.
@@ -165,10 +156,10 @@ public class CacheSelectBackendSelectorTest {
             throw new RuntimeException(e);
         } finally {
             List<Long> expectedIds = Stream.concat(
-                    tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired,
-                            "group1").stream(),
-                    tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired,
-                            "group3").stream())
+                            tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired,
+                                    "group1").stream(),
+                            tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired,
+                                    "group3").stream())
                     .collect(Collectors.toList());
 
             Assert.assertEquals(new HashSet<>(expectedIds), selector.getSelectedWorkerIds());
@@ -212,7 +203,6 @@ public class CacheSelectBackendSelectorTest {
             warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
             result = nodeIds;
         }};
-
 
         // Non-internal scans don't have tabletIds and should therefore use the workerProviders to get backups.
         List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, false);
