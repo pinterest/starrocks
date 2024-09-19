@@ -110,8 +110,6 @@ public class SystemInfoService implements GsonPostProcessable {
     @SerializedName(value = "be")
     protected volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
 
-    // TODO(cbrennan) Trace all usages of the ComputeNode references, make sure their resource isolation group
-    //  information is being used appropriately.
     @SerializedName(value = "ce")
     protected volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 

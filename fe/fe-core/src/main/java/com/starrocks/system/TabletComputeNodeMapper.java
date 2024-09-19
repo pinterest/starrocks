@@ -186,15 +186,18 @@ public class TabletComputeNodeMapper {
     }
 
     public List<Long> computeNodesForTablet(Long tabletId, int count) {
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
+                getResourceIsolationGroup();
+        return computeNodesForTablet(tabletId, count, thisResourceIsolationGroup);
+    }
+
+    public List<Long> computeNodesForTablet(Long tabletId, int count, String resourceIsolationGroup) {
         readLock.lock();
         try {
-            String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
-                    getResourceIsolationGroup();
-            thisResourceIsolationGroup = getResourceIsolationGroupName(thisResourceIsolationGroup);
-            if (!this.resourceIsolationGroupToTabletMapping.containsKey(thisResourceIsolationGroup)) {
+            if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
                 return null;
             }
-            TabletMap m = this.resourceIsolationGroupToTabletMapping.get(thisResourceIsolationGroup);
+            TabletMap m = this.resourceIsolationGroupToTabletMapping.get(resourceIsolationGroup);
             return m.tabletToComputeNodeId.get(tabletId, count);
         } finally {
             readLock.unlock();

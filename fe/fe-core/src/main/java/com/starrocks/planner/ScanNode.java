@@ -115,10 +115,6 @@ public abstract class ScanNode extends PlanNode {
      *                           only applicable to HDFS; less than or equal to zero means no
      *                           maximum.
      */
-    // TODO(cbrennan): When we want to have multiple replicas in shared-data mode, or if we want official assignments of
-    //  scan ranges to one node per group, we'll ultimately need to change what this returns. Currently it appears that
-    //  this will be a somewhat involved process, left for v2. For our purposes, this should be done first for the
-    //  OlapScanNode.
     public abstract List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength);
 
     @Override

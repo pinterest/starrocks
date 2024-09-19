@@ -229,7 +229,6 @@ public class WarehouseManager implements Writable {
         return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
     }
 
-    // TODO(cbrennan) Ensure that the ComputeNode returned here is checked for its resource group id if appropriate.
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
         if (computeNodeId == null) {

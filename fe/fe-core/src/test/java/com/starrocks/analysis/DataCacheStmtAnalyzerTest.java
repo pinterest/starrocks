@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -146,5 +147,13 @@ public class DataCacheStmtAnalyzerTest {
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1DT1S\")");
         Assert.assertEquals(1, stmt.getPriority());
         Assert.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
+        Assert.assertEquals(1, stmt.getNumReplicasDesired());
+        Assert.assertNull(stmt.getResourceIsolationGroups());
+
+        stmt = (DataCacheSelectStatement) analyzeSuccess("cache select * from" +
+                " hive0.datacache_db.multi_partition_table properties(\"resource_isolation_groups\"=\"somegroup1,somegroup2\"," +
+                " \"num_replicas\"=\"2\")");
+        Assert.assertEquals(2, stmt.getNumReplicasDesired());
+        Assert.assertEquals(List.of("somegroup1", "somegroup2"), stmt.getResourceIsolationGroups());
     }
 }

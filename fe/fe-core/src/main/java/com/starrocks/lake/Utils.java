@@ -114,7 +114,6 @@ public class Utils {
         }
 
         for (Tablet tablet : tablets) {
-            // TODO(cbrennan) I believe this is where we should enforce group matching for version vacuuming.
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {

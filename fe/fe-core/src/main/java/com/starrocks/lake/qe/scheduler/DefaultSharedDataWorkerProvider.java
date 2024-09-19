@@ -96,8 +96,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
-            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes,
-                    resourceIsolationGroup);
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);
         }
     }
 
@@ -118,17 +117,13 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
-    private final String resourceIsolationGroup;
 
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
-                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode
-                                           String resourceIsolationGroup
-    ) {
+                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
-        this.resourceIsolationGroup = resourceIsolationGroup;
         this.allComputeNodeIds = null;
     }
 
@@ -287,12 +282,10 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     public String toString() {
         StringBuilder out = new StringBuilder("compute node: ");
         id2ComputeNode.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b, available: %b, inBlacklist: %b, resourceIsolationGroupMatch: %b] ",
+                String.format("[%s alive: %b, available: %b, inBlacklist: %b] ",
                         backend.getHost(),
                         backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
-                        SimpleScheduler.isInBlocklist(backendID),
-                        resourceIsolationGroupMatches(this.resourceIsolationGroup,
-                                backend.getResourceIsolationGroup()))));
+                        SimpleScheduler.isInBlocklist(backendID))));
         return out.toString();
     }
 

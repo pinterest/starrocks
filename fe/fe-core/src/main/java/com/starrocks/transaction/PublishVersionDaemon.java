@@ -543,7 +543,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
-                // TODO(cbrennan): See here for entrypoint into getting nodes for vacuuming.
                 Utils.publishVersionBatch(publishTablets, txnInfos,
                         startVersion - 1, endVersion, compactionScores,
                         warehouseId,
