@@ -245,7 +245,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                     LOG.warn(String.format("The internal tablet mapper doesn't seem to know about the resource" +
                                     " isolation group %s. Its state is %s.",
                             GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup(),
-                            mapper.DebugString()));
+                            mapper.debugString()));
                     return -1;
                 }
                 for (Long possibleBackup : cnIdsOrderedByPreference) {

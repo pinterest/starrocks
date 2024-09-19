@@ -115,7 +115,7 @@ public class TabletComputeNodeMapper {
         return resourceIsolationGroup == null ? DEFAULT_RESOURCE_ISOLATION_GROUP_ID : resourceIsolationGroup;
     }
 
-    public String DebugString() {
+    public String debugString() {
         return resourceIsolationGroupToTabletMapping.entrySet().stream()
                 .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue()))
                 .collect(Collectors.joining("\n"));
