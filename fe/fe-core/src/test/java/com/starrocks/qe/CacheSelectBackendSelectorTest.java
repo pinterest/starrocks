@@ -129,14 +129,16 @@ public class CacheSelectBackendSelectorTest {
             nodes.put(computeNodeId, cn);
             nodeIds.add(computeNodeId);
         }
-        new Expectations() {{
-            systemInfoService.shouldUseInternalTabletToCnMapper();
-            times = 2; // Once per resource isolation group
-            result = true;
+        new Expectations() {
+            {
+                systemInfoService.shouldUseInternalTabletToCnMapper();
+                times = 2; // Once per resource isolation group
+                result = true;
 
-            systemInfoService.internalTabletMapper();
-            result = tabletComputeNodeMapper;
-        }};
+                systemInfoService.internalTabletMapper();
+                result = tabletComputeNodeMapper;
+            }
+        };
 
         // Internal scans do have tabletIds and should therefore use the internalTabletMapper.
         List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
@@ -145,10 +147,10 @@ public class CacheSelectBackendSelectorTest {
         Assert.assertEquals(givenTabletId, locations.get(0).scan_range.internal_scan_range.tablet_id);
 
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-        CacheSelectComputeNodeSelectionProperties props = new
-                CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
-        CacheSelectBackendSelector selector = new CacheSelectBackendSelector(
-                scanNode, locations, assignment, props, DEFAULT_WAREHOUSE_ID);
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
+        CacheSelectBackendSelector selector =
+                new CacheSelectBackendSelector(scanNode, locations, assignment, props, DEFAULT_WAREHOUSE_ID);
 
         try {
             selector.computeScanRangeAssignment();
@@ -156,11 +158,10 @@ public class CacheSelectBackendSelectorTest {
             throw new RuntimeException(e);
         } finally {
             List<Long> expectedIds = Stream.concat(
-                            tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired,
-                                    "group1").stream(),
-                            tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired,
-                                    "group3").stream())
-                    .collect(Collectors.toList());
+                    tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired, "group1")
+                            .stream(),
+                    tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired, "group3")
+                            .stream()).collect(Collectors.toList());
 
             Assert.assertEquals(new HashSet<>(expectedIds), selector.getSelectedWorkerIds());
 
@@ -194,15 +195,19 @@ public class CacheSelectBackendSelectorTest {
             nodes.put(computeNodeId, cn);
             nodeIds.add(computeNodeId);
             long finalComputeNodeId = computeNodeId;
-            new Expectations() {{
-                systemInfoService.getBackendOrComputeNode(finalComputeNodeId);
-                result = cn;
-            }};
+            new Expectations() {
+                {
+                    systemInfoService.getBackendOrComputeNode(finalComputeNodeId);
+                    result = cn;
+                }
+            };
         }
-        new Expectations() {{
-            warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
-            result = nodeIds;
-        }};
+        new Expectations() {
+            {
+                warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
+                result = nodeIds;
+            }
+        };
 
         // Non-internal scans don't have tabletIds and should therefore use the workerProviders to get backups.
         List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, false);
@@ -210,10 +215,10 @@ public class CacheSelectBackendSelectorTest {
         Assert.assertEquals(0, locations.get(0).locations.get(0).backend_id);
 
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-        CacheSelectComputeNodeSelectionProperties props = new
-                CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
-        CacheSelectBackendSelector selector = new CacheSelectBackendSelector(
-                scanNode, locations, assignment, props, DEFAULT_WAREHOUSE_ID);
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
+        CacheSelectBackendSelector selector =
+                new CacheSelectBackendSelector(scanNode, locations, assignment, props, DEFAULT_WAREHOUSE_ID);
 
         try {
             selector.computeScanRangeAssignment();
