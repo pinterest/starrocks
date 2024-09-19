@@ -282,8 +282,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     public String toString() {
         StringBuilder out = new StringBuilder("compute node: ");
         id2ComputeNode.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b, available: %b, inBlacklist: %b] ",
-                        backend.getHost(),
+                String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
                         backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
                         SimpleScheduler.isInBlocklist(backendID))));
         return out.toString();
@@ -310,11 +309,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers,
-                                                                          String thisFeResourceIsolationGroup) {
+                                                                          String resourceIsolationGroup) {
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
             if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
-                    resourceIsolationGroupMatches(thisFeResourceIsolationGroup, entry.getValue().getResourceIsolationGroup())) {
+                    resourceIsolationGroupMatches(resourceIsolationGroup, entry.getValue().getResourceIsolationGroup())) {
                 builder.put(entry);
             }
         }

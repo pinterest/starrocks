@@ -615,7 +615,6 @@ public class StarOSAgent {
 
     public Set<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
         List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
-
         if (onlyPrimary) {
             replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
                     .collect(Collectors.toList());
