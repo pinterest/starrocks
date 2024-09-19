@@ -18,7 +18,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
@@ -33,7 +32,6 @@ import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.qe.scheduler.Utils.getOptionalTabletId;
-
 
 // This class should only be used in shared data mode.
 public class CacheSelectBackendSelector implements BackendSelector {
@@ -65,7 +63,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
     }
 
     private Set<Long> getAssignedCnByTabletId(SystemInfoService systemInfoService, Long tabletId,
-                                                   String resourceIsolationGroupId) throws UserException {
+                                              String resourceIsolationGroupId) throws UserException {
         TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
         List<Long> cnIdsOrderedByPreference = mapper.computeNodesForTablet(
                 tabletId, props.numReplicasDesired, resourceIsolationGroupId);
