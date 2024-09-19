@@ -249,13 +249,13 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                     return -1;
                 }
                 for (Long possibleBackup : cnIdsOrderedByPreference) {
-                    if (possibleBackup != workerId && availableID2ComputeNode.containsKey(possibleBackup) &&
-                            !SimpleScheduler.isInBlocklist(possibleBackup)) {
+                    if (possibleBackup != workerId && availableID2ComputeNode.containsKey(possibleBackup)) {
                         return possibleBackup;
                     }
                 }
                 LOG.warn(String.format("Tried to use internal tablet to CN mapper but it failed to find an available" +
                         " cn for the given tablet %d", tabletId.get()));
+                return -1;
             }
         }
 

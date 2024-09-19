@@ -32,7 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 
-import static com.starrocks.qe.scheduler.Utils.maybeGetTabletId;
+import static com.starrocks.qe.scheduler.Utils.getOptionalTabletId;
 
 public class NormalBackendSelector implements BackendSelector {
     private static final Logger LOG = LogManager.getLogger(NormalBackendSelector.class);
@@ -75,7 +75,7 @@ public class NormalBackendSelector implements BackendSelector {
         }
 
         for (TScanRangeLocations scanRangeLocations : locations) {
-            Optional<Long> optTabletId = maybeGetTabletId(scanRangeLocations.scan_range);
+            Optional<Long> optTabletId = getOptionalTabletId(scanRangeLocations.scan_range);
             // assign this scan range to the host w/ the fewest assigned row count
             Long minRowCount = Long.MAX_VALUE;
             TScanRangeLocation minLocation = null;

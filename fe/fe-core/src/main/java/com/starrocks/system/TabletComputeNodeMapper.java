@@ -111,7 +111,7 @@ public class TabletComputeNodeMapper {
         return numGroups > 1 || !resourceIsolationGroupToTabletMapping.containsKey(DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
 
-    private String remapResourceIsolationGroupIfNull(String resourceIsolationGroup) {
+    private String getResourceIsolationGroupName(String resourceIsolationGroup) {
         return resourceIsolationGroup == null ? DEFAULT_RESOURCE_ISOLATION_GROUP_ID : resourceIsolationGroup;
     }
 
@@ -122,7 +122,7 @@ public class TabletComputeNodeMapper {
     }
 
     public void addComputeNode(Long computeNodeId, String resourceIsolationGroup) {
-        resourceIsolationGroup = remapResourceIsolationGroupIfNull(resourceIsolationGroup);
+        resourceIsolationGroup = getResourceIsolationGroupName(resourceIsolationGroup);
         writeLock.lock();
         try {
             addComputeNodeUnsynchronized(computeNodeId, resourceIsolationGroup);
@@ -145,7 +145,7 @@ public class TabletComputeNodeMapper {
 
     // This will succeed even if the resource isolation group is not being tracked.
     public void removeComputeNode(Long computeNodeId, String resourceIsolationGroup) {
-        resourceIsolationGroup = remapResourceIsolationGroupIfNull(resourceIsolationGroup);
+        resourceIsolationGroup = getResourceIsolationGroupName(resourceIsolationGroup);
         writeLock.lock();
         try {
             removeComputeNodeUnsynchronized(computeNodeId, resourceIsolationGroup);
@@ -167,8 +167,8 @@ public class TabletComputeNodeMapper {
 
     public void modifyComputeNode(Long computeNodeId,
                                   String oldResourceIsolationGroup, String newResourceIsolationGroup) {
-        oldResourceIsolationGroup = remapResourceIsolationGroupIfNull(oldResourceIsolationGroup);
-        newResourceIsolationGroup = remapResourceIsolationGroupIfNull(newResourceIsolationGroup);
+        oldResourceIsolationGroup = getResourceIsolationGroupName(oldResourceIsolationGroup);
+        newResourceIsolationGroup = getResourceIsolationGroupName(newResourceIsolationGroup);
         if (oldResourceIsolationGroup.equals(newResourceIsolationGroup)) {
             return;
         }
@@ -190,7 +190,7 @@ public class TabletComputeNodeMapper {
         try {
             String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
                     getResourceIsolationGroup();
-            thisResourceIsolationGroup = remapResourceIsolationGroupIfNull(thisResourceIsolationGroup);
+            thisResourceIsolationGroup = getResourceIsolationGroupName(thisResourceIsolationGroup);
             if (!this.resourceIsolationGroupToTabletMapping.containsKey(thisResourceIsolationGroup)) {
                 return null;
             }

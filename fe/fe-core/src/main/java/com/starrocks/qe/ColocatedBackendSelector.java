@@ -42,7 +42,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
 
-import static com.starrocks.qe.scheduler.Utils.maybeGetTabletId;
+import static com.starrocks.qe.scheduler.Utils.getOptionalTabletId;
 
 public class ColocatedBackendSelector implements BackendSelector {
     private static final Logger LOG = LogManager.getLogger(ColocatedBackendSelector.class);
@@ -123,7 +123,7 @@ public class ColocatedBackendSelector implements BackendSelector {
         int minBucketNum = Integer.MAX_VALUE;
         long minBackendId = Long.MAX_VALUE;
         List<TScanRangeLocation> backupLocations = new ArrayList<>();
-        Optional<Long> optTabletId = maybeGetTabletId(seqLocation.scan_range);
+        Optional<Long> optTabletId = getOptionalTabletId(seqLocation.scan_range);
         for (TScanRangeLocation location : seqLocation.locations) {
             if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
                 if (workerProvider.allowUsingBackupNode()) {
