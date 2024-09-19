@@ -24,6 +24,7 @@ import com.starrocks.server.NodeMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
@@ -170,11 +171,13 @@ public class EditLogTest {
     public void testOpUpdateFrontend() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
         List<Frontend> frontends = mgr.getNodeMgr().getFrontends(null);
-        Frontend fe = frontends.get(0);
-        fe.updateHostAndEditLogPort("testHost", 1000);
-        fe.setResourceIsolationGroup("somegroup2");
+        Frontend feInMemory = frontends.get(0);
+        Frontend feToWrite = new Frontend(feInMemory.getRole(), feInMemory.getNodeName(), feInMemory.getHost(),
+                feInMemory.getEditLogPort());
+        feToWrite.updateHostAndEditLogPort("testHost", 1000);
+        feToWrite.setResourceIsolationGroup("somegroup2");
         JournalEntity journal = new JournalEntity();
-        journal.setData(fe);
+        journal.setData(feToWrite);
         journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
         EditLog editLog = new EditLog(null);
         editLog.loadJournal(mgr, journal);
@@ -188,15 +191,24 @@ public class EditLogTest {
     @Test
     public void testOpModifyComputeNode() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
-        List<ComputeNode> computeNodes = mgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
-        ComputeNode cn = computeNodes.get(0);
-        cn.setResourceIsolationGroup("somegroup");
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        ComputeNode cnInMemory =  systemInfoService.getComputeNodes().get(0);
+        ComputeNode cnToWrite = new ComputeNode(cnInMemory.getId(), cnInMemory.getHost(), cnInMemory.getHeartbeatPort());
+        cnToWrite.setResourceIsolationGroup("somegroup");
         JournalEntity journal = new JournalEntity();
-        journal.setData(cn);
+        journal.setData(cnToWrite);
         journal.setOpCode(OperationType.OP_COMPUTE_NODE_STATE_CHANGE);
         EditLog editLog = new EditLog(null);
+
+        TabletComputeNodeMapper tabletComputeNodeMapper = systemInfoService.internalTabletMapper();
+        new Expectations(tabletComputeNodeMapper) {
+            {
+                tabletComputeNodeMapper.modifyComputeNode(cnToWrite.getId(), null, "somegroup");
+                minTimes = 1;
+            }
+        };
         editLog.loadJournal(mgr, journal);
-        List<ComputeNode> updatedComputeNodes = mgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+        List<ComputeNode> updatedComputeNodes = systemInfoService.getComputeNodes();
         ComputeNode updatedCn = updatedComputeNodes.get(0);
         Assert.assertEquals("somegroup", updatedCn.getResourceIsolationGroup());
     }
