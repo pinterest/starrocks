@@ -998,9 +998,9 @@ public class ShowExecutorTest {
         }
         List<List<String>> rows = resultSet.getResultRows();
         Assert.assertEquals(3, rows.size());
-        Assert.assertEquals(" fe5 1 4 1", String.join(" ", rows.get(0)));
-        Assert.assertEquals("somegroup fe1,fe2,fe3 3 1,2 2", String.join(" ", rows.get(1)));
-        Assert.assertEquals("someothergroup fe4 1 3 1", String.join(" ", rows.get(2)));
+        Assert.assertEquals(" 1 fe5 1 4", String.join(" ", rows.get(0)));
+        Assert.assertEquals("somegroup 3 fe1,fe2,fe3 2 1,2", String.join(" ", rows.get(1)));
+        Assert.assertEquals("someothergroup 1 fe4 1 3", String.join(" ", rows.get(2)));
     }
 
     @Test

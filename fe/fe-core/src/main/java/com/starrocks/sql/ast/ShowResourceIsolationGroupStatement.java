@@ -77,15 +77,15 @@ public class ShowResourceIsolationGroupStatement extends ShowStmt {
             List<String> row = new ArrayList<>();
             row.add(rig);
             if (rigToFeIds.containsKey(rig)) {
-                row.add(String.join(",", rigToFeIds.get(rig)));
                 row.add(String.format("%d", rigToFeIds.get(rig).size()));
+                row.add(String.join(",", rigToFeIds.get(rig)));
             } else {
                 row.add("");
                 row.add("");
             }
             if (rigToCnIds.containsKey(rig)) {
-                row.add(String.join(",", rigToCnIds.get(rig)));
                 row.add(String.format("%d", rigToCnIds.get(rig).size()));
+                row.add(String.join(",", rigToCnIds.get(rig)));
             } else {
                 row.add("");
                 row.add("");
