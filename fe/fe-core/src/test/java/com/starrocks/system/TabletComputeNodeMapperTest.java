@@ -129,8 +129,6 @@ public class TabletComputeNodeMapperTest {
         Set<Long> group1Cn = new java.util.HashSet<>(Set.of(0L, 1L, 2L));
         Set<Long> group2Cn = new java.util.HashSet<>(Set.of(3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L));
 <<<<<<< HEAD
-        int[] cnChoiceCount = new int[group1Cn.size()+group2Cn.size()];
-=======
         int[] cnChoiceCount = new int[group1Cn.size() + group2Cn.size()];
 >>>>>>> a0aa5d55b63 (merge)
 
@@ -221,8 +219,6 @@ public class TabletComputeNodeMapperTest {
                 backupForRemovedCnToCount.values().stream().mapToDouble(val -> Math.pow(val - avg, 2)).sum();
         for (Integer count : backupForRemovedCnToCount.values()) {
 <<<<<<< HEAD
-            Assert.assertTrue(Math.abs(count-avg) < stddev);
-=======
             Assert.assertTrue(Math.abs(count - avg) < stddev);
 >>>>>>> a0aa5d55b63 (merge)
         }

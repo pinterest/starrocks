@@ -167,7 +167,6 @@ public class TabletComputeNodeMapper {
 
     public void modifyComputeNode(Long computeNodeId,
                                   String oldResourceIsolationGroup, String newResourceIsolationGroup) {
-<<<<<<< HEAD
         oldResourceIsolationGroup = remapResourceIsolationGroupIfNull(oldResourceIsolationGroup);
         newResourceIsolationGroup = remapResourceIsolationGroupIfNull(newResourceIsolationGroup);
         if (oldResourceIsolationGroup.equals(newResourceIsolationGroup)) {

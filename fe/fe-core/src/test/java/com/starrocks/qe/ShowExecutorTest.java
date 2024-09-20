@@ -899,15 +899,89 @@ public class ShowExecutorTest {
                     resultSet.getMetaData().getColumn(i).getName());
         }
 
-        Assertions.assertTrue(resultSet.next());
-        Assertions.assertEquals("16", resultSet.getString(13)); // CpuCores
-        Assertions.assertEquals("100.000B", resultSet.getString(14)); // MemLimit
-        Assertions.assertEquals("10", resultSet.getString(15));
-        Assertions.assertEquals("1.00 %", resultSet.getString(16));
-        Assertions.assertEquals("3.0 %", resultSet.getString(17));
-        Assertions.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(18));
-        Assertions.assertEquals("OK", resultSet.getString(20));
-        Assertions.assertEquals(String.valueOf(tabletNum), resultSet.getString(24));
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("16", resultSet.getString(13));
+        Assert.assertEquals("10", resultSet.getString(14));
+        Assert.assertEquals("1.00 %", resultSet.getString(15));
+        Assert.assertEquals("3.0 %", resultSet.getString(16));
+        Assert.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(17));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(22));
+    }
+
+    @Test
+    public void testShowResourceIsolationGroups(@Mocked StarOSAgent starosAgent, @Mocked WarehouseManager warehouseManager)
+            throws AnalysisException, DdlException {
+        SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
+
+        ComputeNode node1 = new ComputeNode(1L, "127.0.0.1", 80);
+        node1.setResourceIsolationGroup("somegroup");
+        ComputeNode node2 = new ComputeNode(2L, "127.0.0.1", 80);
+        node2.setResourceIsolationGroup("somegroup");
+        ComputeNode node3 = new ComputeNode(3L, "127.0.0.1", 80);
+        node3.setResourceIsolationGroup("someothergroup");
+        ComputeNode node4 = new ComputeNode(4L, "127.0.0.1", 80);
+        node3.setResourceIsolationGroup("someothergroup");
+        clusterInfo.addComputeNode(node1);
+        clusterInfo.addComputeNode(node2);
+        clusterInfo.addComputeNode(node3);
+        clusterInfo.addComputeNode(node4);
+
+        Frontend fe1 =  new Frontend(FrontendNodeType.LEADER, "fe1", "127.0.0.1", 90);
+        fe1.setResourceIsolationGroup("somegroup");
+        Frontend fe2 =  new Frontend(FrontendNodeType.FOLLOWER, "fe2", "127.0.0.1", 90);
+        fe2.setResourceIsolationGroup("somegroup");
+        Frontend fe3 =  new Frontend(FrontendNodeType.FOLLOWER, "fe3", "127.0.0.1", 90);
+        fe3.setResourceIsolationGroup("somegroup");
+        Frontend fe4 =  new Frontend(FrontendNodeType.OBSERVER, "fe4", "127.0.0.1", 90);
+        fe4.setResourceIsolationGroup("someothergroup");
+        Frontend fe5 =  new Frontend(FrontendNodeType.OBSERVER, "fe5", "127.0.0.1", 90);
+
+        List<Frontend> allFe = new ArrayList<>(List.of(fe1, fe2, fe3, fe4, fe5));
+
+        NodeMgr nodeMgr = new NodeMgr();
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 1;
+                result = clusterInfo;
+
+                nodeMgr.getAllFrontends();
+                minTimes = 1;
+                result = allFe;
+            }
+        };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+
+        ShowResourceIsolationGroupStatement stmt = new ShowResourceIsolationGroupStatement();
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+
+        Assert.assertEquals(5,
+                resultSet.getMetaData().getColumnCount());
+        for (int i = 0; i < ShowResourceIsolationGroupStatement.TITLE_NAMES.size(); ++i) {
+            Assert.assertEquals(ShowResourceIsolationGroupStatement.TITLE_NAMES.get(i),
+                    resultSet.getMetaData().getColumn(i).getName());
+
+        }
+        List<List<String>> rows = resultSet.getResultRows();
+        Assert.assertEquals(3, rows.size());
+        Assert.assertEquals(" 1 fe5 1 4", String.join(" ", rows.get(0)));
+        Assert.assertEquals("somegroup 3 fe1,fe2,fe3 2 1,2", String.join(" ", rows.get(1)));
+        Assert.assertEquals("someothergroup 1 fe4 1 3", String.join(" ", rows.get(2)));
     }
 
     @Test
