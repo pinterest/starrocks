@@ -22,6 +22,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
@@ -42,7 +43,6 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -124,8 +124,8 @@ public class CacheSelectBackendSelectorTest {
     }
 
     @Test
-    public void testSelectBackendKnownTabletIdAndInternalMapping(@Mocked WarehouseManager warehouseManager,
-                                                                 @Mocked SystemInfoService systemInfoService) {
+    public void testSelectBackendKnownTabletIdAndInternalMapping(@Mocked SystemInfoService systemInfoService,
+                                                                 @Mocked WorkerProvider callerWorkerProvider) {
         ScanNode scanNode = newOlapScanNode(1, 1);
         Map<Long, ComputeNode> nodes = new HashMap<>();
         List<Long> nodeIds = new ArrayList<>();
@@ -148,6 +148,25 @@ public class CacheSelectBackendSelectorTest {
             nodes.put(computeNodeId, cn);
             nodeIds.add(computeNodeId);
         }
+
+        // Internal scans do have tabletIds and should therefore use the internalTabletMapper.
+        List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
+        // Confirm our assumption that the TScanRangeLocations we used in the test has the 0th CN assigned.
+        long givenTabletId = 0L;
+        Assert.assertEquals(givenTabletId, locations.get(0).scan_range.internal_scan_range.tablet_id);
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        CacheSelectBackendSelector selector =
+                new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
+                        DEFAULT_WAREHOUSE_ID);
+
+        List<Long> expectedSelections = Stream.concat(
+                tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired, "group1")
+                        .stream(),
+                tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired, "group3")
+                        .stream()).collect(Collectors.toList());
+
         new Expectations() {
             {
                 systemInfoService.shouldUseInternalTabletToCnMapper();
@@ -156,38 +175,23 @@ public class CacheSelectBackendSelectorTest {
 
                 systemInfoService.internalTabletMapper();
                 result = tabletComputeNodeMapper;
+
+                for (Long cnId : expectedSelections) {
+                    callerWorkerProvider.selectWorkerUnchecked(cnId);
+                    minTimes = 1;
+                }
             }
         };
-
-        // Internal scans do have tabletIds and should therefore use the internalTabletMapper.
-        List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
-        // Confirm our assumption that the TScanRangeLocations we used in the test has the 0th CN assigned.
-        long givenTabletId = 0L;
-        Assert.assertEquals(givenTabletId, locations.get(0).scan_range.internal_scan_range.tablet_id);
-
-        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-        CacheSelectComputeNodeSelectionProperties props =
-                new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
-        CacheSelectBackendSelector selector =
-                new CacheSelectBackendSelector(scanNode, locations, assignment, props, DEFAULT_WAREHOUSE_ID);
 
         try {
             selector.computeScanRangeAssignment();
         } catch (UserException e) {
             throw new RuntimeException(e);
         } finally {
-            List<Long> expectedIds = Stream.concat(
-                    tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired, "group1")
-                            .stream(),
-                    tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired, "group3")
-                            .stream()).collect(Collectors.toList());
-
-            Assert.assertEquals(new HashSet<>(expectedIds), selector.getSelectedWorkerIds());
-
             int givenScanNodeId = scanNode.getId().asInt();
             TScanRangeParams givenRangeParams = new TScanRangeParams(locations.get(0).scan_range);
             FragmentScanRangeAssignment expectedAssignment = new FragmentScanRangeAssignment();
-            for (Long id : expectedIds) {
+            for (Long id : expectedSelections) {
                 expectedAssignment.put(id, givenScanNodeId, givenRangeParams);
             }
             Assert.assertEquals(expectedAssignment, assignment);
@@ -196,7 +200,8 @@ public class CacheSelectBackendSelectorTest {
 
     @Test
     public void testSelectBackendKnownTabletIdNoInternalTabletMapper(@Mocked WarehouseManager warehouseManager,
-                                                 @Mocked SystemInfoService systemInfoService) {
+                                                                     @Mocked SystemInfoService systemInfoService,
+                                                                     @Mocked WorkerProvider callerWorkerProvider) {
         ScanNode scanNode = newOlapScanNode(1, 1);
         Map<Long, ComputeNode> nodes = new HashMap<>();
         List<Long> nodeIds = new ArrayList<>();
@@ -221,20 +226,6 @@ public class CacheSelectBackendSelectorTest {
                 }
             };
         }
-        new Expectations() {
-            {
-                warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
-                result = nodeIds;
-            }
-        };
-
-        new Expectations() {
-            {
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                times = 2; // Once per resource isolation group
-                result = false;
-            }
-        };
 
         // Note the internal scan is true, meaning we will know the tablet
         List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
@@ -245,17 +236,31 @@ public class CacheSelectBackendSelectorTest {
         CacheSelectComputeNodeSelectionProperties props =
                 new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
         CacheSelectBackendSelector selector =
-                new CacheSelectBackendSelector(scanNode, locations, assignment, props, DEFAULT_WAREHOUSE_ID);
+                new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
+                        DEFAULT_WAREHOUSE_ID);
+        new Expectations() {
+            {
+                warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
+                result = nodeIds;
+
+                systemInfoService.shouldUseInternalTabletToCnMapper();
+                times = 2; // Once per resource isolation group
+                result = false;
+
+                // For group1, CNs 0, 3, 6 will be assigned
+                // For group3, CNs 2, 5, 8 should be assigned.
+                for (Long cnId : Set.of(0L, 3L, 6L, 2L, 5L, 8L)) {
+                    callerWorkerProvider.selectWorkerUnchecked(cnId);
+                    minTimes = 1;
+                }
+            }
+        };
 
         try {
             selector.computeScanRangeAssignment();
         } catch (UserException e) {
             throw new RuntimeException(e);
         } finally {
-            // For group1, CNs 0, 3, 6 will be assigned
-            // For group3, CNs 2, 5, 8 should be assigned.
-            Assert.assertEquals(Set.of(0L, 3L, 6L, 2L, 5L, 8L), selector.getSelectedWorkerIds());
-
             int givenScanNodeId = scanNode.getId().asInt();
             TScanRangeParams givenRangeParams = new TScanRangeParams(locations.get(0).scan_range);
             FragmentScanRangeAssignment expectedAssignment = new FragmentScanRangeAssignment();
@@ -269,10 +274,10 @@ public class CacheSelectBackendSelectorTest {
         }
     }
 
-
     @Test
     public void testSelectBackendUnknownTabletId(@Mocked WarehouseManager warehouseManager,
-                                                 @Mocked SystemInfoService systemInfoService) {
+                                                 @Mocked SystemInfoService systemInfoService,
+                                                 @Mocked WorkerProvider callerWorkerProvider) {
         ScanNode scanNode = newOlapScanNode(1, 1);
         Map<Long, ComputeNode> nodes = new HashMap<>();
         List<Long> nodeIds = new ArrayList<>();
@@ -297,12 +302,6 @@ public class CacheSelectBackendSelectorTest {
                 }
             };
         }
-        new Expectations() {
-            {
-                warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
-                result = nodeIds;
-            }
-        };
 
         // Non-internal scans don't have tabletIds and should therefore use the workerProviders to get backups.
         List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, false);
@@ -313,17 +312,27 @@ public class CacheSelectBackendSelectorTest {
         CacheSelectComputeNodeSelectionProperties props =
                 new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3);
         CacheSelectBackendSelector selector =
-                new CacheSelectBackendSelector(scanNode, locations, assignment, props, DEFAULT_WAREHOUSE_ID);
+                new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
+                        DEFAULT_WAREHOUSE_ID);
+        new Expectations() {
+            {
+                warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
+                result = nodeIds;
+
+                // For group1, CNs 0, 3, 6 will be assigned
+                // For group3, CNs 2, 5, 8 should be assigned.
+                for (Long cnId : Set.of(0L, 3L, 6L, 2L, 5L, 8L)) {
+                    callerWorkerProvider.selectWorkerUnchecked(cnId);
+                    minTimes = 1;
+                }
+            }
+        };
 
         try {
             selector.computeScanRangeAssignment();
         } catch (UserException e) {
             throw new RuntimeException(e);
         } finally {
-            // For group1, CNs 0, 3, 6 will be assigned
-            // For group3, CNs 2, 5, 8 should be assigned.
-            Assert.assertEquals(Set.of(0L, 3L, 6L, 2L, 5L, 8L), selector.getSelectedWorkerIds());
-
             int givenScanNodeId = scanNode.getId().asInt();
             TScanRangeParams givenRangeParams = new TScanRangeParams(locations.get(0).scan_range);
             FragmentScanRangeAssignment expectedAssignment = new FragmentScanRangeAssignment();
