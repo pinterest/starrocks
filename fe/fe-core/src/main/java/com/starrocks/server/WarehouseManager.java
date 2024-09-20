@@ -218,13 +218,6 @@ public class WarehouseManager implements Writable {
             return null;
         }
     }
-        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouse.getId(), tablet);
-        if (ids != null && !ids.isEmpty()) {
-            return ids.iterator().next();
-        } else {
-            return null;
-        }
-    }
 
     public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr

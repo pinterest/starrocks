@@ -67,9 +67,20 @@ public class TabletComputeNodeMapperTest {
     }
 
     @Test
+    public void testGroupManagementEdgeCase() throws Exception {
+        TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
+        Assert.assertEquals(0, mapper.numResourceIsolationGroups());
+        Assert.assertFalse(mapper.trackingNonDefaultResourceIsolationGroup());
+        mapper.addComputeNode(1L, "randomgroup");
+        Assert.assertTrue(mapper.trackingNonDefaultResourceIsolationGroup());
+    }
+
+
+    @Test
     public void testGroupManagement() throws Exception {
         TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
         Assert.assertEquals(0, mapper.numResourceIsolationGroups());
+        Assert.assertFalse(mapper.trackingNonDefaultResourceIsolationGroup());
 
         Long arbitraryTablet = 1000L;
 
@@ -90,21 +101,19 @@ public class TabletComputeNodeMapperTest {
         mapper.addComputeNode(3L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
         mapper.addComputeNode(4L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
         Assert.assertEquals(3, mapper.computeNodesForTablet(arbitraryTablet, 3).size());
-
-
+        Assert.assertFalse(mapper.trackingNonDefaultResourceIsolationGroup());
 
         String otherGroup = "someothergroup";
         mapper.modifyComputeNode(2L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID,
                 otherGroup);
         // Check that assigning the compute node to another group is reflected in the count
         Assert.assertEquals(2, mapper.numResourceIsolationGroups());
+        Assert.assertTrue(mapper.trackingNonDefaultResourceIsolationGroup());
 
         // Check that moving the only CN from otherGroup back to the default group again reflects the count correctly
         mapper.modifyComputeNode(2L, otherGroup,
                 ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
         Assert.assertEquals(1, mapper.numResourceIsolationGroups());
-
-
         // Check that removing the only CN from otherGroup again reflects the count correctly
         mapper.modifyComputeNode(2L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID,
                 otherGroup);
@@ -119,7 +128,11 @@ public class TabletComputeNodeMapperTest {
 
         Set<Long> group1Cn = new java.util.HashSet<>(Set.of(0L, 1L, 2L));
         Set<Long> group2Cn = new java.util.HashSet<>(Set.of(3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L));
+<<<<<<< HEAD
         int[] cnChoiceCount = new int[group1Cn.size()+group2Cn.size()];
+=======
+        int[] cnChoiceCount = new int[group1Cn.size() + group2Cn.size()];
+>>>>>>> a0aa5d55b63 (merge)
 
         // Set up mapper for group1 and group2 to have their own CN
         String group1 = "group1id";
@@ -207,7 +220,11 @@ public class TabletComputeNodeMapperTest {
         double stddev =
                 backupForRemovedCnToCount.values().stream().mapToDouble(val -> Math.pow(val - avg, 2)).sum();
         for (Integer count : backupForRemovedCnToCount.values()) {
+<<<<<<< HEAD
             Assert.assertTrue(Math.abs(count-avg) < stddev);
+=======
+            Assert.assertTrue(Math.abs(count - avg) < stddev);
+>>>>>>> a0aa5d55b63 (merge)
         }
 
     }

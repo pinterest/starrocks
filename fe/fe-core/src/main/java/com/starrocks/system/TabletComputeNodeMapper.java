@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
 
@@ -113,6 +114,13 @@ public class TabletComputeNodeMapper {
     private String remapResourceIsolationGroupIfNull(String resourceIsolationGroup) {
         return resourceIsolationGroup == null ? DEFAULT_RESOURCE_ISOLATION_GROUP_ID : resourceIsolationGroup;
     }
+
+    public String debugString() {
+        return resourceIsolationGroupToTabletMapping.entrySet().stream()
+                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue()))
+                .collect(Collectors.joining("\n"));
+    }
+
     public void addComputeNode(Long computeNodeId, String resourceIsolationGroup) {
         resourceIsolationGroup = remapResourceIsolationGroupIfNull(resourceIsolationGroup);
         writeLock.lock();
@@ -159,6 +167,7 @@ public class TabletComputeNodeMapper {
 
     public void modifyComputeNode(Long computeNodeId,
                                   String oldResourceIsolationGroup, String newResourceIsolationGroup) {
+<<<<<<< HEAD
         oldResourceIsolationGroup = remapResourceIsolationGroupIfNull(oldResourceIsolationGroup);
         newResourceIsolationGroup = remapResourceIsolationGroupIfNull(newResourceIsolationGroup);
         if (oldResourceIsolationGroup.equals(newResourceIsolationGroup)) {

@@ -50,6 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+import static java.util.Objects.requireNonNullElse;
 
 /**
  * This class extends the primary identifier of a compute node with computing capabilities
@@ -304,7 +305,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     }
 
     public String getResourceIsolationGroup() {
-        return java.util.Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        return requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
     public void setResourceIsolationGroup(String group) {
         this.resourceIsolationGroup = group;
