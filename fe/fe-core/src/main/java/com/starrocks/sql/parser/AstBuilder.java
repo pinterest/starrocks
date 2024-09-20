@@ -389,6 +389,7 @@ import com.starrocks.sql.ast.ShowProfilelistStmt;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourceGroupUsageStmt;
+import com.starrocks.sql.ast.ShowResourceIsolationGroupStatement;
 import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
@@ -2322,6 +2323,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowComputeNodesStatement(StarRocksParser.ShowComputeNodesStatementContext context) {
         return new ShowComputeNodesStmt(createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowResourceIsolationGroupsStatement(
+            StarRocksParser.ShowResourceIsolationGroupsStatementContext context) {
+        return new ShowResourceIsolationGroupStatement(createPos(context));
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------

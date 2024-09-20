@@ -423,6 +423,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowResourceIsolationGroups(ShowResourceIsolationGroupStatement statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
     default R visitAnalyzeStatement(AnalyzeStmt statement, C context) {

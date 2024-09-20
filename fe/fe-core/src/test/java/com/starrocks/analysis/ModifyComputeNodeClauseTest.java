@@ -25,9 +25,9 @@ public class ModifyComputeNodeClauseTest {
 
     @Test
     public void testCreateClause() {
-        ModifyComputeNodeClause clause1 = new ModifyComputeNodeClause("originalHost-test:port", Map.of("labels.group", "group:somegroup"));
+        ModifyComputeNodeClause clause1 = new ModifyComputeNodeClause("originalHost-test:port", Map.of("labels.resource_isolation_group", "group:somegroup"));
 
         Assert.assertEquals("originalHost-test:port", clause1.getComputeNodeHostPort());
-        Assert.assertEquals(Map.of("labels.group", "group:somegroup"), clause1.getProperties());
+        Assert.assertEquals(Map.of("labels.resource_isolation_group", "group:somegroup"), clause1.getProperties());
     }
 }

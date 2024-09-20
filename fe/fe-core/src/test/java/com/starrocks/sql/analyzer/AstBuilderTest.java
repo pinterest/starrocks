@@ -91,7 +91,7 @@ public class AstBuilderTest {
     @Test
     public void testModifyFrontendHostGroup() throws NoSuchFieldException, SecurityException,
             IllegalArgumentException, IllegalAccessException {
-        String sql = "alter system modify frontend '127.0.0.1:9010' set ('labels.group' = 'group:somegroup')";
+        String sql = "alter system modify frontend '127.0.0.1:9010' set ('labels.resource_isolation_group' = 'group:somegroup')";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
@@ -103,13 +103,14 @@ public class AstBuilderTest {
         ModifyFrontendClause clause = (ModifyFrontendClause) field.get(statement);
         Assert.assertNull(clause.getSrcHost());
         Assert.assertNull(clause.getDestHost());
-        Assert.assertEquals(Map.of("labels.group", "group:somegroup"), clause.getProperties());
+        Assert.assertEquals(Map.of("labels.resource_isolation_group", "group:somegroup"), clause.getProperties());
     }
 
     @Test
     public void testModifyComputeNodeGroup() throws NoSuchFieldException, SecurityException,
             IllegalArgumentException, IllegalAccessException {
-        String sql = "ALTER SYSTEM MODIFY COMPUTE NODE '127.0.0.1:9050' set ('labels.group' = 'group:somegroup')";
+        String sql = "ALTER SYSTEM MODIFY COMPUTE NODE '127.0.0.1:9050' set " +
+                "('labels.resource_isolation_group' = 'group:somegroup')";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
@@ -120,7 +121,7 @@ public class AstBuilderTest {
         field.setAccessible(true);
         ModifyComputeNodeClause clause = (ModifyComputeNodeClause) field.get(statement);
         Assert.assertEquals("127.0.0.1:9050", clause.getComputeNodeHostPort());
-        Assert.assertEquals(Map.of("labels.group", "group:somegroup"), clause.getProperties());
+        Assert.assertEquals(Map.of("labels.resource_isolation_group", "group:somegroup"), clause.getProperties());
     }
 
     @Test

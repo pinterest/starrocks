@@ -42,8 +42,8 @@ public class ModifyFrontendClauseTest {
     @Test
     public void testCreateWithProperties() {
         ModifyFrontendClause
-                clause1 = new ModifyFrontendClause("originalHost-test:port", Map.of("labels.group", "group:somegroup"), null);
+                clause1 = new ModifyFrontendClause("originalHost-test:port", Map.of("labels.resource_isolation_group", "group:somegroup"), null);
         Assert.assertEquals("originalHost-test:port", clause1.getHostPort());
-        Assert.assertEquals(Map.of("labels.group", "group:somegroup"), clause1.getProperties());
+        Assert.assertEquals(Map.of("labels.resource_isolation_group", "group:somegroup"), clause1.getProperties());
     }
 }
