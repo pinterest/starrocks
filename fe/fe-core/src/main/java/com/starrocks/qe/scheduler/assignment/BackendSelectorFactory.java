@@ -78,18 +78,9 @@ public class BackendSelectorFactory {
             // Note that a cacheSelect should never be hasReplicated (because currently shared-data mode otherwise
             // doesn't support multiple replicas in cache), and it should never be hasColocate (because a cache select
             // statement is for a single table).
-            CacheSelectBackendSelector selector = new CacheSelectBackendSelector(
-                    scanNode, locations, assignment, new CacheSelectComputeNodeSelectionProperties(
+            return new CacheSelectBackendSelector(
+                    scanNode, locations, assignment, workerProvider, new CacheSelectComputeNodeSelectionProperties(
                     datacacheSelectResourceGroups, desiredDatacacheReplicas), connectContext.getCurrentWarehouseId());
-            // We don't pass the WorkerProvider since the CacheSelectBackendSelector will need to create WorkerProviders
-            // for a different resource isolation group.
-            //  Note that although we're not using the provided workerProvider above, the caller assumes that we used it
-            //  to note the selected backend ids. This is used for things like checking if the worker has died
-            //  and cancelling queries.
-            for (long workerId : selector.getSelectedWorkerIds()) {
-                workerProvider.selectWorkerUnchecked(workerId);
-            }
-            return selector;
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();

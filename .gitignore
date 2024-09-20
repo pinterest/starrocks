@@ -1,7 +1,5 @@
 # *.xml line was added by cbrennan
 *.xml
-# build.sh added by cbrennan
-build.sh
 *.swp
 *.pyc
 be/output
