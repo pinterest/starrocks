@@ -59,7 +59,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("StarletPort")
                 .add("WorkerId")
                 .add("WarehouseName")
-                .add("TabletNum");
+                .add("TabletNum")
+                .add("ResourceIsolationGroup");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
@@ -179,6 +180,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
                 long tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
                 computeNodeInfo.add(tabletNum);
+                computeNodeInfo.add(computeNode.getResourceIsolationGroup());
             }
 
             comparableComputeNodeInfos.add(computeNodeInfo);

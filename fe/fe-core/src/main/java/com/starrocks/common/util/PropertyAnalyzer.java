@@ -149,7 +149,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
-    public static final String PROPERTIES_LABELS_GROUP = "labels.group";
+    public static final String PROPERTIES_LABELS_GROUP = "labels.resource_isolation_group";
     private static final String COLON_DELIMITER = ":";
     private static final String PROPERTIES_GROUP = "group";
 

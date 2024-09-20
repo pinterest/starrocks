@@ -63,6 +63,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             .add("Name").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
             .add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
+            .add("ResourceIsolationGroup")
             .build();
 
     private GlobalStateMgr globalStateMgr;
@@ -152,6 +153,8 @@ public class FrontendsProcNode implements ProcNodeInterface {
             } else {
                 info.add(fe.getFeVersion());
             }
+
+            info.add(fe.getResourceIsolationGroup());
 
             infos.add(info);
         }
