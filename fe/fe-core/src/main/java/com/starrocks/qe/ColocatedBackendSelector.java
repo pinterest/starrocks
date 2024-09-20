@@ -37,9 +37,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+
+import static com.starrocks.qe.scheduler.Utils.getOptionalTabletId;
 
 public class ColocatedBackendSelector implements BackendSelector {
     private static final Logger LOG = LogManager.getLogger(ColocatedBackendSelector.class);
@@ -120,10 +123,11 @@ public class ColocatedBackendSelector implements BackendSelector {
         int minBucketNum = Integer.MAX_VALUE;
         long minBackendId = Long.MAX_VALUE;
         List<TScanRangeLocation> backupLocations = new ArrayList<>();
+        Optional<Long> optTabletId = getOptionalTabletId(seqLocation.scan_range);
         for (TScanRangeLocation location : seqLocation.locations) {
             if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
                 if (workerProvider.allowUsingBackupNode()) {
-                    long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id());
+                    long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id(), optTabletId);
                     LOG.debug("Select a backup node:{} for node:{}", backupNodeId, location.getBackend_id());
                     if (backupNodeId > 0) {
                         // using the backupNode to generate a new ScanRangeLocation

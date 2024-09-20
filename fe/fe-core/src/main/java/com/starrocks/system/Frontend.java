@@ -47,6 +47,7 @@ import com.starrocks.system.HeartbeatResponse.HbStatus;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Objects;
 
 import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
 
@@ -135,10 +136,7 @@ public class Frontend implements Writable {
     }
 
     public String getResourceIsolationGroup() {
-        if (resourceIsolationGroup == null) {
-            return DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
-        }
-        return resourceIsolationGroup;
+        return Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
     public void setResourceIsolationGroup(String group) {
         this.resourceIsolationGroup = group;

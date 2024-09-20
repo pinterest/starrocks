@@ -25,12 +25,15 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
@@ -45,6 +48,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public class WarehouseManagerTest {
     @Mocked
@@ -122,6 +126,87 @@ public class WarehouseManagerTest {
 
         List<ComputeNode> nodes = mgr.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(1, nodes.size());
+    }
+
+    @Test
+    public void testUsingResourceIsolationGroups() throws UserException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+        };
+
+        Frontend thisFe = new Frontend();
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
+                return systemInfo;
+            }
+            @Mock
+            public Frontend getMySelf() {
+                return thisFe;
+            }
+        };
+
+
+        TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
+        tabletComputeNodeMapper.addComputeNode(1L, thisFe.getResourceIsolationGroup());
+        String otherResourceIsolationGroup = "someothergroup";
+        tabletComputeNodeMapper.addComputeNode(2L, otherResourceIsolationGroup);
+        new MockUp<SystemInfoService>() {
+
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                if (nodeId == 10003L) {
+                    ComputeNode node = new ComputeNode();
+                    node.setAlive(false);
+                    return node;
+                }
+                ComputeNode node = new ComputeNode();
+                node.setAlive(true);
+                return node;
+            }
+
+            @Mock
+            public boolean shouldUseInternalTabletToCnMapper() {
+                return tabletComputeNodeMapper.trackingNonDefaultResourceIsolationGroup();
+            }
+
+            @Mock
+            public TabletComputeNodeMapper internalTabletMapper() {
+                return tabletComputeNodeMapper;
+            }
+        };
+
+        // We want to make sure we never call StarOSAgent if we're using resource isolation groups
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent();
+                maxTimes = 0;
+            }
+        };
+
+        WarehouseManager mgr = new WarehouseManager();
+        mgr.initDefaultWarehouse();
+
+        LakeTablet arbitraryTablet = new LakeTablet(1001L);
+        Assert.assertEquals(Set.of(1L), mgr.getAllComputeNodeIdsAssignToTablet(
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, arbitraryTablet));
+
+        thisFe.setResourceIsolationGroup(otherResourceIsolationGroup);
+        Assert.assertEquals(Set.of(2L), mgr.getAllComputeNodeIdsAssignToTablet(
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, arbitraryTablet));
+
+        // Check that WarehouseManager.getAllComputeNodeIdsAssignToTablet delegates to
+        // systemInfo.getAvailableComputeNodeIds.
+        new Expectations() {
+            {
+                systemInfo.getAvailableComputeNodeIds();
+                times = 1;
+            }
+        };
+        mgr.getAllComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     @Test

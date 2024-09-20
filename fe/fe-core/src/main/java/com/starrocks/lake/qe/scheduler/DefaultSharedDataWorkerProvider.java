@@ -31,6 +31,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,10 +41,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
+
+import static com.starrocks.system.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -215,7 +219,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
      * e.g. also in BlockList, then try the next one in the list, until all nodes have benn tried.
      */
     @Override
-    public long selectBackupWorker(long workerId) {
+    public long selectBackupWorker(long workerId, Optional<Long> tabletId) {
         if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
             return -1;
         }
@@ -224,6 +228,36 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         }
         Preconditions.checkNotNull(allComputeNodeIds);
         Preconditions.checkState(allComputeNodeIds.contains(workerId));
+
+        if (tabletId.isPresent()) {
+            // If we've been provided the relevant tablet id, we try to select a backup that's based on the "next best"
+            // compute node for the tablet. This way, when we need a backup for some dead compute node, we don't send
+            // all its traffic to a single backup CN, and instead we spread out its traffic somewhat evenly.
+            // Currently, this is only enabled in the case that we're using resource isolation groups, which is when we
+            // prefer to use the internal mapping, in the TabletComputeNodeMapper, rather than delegating to StarOS for
+            // the tablet to compute node mapping.
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (systemInfoService.shouldUseInternalTabletToCnMapper()) {
+                TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
+                List<Long> cnIdsOrderedByPreference = mapper.computeNodesForTablet(
+                        tabletId.get(), availableID2ComputeNode.size());
+                if (cnIdsOrderedByPreference == null) {
+                    LOG.warn(String.format("The internal tablet mapper doesn't seem to know about the resource" +
+                                    " isolation group %s. Its state is %s.",
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup(),
+                            mapper.debugString()));
+                    return -1;
+                }
+                for (Long possibleBackup : cnIdsOrderedByPreference) {
+                    if (possibleBackup != workerId && availableID2ComputeNode.containsKey(possibleBackup)) {
+                        return possibleBackup;
+                    }
+                }
+                LOG.warn(String.format("Tried to use internal tablet to CN mapper but it failed to find an available" +
+                        " cn for the given tablet %d", tabletId.get()));
+                return -1;
+            }
+        }
 
         int startPos = allComputeNodeIds.indexOf(workerId);
         int attempts = allComputeNodeIds.size();
@@ -271,9 +305,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
+        String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
+                getNodeMgr().getMySelf().getResourceIsolationGroup();
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
-            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
+            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
+                    resourceIsolationGroupMatches(thisFeResourceIsolationGroup, entry.getValue().getResourceIsolationGroup())) {
                 builder.put(entry);
             }
         }
