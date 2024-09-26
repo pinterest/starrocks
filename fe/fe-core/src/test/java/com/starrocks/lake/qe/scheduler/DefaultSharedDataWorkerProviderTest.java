@@ -51,6 +51,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.assertj.core.util.Sets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -775,5 +776,31 @@ public class DefaultSharedDataWorkerProviderTest {
             Long workerId = provider.selectNextWorker();
             assertThat(workerId).isNotNegative();
         }
+    }
+
+    @Test
+    public void testGetAnyWorker(@Mocked SystemInfoService systemInfoService) {
+        long nodeId1 = 1L;
+        long nodeId2 = 2L;
+        ComputeNode availNode = id2AllNodes.get(nodeId1);
+        WorkerProvider provider = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
+                ImmutableMap.of(availNode.getId(), availNode));
+
+        Assert.assertNotNull(provider.getWorkerById(nodeId1));
+        Assert.assertNull(provider.getWorkerById(nodeId2));
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(nodeId2);
+                times = 1;
+                result = new ComputeNode(nodeId2, "whatever", 100);
+            }
+        };
+
+        provider.setAllowGetAnyWorker(true);
+        Assert.assertNotNull(provider.getWorkerById(nodeId2));
+
+        provider.setAllowGetAnyWorker(false);
+        Assert.assertNull(provider.getWorkerById(nodeId2));
     }
 }
