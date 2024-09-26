@@ -117,6 +117,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
+    private boolean allowGetAnyWorker = false;
 
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
@@ -162,9 +163,33 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return availableID2ComputeNode.values();
     }
 
+    // Functionality: If allowGetAnyWorker is set, then getWorkerById will use global state to get a ComputeNode
+    // reference instead of its available node map.
+    // Where it's used: As of writing this, this is only used for CACHE SELECT statements,
+    // Why: This is necessary because FragmentAssignmentStrategy classes, Coordinator, and CoordinatorPreprocessors use
+    // the WorkerProvider interface to get ComputeNode references. During a CACHE SELECT execution (which is the only
+    // type of statement that should be selecting workers from an un-matching resource isolation group), they will need
+    // to get the ComputeNode addresses for nodes outside the leader group.
+    // Alternative considered: Another way of achieving this would be to allow any caller to get a ComputeNode reference
+    // for any compute node, but that would leave space for bugs during the execution of other types of statements which
+    // really shouldn't be getting ComputeNode references for un-matching resource isolation groups or unhealthy
+    // ComputeNodes. Instead of changing a bunch of code which uses the WorkerProvider in a specific way, this way
+    // limits scope to only change behavior when the user of the WorkerProvider sets this very specific option.
+    public void setAllowGetAnyWorker(boolean allowGetAnyWorker) {
+        this.allowGetAnyWorker = allowGetAnyWorker;
+    }
+
     @Override
     public ComputeNode getWorkerById(long workerId) {
-        return availableID2ComputeNode.get(workerId);
+        ComputeNode cn = availableID2ComputeNode.get(workerId);
+        if (cn == null && allowGetAnyWorker) {
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            cn = systemInfoService.getBackendOrComputeNode(workerId);
+            if (cn == null) {
+                LOG.warn(String.format("could not get worker by id: %s", workerId));
+            }
+        }
+        return cn;
     }
 
     @Override
@@ -313,7 +338,8 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
             if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
-                    resourceIsolationGroupMatches(resourceIsolationGroup, entry.getValue().getResourceIsolationGroup())) {
+                    resourceIsolationGroupMatches(resourceIsolationGroup,
+                            entry.getValue().getResourceIsolationGroup())) {
                 builder.put(entry);
             }
         }

@@ -51,6 +51,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
+import static org.junit.Assert.assertThrows;
 
 public class CacheSelectBackendSelectorTest {
 
@@ -180,6 +181,9 @@ public class CacheSelectBackendSelectorTest {
                     callerWorkerProvider.selectWorkerUnchecked(cnId);
                     minTimes = 1;
                 }
+
+                callerWorkerProvider.setAllowGetAnyWorker(true);
+                times = 1;
             }
         };
 
@@ -253,6 +257,9 @@ public class CacheSelectBackendSelectorTest {
                     callerWorkerProvider.selectWorkerUnchecked(cnId);
                     minTimes = 1;
                 }
+
+                callerWorkerProvider.setAllowGetAnyWorker(true);
+                times = 1;
             }
         };
 
@@ -325,6 +332,9 @@ public class CacheSelectBackendSelectorTest {
                     callerWorkerProvider.selectWorkerUnchecked(cnId);
                     minTimes = 1;
                 }
+
+                callerWorkerProvider.setAllowGetAnyWorker(true);
+                times = 1;
             }
         };
 
@@ -344,5 +354,68 @@ public class CacheSelectBackendSelectorTest {
             expectedAssignment.put(8L, givenScanNodeId, givenRangeParams);
             Assert.assertEquals(expectedAssignment, assignment);
         }
+    }
+
+    @Test
+    public void testInsufficientWorkerCountThrowsExceptionNoTablet(@Mocked WarehouseManager warehouseManager,
+                                                                   @Mocked SystemInfoService systemInfoService,
+                                                                   @Mocked WorkerProvider callerWorkerProvider) {
+        ScanNode scanNode = newOlapScanNode(1, 1);
+        Map<Long, ComputeNode> nodes = new HashMap<>();
+        List<Long> nodeIds = new ArrayList<>();
+        {
+            ComputeNode cn = new ComputeNode(1L, "whatever", 100);
+            cn.setAlive(true);
+            cn.setResourceIsolationGroup("group1");
+            nodes.put(cn.getId(), cn);
+            nodeIds.add(cn.getId());
+        }
+        {
+            ComputeNode cn = new ComputeNode(2L, "whatever", 100);
+            cn.setAlive(true);
+            cn.setResourceIsolationGroup("group1");
+            nodes.put(cn.getId(), cn);
+            nodeIds.add(cn.getId());
+        }
+        {
+            ComputeNode cn = new ComputeNode(3L, "whatever", 100);
+            cn.setAlive(true);
+            cn.setResourceIsolationGroup("group2");
+            nodes.put(cn.getId(), cn);
+            nodeIds.add(cn.getId());
+        }
+        for (ComputeNode cn : nodes.values()) {
+            new Expectations() {
+                {
+                    systemInfoService.getBackendOrComputeNode(cn.getId());
+                    result = cn;
+                }
+            };
+        }
+
+        // Non-internal scans don't have tabletIds and should therefore use the workerProviders to get backups.
+        List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, false);
+        // Confirm our assumption that the TScanRangeLocations we used in the test has the 1st CN assigned.
+        Assert.assertEquals(1, locations.get(0).locations.get(0).backend_id);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group2"), 2);
+        CacheSelectBackendSelector selector =
+                new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
+                        DEFAULT_WAREHOUSE_ID);
+        new Expectations() {
+            {
+                warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
+                result = nodeIds;
+            }
+        };
+
+        UserException exception = assertThrows(UserException.class, selector::computeScanRangeAssignment);
+        Assert.assertEquals("Compute node not found. Check if any compute node is down." +
+                " nodeId: -1 compute node: [whatever alive: true, available: false, inBlacklist: false]" +
+                " [whatever alive: true, available: false, inBlacklist: false]" +
+                " [whatever alive: true, available: true, inBlacklist: false] ", exception.getMessage());
+
     }
 }

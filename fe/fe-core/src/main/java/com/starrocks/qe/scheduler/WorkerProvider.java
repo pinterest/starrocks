@@ -72,6 +72,11 @@ public interface WorkerProvider {
 
     Collection<ComputeNode> getAllWorkers();
 
+    // Makes it so getWorkerById is not restricted by which nodes are "available"/of the same resource isolation group.
+    default void setAllowGetAnyWorker(boolean allowGetAnyWorker) throws UnsupportedOperationException {
+        throw new UnsupportedOperationException("setAllowGetAnyWorker is not supported.");
+    }
+
     ComputeNode getWorkerById(long workerId);
 
     boolean isDataNodeAvailable(long dataNodeId);

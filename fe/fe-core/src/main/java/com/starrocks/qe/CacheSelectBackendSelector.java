@@ -24,16 +24,21 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.Utils.getOptionalTabletId;
 
 // This class should only be used in shared data mode.
 public class CacheSelectBackendSelector implements BackendSelector {
+    private static final Logger LOG = LogManager.getLogger(CacheSelectBackendSelector.class);
+
     // Inputs
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
@@ -57,14 +62,14 @@ public class CacheSelectBackendSelector implements BackendSelector {
     }
 
     private Set<Long> assignedCnByTabletId(SystemInfoService systemInfoService, Long tabletId,
-                                              String resourceIsolationGroupId) throws UserException {
+                                           String resourceIsolationGroupId) throws UserException {
         TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
         List<Long> cnIdsOrderedByPreference =
                 mapper.computeNodesForTablet(tabletId, props.numReplicasDesired, resourceIsolationGroupId);
         if (cnIdsOrderedByPreference.size() < props.numReplicasDesired) {
             throw new DdlException(String.format("Requesting more replicas than we have available CN" +
-                            " for the specified resource group. desiredReplicas: %d, resourceGroup: %s",
-                    props.numReplicasDesired, resourceIsolationGroupId));
+                            " for the specified resource group. desiredReplicas: %d, resourceGroup: %s, tabletId: %d",
+                    props.numReplicasDesired, resourceIsolationGroupId, tabletId));
         }
         return new HashSet<>(cnIdsOrderedByPreference);
     }
@@ -79,7 +84,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
         while (selectedCn.size() < props.numReplicasDesired) {
             if (selectedCn.contains(targetBackendId) || !workerProvider.isDataNodeAvailable(targetBackendId)) {
                 targetBackendId = workerProvider.selectBackupWorker(targetBackendId, Optional.empty());
-                if (selectedCn.contains(targetBackendId)) {
+                if (targetBackendId < 0 || selectedCn.contains(targetBackendId)) {
                     workerProvider.reportDataNodeNotFoundException();
                     throw new DdlException(String.format("Requesting more replicas than we have available CN" +
                                     " for the specified resource group. desiredReplicas: %d, resourceGroup: %s",
@@ -125,6 +130,13 @@ public class CacheSelectBackendSelector implements BackendSelector {
                             assignedCnByBackupWorker(scanRangeLocations.getLocations().get(0).getBackend_id(),
                                     resourceIsolationGroupId);
                 }
+                LOG.debug(String.format(
+                        "done doing assignment for resource isolation group %s, tablet %d, location %s: CN chosen are %s",
+                        resourceIsolationGroupId,
+                        tabletId.orElse(-1L),
+                        scanRangeLocations.getLocations().get(0),
+                        selectedCn.stream().map(String::valueOf).collect(Collectors.joining(","))));
+
                 for (Long cnId : selectedCn) {
                     assignment.put(cnId, scanNode.getId().asInt(), scanRangeParams);
                     allSelectedWorkerIds.add(cnId);
@@ -137,5 +149,8 @@ public class CacheSelectBackendSelector implements BackendSelector {
         for (long workerId : allSelectedWorkerIds) {
             callerWorkerProvider.selectWorkerUnchecked(workerId);
         }
+        // Also, caller upstream will use the workerProvider to get ComputeNode references corresponding to the compute
+        // nodes chosen in this function, so we must enable getting any worker regardless of availability.
+        callerWorkerProvider.setAllowGetAnyWorker(true);
     }
 }
