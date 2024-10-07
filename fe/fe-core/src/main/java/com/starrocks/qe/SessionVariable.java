@@ -1662,6 +1662,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private boolean enableCacheSelect = false;
 
+    private List<String> datacacheSelectResourceGroups = null;
+    private int numDesiredDatacacheReplicas = -1;
+
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
 
@@ -3976,6 +3979,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLikePredicateConsolidateMin(int value) {
         this.likePredicateConsolidateMin = value;
+    }
+
+    public List<String> getDatacacheSelectResourceGroups() {
+        return datacacheSelectResourceGroups;
+    }
+
+    public void setDatacacheSelectResourceGroups(List<String> datacacheSelectResourceGroups) {
+        this.datacacheSelectResourceGroups = datacacheSelectResourceGroups;
+    }
+
+    public int getNumDesiredDatacacheReplicas() {
+        return numDesiredDatacacheReplicas;
+    }
+
+    public void setNumDesiredDatacacheReplicas(int numDesiredDatacacheReplicas) {
+        this.numDesiredDatacacheReplicas = numDesiredDatacacheReplicas;
     }
 
     // Serialize to thrift object
