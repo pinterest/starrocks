@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.TableRelation;
 
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -164,6 +165,17 @@ public class DataCacheStmtAnalyzer {
             }
             statement.setTTLSeconds(ttlSeconds);
 
+            statement.setNumReplicasDesired(Integer.parseInt(
+                    properties.getOrDefault("num_replicas", "1")));
+            if (statement.getNumReplicasDesired() < 1) {
+                throw new SemanticException("Num replicas must be positive");
+            }
+
+            String resourceIsolationGroupsString = properties.getOrDefault("resource_isolation_groups",
+                    "");
+            if (!resourceIsolationGroupsString.isEmpty()) {
+                statement.setResourceIsolationGroups(Arrays.asList(resourceIsolationGroupsString.split(",")));
+            }
             return null;
         }
     }
