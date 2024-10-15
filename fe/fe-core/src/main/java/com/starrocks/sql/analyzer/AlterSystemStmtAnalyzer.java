@@ -163,7 +163,8 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
                     continue;
                 }
                 // Support single level location label for now
-                String regex = "(\\s*[a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*)";
+                // allow matching an empty val (after the colon)
+                String regex = "(\\s*[a-z_0-9]+\\s*:\\s*[a-z_0-9]*\\s*)";
                 if (!Pattern.compile(regex).matcher(propVal).matches()) {
                     throw new SemanticException("invalid 'location' or 'group' format: " + propVal +
                             ", should be like: 'key:val'");
