@@ -67,6 +67,17 @@ public class TabletComputeNodeMapperTest {
     }
 
     @Test
+    public void modifyComputeNodeEdgeCases() throws Exception {
+        Long arbitraryTablet = 9000L;
+        TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
+        Assert.assertEquals(0, mapper.numResourceIsolationGroups());
+        Assert.assertNull(mapper.computeNodesForTablet(arbitraryTablet, 1, ""));
+        mapper.modifyComputeNode(1L, "", "");
+        Assert.assertEquals(1, mapper.numResourceIsolationGroups());
+        Assert.assertEquals(List.of(1L), mapper.computeNodesForTablet(arbitraryTablet, 1, ""));
+    }
+
+    @Test
     public void testGroupManagementEdgeCase() throws Exception {
         TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
         Assert.assertEquals(0, mapper.numResourceIsolationGroups());
