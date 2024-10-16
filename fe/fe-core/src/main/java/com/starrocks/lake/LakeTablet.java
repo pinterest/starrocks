@@ -140,6 +140,9 @@ public class LakeTablet extends Tablet {
                                      long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
         Set<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+        if (computeNodeIds == null) {
+            return;
+        }
         for (long backendId : computeNodeIds) {
             Replica replica = new Replica(getId(), backendId, visibleVersion, schemaHash, getDataSize(true),
                     getRowCount(visibleVersion), NORMAL, -1, visibleVersion);

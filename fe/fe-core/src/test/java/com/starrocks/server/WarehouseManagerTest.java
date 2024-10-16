@@ -143,12 +143,12 @@ public class WarehouseManagerTest {
             public SystemInfoService getClusterInfo() {
                 return systemInfo;
             }
+
             @Mock
             public Frontend getMySelf() {
                 return thisFe;
             }
         };
-
 
         TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
         tabletComputeNodeMapper.addComputeNode(1L, thisFe.getResourceIsolationGroup());
@@ -191,12 +191,12 @@ public class WarehouseManagerTest {
         mgr.initDefaultWarehouse();
 
         LakeTablet arbitraryTablet = new LakeTablet(1001L);
-        Assert.assertEquals(Set.of(1L), mgr.getAllComputeNodeIdsAssignToTablet(
-                WarehouseManager.DEFAULT_WAREHOUSE_ID, arbitraryTablet));
+        Assert.assertEquals(Set.of(1L),
+                mgr.getAllComputeNodeIdsAssignToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, arbitraryTablet));
 
         thisFe.setResourceIsolationGroup(otherResourceIsolationGroup);
-        Assert.assertEquals(Set.of(2L), mgr.getAllComputeNodeIdsAssignToTablet(
-                WarehouseManager.DEFAULT_WAREHOUSE_ID, arbitraryTablet));
+        Assert.assertEquals(Set.of(2L),
+                mgr.getAllComputeNodeIdsAssignToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, arbitraryTablet));
 
         // Check that WarehouseManager.getAllComputeNodeIdsAssignToTablet delegates to
         // systemInfo.getAvailableComputeNodeIds.
@@ -365,7 +365,10 @@ public class WarehouseManagerTest {
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
                 () -> scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1));
-        Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
+        Assert.assertEquals(
+                "No alive backend or compute node in warehouse null. Also possible that there are no CN of the resource " +
+                        "isolation group matching the FE.",
+                ex.getMessage());
     }
 
     private OlapScanNode newOlapScanNode() {
