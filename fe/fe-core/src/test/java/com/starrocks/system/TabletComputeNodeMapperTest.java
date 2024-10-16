@@ -35,13 +35,13 @@ package com.starrocks.system;
 
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
-import java.util.Collections;
 import mockit.Expectations;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +49,7 @@ import java.util.Set;
 
 public class TabletComputeNodeMapperTest {
     private Frontend thisFe;
+
     @Before
     public void setUp() {
         thisFe = new Frontend();
@@ -86,7 +87,6 @@ public class TabletComputeNodeMapperTest {
         mapper.addComputeNode(1L, "randomgroup");
         Assert.assertTrue(mapper.trackingNonDefaultResourceIsolationGroup());
     }
-
 
     @Test
     public void testGroupManagement() throws Exception {
@@ -154,7 +154,6 @@ public class TabletComputeNodeMapperTest {
         }
 
         Assert.assertEquals(2, mapper.numResourceIsolationGroups());
-
 
         int tabletsToTry = 10000;
         long[] tabletIdToGroup2Primary = new long[tabletsToTry];
