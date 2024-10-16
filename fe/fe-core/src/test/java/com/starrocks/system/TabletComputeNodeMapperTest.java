@@ -35,6 +35,7 @@ package com.starrocks.system;
 
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import java.util.Collections;
 import mockit.Expectations;
 import org.junit.After;
 import org.junit.Assert;
@@ -71,7 +72,7 @@ public class TabletComputeNodeMapperTest {
         Long arbitraryTablet = 9000L;
         TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
         Assert.assertEquals(0, mapper.numResourceIsolationGroups());
-        Assert.assertNull(mapper.computeNodesForTablet(arbitraryTablet, 1, ""));
+        Assert.assertEquals(Collections.emptyList(), mapper.computeNodesForTablet(arbitraryTablet, 1, ""));
         mapper.modifyComputeNode(1L, "", "");
         Assert.assertEquals(1, mapper.numResourceIsolationGroups());
         Assert.assertEquals(List.of(1L), mapper.computeNodesForTablet(arbitraryTablet, 1, ""));

@@ -37,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -207,8 +208,10 @@ public class WarehouseManager implements Writable {
                         " warehouse %d", warehouseId));
             }
             List<Long> computeNodeIds = systemInfoService.internalTabletMapper().computeNodesForTablet(tablet.getId());
-            if (computeNodeIds == null) {
-                return null;
+            if (computeNodeIds == null || computeNodeIds.isEmpty()) {
+                LOG.warn("no compute nodes assigned to tablet {} in warehouse {}", tablet.getId(),
+                        warehouseId);
+                return Collections.emptySet();
             }
             return new HashSet<>(computeNodeIds);
         }

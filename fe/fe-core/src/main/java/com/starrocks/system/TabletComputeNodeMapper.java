@@ -203,7 +203,7 @@ public class TabletComputeNodeMapper {
             if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
                 LOG.warn(String.format("Requesting node for resource isolation group %s, to which"
                         + " there is not a known CN assigned.", resourceIsolationGroup));
-                return null;
+                return Collections.emptyList();
             }
             TabletMap m = this.resourceIsolationGroupToTabletMapping.get(resourceIsolationGroup);
             return m.tabletToComputeNodeId.get(tabletId, count);
