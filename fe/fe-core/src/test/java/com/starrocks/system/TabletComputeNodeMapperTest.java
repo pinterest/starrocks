@@ -41,6 +41,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,7 @@ import java.util.Set;
 
 public class TabletComputeNodeMapperTest {
     private Frontend thisFe;
+
     @Before
     public void setUp() {
         thisFe = new Frontend();
@@ -67,6 +69,17 @@ public class TabletComputeNodeMapperTest {
     }
 
     @Test
+    public void modifyComputeNodeEdgeCases() throws Exception {
+        Long arbitraryTablet = 9000L;
+        TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
+        Assert.assertEquals(0, mapper.numResourceIsolationGroups());
+        Assert.assertEquals(Collections.emptyList(), mapper.computeNodesForTablet(arbitraryTablet, 1, ""));
+        mapper.modifyComputeNode(1L, "", "");
+        Assert.assertEquals(1, mapper.numResourceIsolationGroups());
+        Assert.assertEquals(List.of(1L), mapper.computeNodesForTablet(arbitraryTablet, 1, ""));
+    }
+
+    @Test
     public void testGroupManagementEdgeCase() throws Exception {
         TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
         Assert.assertEquals(0, mapper.numResourceIsolationGroups());
@@ -74,7 +87,6 @@ public class TabletComputeNodeMapperTest {
         mapper.addComputeNode(1L, "randomgroup");
         Assert.assertTrue(mapper.trackingNonDefaultResourceIsolationGroup());
     }
-
 
     @Test
     public void testGroupManagement() throws Exception {
@@ -142,7 +154,6 @@ public class TabletComputeNodeMapperTest {
         }
 
         Assert.assertEquals(2, mapper.numResourceIsolationGroups());
-
 
         int tabletsToTry = 10000;
         long[] tabletIdToGroup2Primary = new long[tabletsToTry];
