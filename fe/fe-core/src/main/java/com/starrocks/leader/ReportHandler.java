@@ -127,7 +127,6 @@ import com.starrocks.transaction.TransactionType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -141,17 +140,30 @@ import java.util.stream.Collectors;
 
 public class ReportHandler extends Daemon implements MemoryTrackable {
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(reportQueue) + SizeEstimator.estimate(pendingTaskMap);
+    public List<Pair<List<Object>, Long>> getSamples() {
+        synchronized (pendingTaskMap) {
+            List<Pair<List<Object>, Long>> result = new ArrayList<>();
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                result.add(Pair.create(taskMap.values()
+                        .stream()
+                        .limit(1)
+                        .collect(Collectors.toList()),
+                        (long) taskMap.size()));
+            }
+            return result;
+        }
     }
 
     @Override
     public Map<String, Long> estimateCount() {
-        long count = 0;
-        for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
-            count += taskMap.size();
+        synchronized (pendingTaskMap) {
+            long count = 0;
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                count += taskMap.size();
+            }
+            return ImmutableMap.of("PendingTask", count,
+                    "ReportQueue", (long) reportQueue.size());
         }
-        return ImmutableMap.of("PendingTask", count, "ReportQueue", (long) reportQueue.size());
     }
 
     public enum ReportType {
@@ -171,9 +183,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
 
-    private BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
+    private final BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
 
-    private Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
+    private final Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
     /**
      * Record the mapping of <tablet id, backend id> to the to be dropped time of tablet.
@@ -615,7 +627,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         LOG.debug("begin to handle resource usage report from backend {}", backendId);
         long start = System.currentTimeMillis();
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(
-                backendId, usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
+                backendId, usage.getNum_running_queries(), usage.getMem_used_bytes(),
                 usage.getCpu_used_permille(), usage.isSetGroup_usages() ? usage.getGroup_usages() : null);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
                 backendId, (System.currentTimeMillis() - start));

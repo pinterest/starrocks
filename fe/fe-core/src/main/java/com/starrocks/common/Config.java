@@ -100,6 +100,15 @@ public class Config extends ConfigBase {
 
     @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
     public static String sys_log_format = "plaintext";
+
+    @ConfField(comment = "Max length of a log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 1MB")
+    public static int sys_log_json_max_string_length = 1048576;
+
+    @ConfField(comment = "Max length of a profile log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 100MB")
+    public static int sys_log_json_profile_max_string_length = 104857600;
+
     /**
      * audit_log_dir:
      * This specifies FE audit log dir.
@@ -134,6 +143,8 @@ public class Config extends ConfigBase {
     public static String[] audit_log_modules = {"slow_query", "query"};
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
+    @ConfField(mutable = true)
+    public static boolean enable_qe_slow_log = true;
     @ConfField
     public static String audit_log_roll_interval = "DAY";
     @ConfField
@@ -657,6 +668,35 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int http_port = 8030;
+
+    /**
+     * Configs for query queue v2.
+     * The configs {@code query_queue_v2_xxx} are effective only when {@code enable_query_queue_v2} is true.
+     * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
+     */
+    @ConfField
+    public static boolean enable_query_queue_v2 = false;
+    /**
+     * Used to calculate the total number of slots the system has,
+     * which is equal to the configuration value * BE number * BE cores.
+     * It will be set to `4` if it is non-positive.
+     */
+    @ConfField(mutable = true)
+    public static int query_queue_v2_concurrency_level = 4;
+    /**
+     * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
+     * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
+     * It will be set to `1` if it is non-positive.
+     */
+    @ConfField(mutable = true)
+    public static int query_queue_v2_num_rows_per_slot = 4096;
+    /**
+     * Used to estimate the number of slots of a query based on the plan cpu costs.
+     * It is equal to the plan cpu costs divided by the configuration value and is limited to between [1, totalSlots].
+     * It will be set to `1` if it is non-positive.
+     */
+    @ConfField(mutable = true)
+    public static long query_queue_v2_cpu_costs_per_slot = 1_000_000_000;
 
     /**
      * Number of worker threads for http server to deal with http requests which may do
@@ -1288,7 +1328,7 @@ public class Config extends ConfigBase {
      * If set to true, memory tracker feature will open
      */
     @ConfField(mutable = true)
-    public static boolean memory_tracker_enable = false;
+    public static boolean memory_tracker_enable = true;
 
     /**
      * Decide how often to track the memory usage of the FE process
@@ -1999,6 +2039,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double statistic_auto_collect_sample_threshold = 0.3;
 
+    @ConfField(mutable = true, comment = "Tolerate some percent of failure for a large table, it will not affect " +
+            "the job status but improve the robustness")
+    public static double statistic_full_statistics_failure_tolerance_ratio = 0.05;
+
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
@@ -2614,6 +2658,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
+    @ConfField(mutable = true, comment =
+            "Consider balancing between workers during tablet migration in shared data mode. Default: false")
+    public static boolean lake_enable_balance_tablets_between_workers = false;
+
+    @ConfField(mutable = true, comment =
+            "Threshold of considering the balancing between workers in shared-data mode, The imbalance factor is " +
+                    "calculated as f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets), " +
+                    "if f > lake_balance_tablets_threshold, balancing will be triggered. Default: 0.15")
+    public static double lake_balance_tablets_threshold = 0.15;
+
     /**
      * Default lake compaction txn timeout
      */
@@ -2918,6 +2972,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
+
+    @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
+    public static boolean enable_active_materialized_view_schema_strict_check = true;
 
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +

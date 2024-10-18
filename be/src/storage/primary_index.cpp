@@ -1184,8 +1184,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
-
-    if (tablet->get_enable_persistent_index()) {
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
@@ -1579,7 +1579,8 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     _set_schema(pkey_schema);
 
-    if (tablet->get_enable_persistent_index()) {
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
         if (_persistent_index != nullptr) {
             _persistent_index.reset();
         }
@@ -1606,7 +1607,7 @@ void PrimaryIndex::reset_cancel_major_compaction() {
 Status PrimaryIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
     if (_persistent_index != nullptr) {
         RETURN_IF_ERROR(_persistent_index->pk_dump(dump, dump_pb));
-    } else {
+    } else if (_pkey_to_rssid_rowid != nullptr) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
         level->set_filename("memory primary index");
         RETURN_IF_ERROR(_pkey_to_rssid_rowid->pk_dump(dump, level));
