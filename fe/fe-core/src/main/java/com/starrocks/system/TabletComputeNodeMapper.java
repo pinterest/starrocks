@@ -37,6 +37,8 @@ import com.google.common.hash.PrimitiveSink;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collections;
@@ -65,6 +67,7 @@ import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_
  */
 
 public class TabletComputeNodeMapper {
+    private static final Logger LOG = LogManager.getLogger(TabletComputeNodeMapper.class);
 
     private static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 256;
     private static final Long ARBITRARY_FAKE_TABLET = 1L;
@@ -169,9 +172,12 @@ public class TabletComputeNodeMapper {
                                   String oldResourceIsolationGroup, String newResourceIsolationGroup) {
         oldResourceIsolationGroup = getResourceIsolationGroupName(oldResourceIsolationGroup);
         newResourceIsolationGroup = getResourceIsolationGroupName(newResourceIsolationGroup);
-        if (oldResourceIsolationGroup.equals(newResourceIsolationGroup)) {
-            return;
-        }
+        // We run the following even if oldResourceIsolationGroup.equals(newResourceIsolationGroup)
+        // because we want to cleanly handle edge cases where the compute node hasn't already been
+        // added to the TabletComputeNode mapper. This can happen in at least one situation, which
+        // is when the cluster is first upgraded to include resource isolation groups.
+        // Because the host ips match during a CN restart, upstream code which adds the ComputeNodes
+        // will not execute and therefore we won't call this.addComputeNode.
         writeLock.lock();
         try {
             removeComputeNodeUnsynchronized(computeNodeId, oldResourceIsolationGroup);
@@ -195,7 +201,9 @@ public class TabletComputeNodeMapper {
         readLock.lock();
         try {
             if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
-                return null;
+                LOG.warn(String.format("Requesting node for resource isolation group %s, to which"
+                        + " there is not a known CN assigned.", resourceIsolationGroup));
+                return Collections.emptyList();
             }
             TabletMap m = this.resourceIsolationGroupToTabletMapping.get(resourceIsolationGroup);
             return m.tabletToComputeNodeId.get(tabletId, count);
