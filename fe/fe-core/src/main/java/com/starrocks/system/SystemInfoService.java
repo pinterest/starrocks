@@ -441,7 +441,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
         // remove from BackendCoreStat
-        BackendCoreStat.removeNumOfHardwareCoresOfBe(dropComputeNode.getId());
+        BackendResourceStat.getInstance().removeBe(dropComputeNode.getId());
 
         // remove worker
         if (RunMode.isSharedDataMode()) {
@@ -553,7 +553,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
 
         // remove from BackendCoreStat
-        BackendCoreStat.removeNumOfHardwareCoresOfBe(droppedBackend.getId());
+        BackendResourceStat.getInstance().removeBe(droppedBackend.getId());
 
         // remove worker
         if (RunMode.isSharedDataMode()) {
@@ -734,7 +734,7 @@ public class SystemInfoService implements GsonPostProcessable {
         node.updateDataCacheMetrics(dataCacheMetrics);
     }
 
-    public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memUsedBytes,
                                     int cpuUsedPermille, List<TResourceGroupUsage> groupUsages) {
         ComputeNode node = getBackendOrComputeNode(backendId);
         if (node == null) {
@@ -742,13 +742,13 @@ public class SystemInfoService implements GsonPostProcessable {
             return;
         }
 
-        node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+        node.updateResourceUsage(numRunningQueries, memUsedBytes, cpuUsedPermille);
 
         if (groupUsages != null) {
             List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages = new ArrayList<>(groupUsages.size());
             for (TResourceGroupUsage usage : groupUsages) {
                 ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-                        .getResourceGroupIncludingDefault(usage.getGroup_id());
+                        .getResourceGroup(usage.getGroup_id());
                 if (group == null) {
                     continue;
                 }
@@ -1127,7 +1127,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
-            BackendCoreStat.removeNumOfHardwareCoresOfBe(computeNodeId);
+            BackendResourceStat.getInstance().removeBe(computeNodeId);
         }
 
         // clear map in starosAgent
@@ -1157,7 +1157,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
-            BackendCoreStat.removeNumOfHardwareCoresOfBe(backend.getId());
+            BackendResourceStat.getInstance().removeBe(backend.getId());
         }
 
         // clear map in starosAgent
@@ -1326,10 +1326,12 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!GlobalStateMgr.isCheckpointThread()) {
             // update BackendCoreStat
             for (ComputeNode node : idToBackendRef.values()) {
-                BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
             }
             for (ComputeNode node : idToComputeNodeRef.values()) {
-                BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
             }
         }
     }

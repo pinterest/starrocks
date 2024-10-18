@@ -174,6 +174,10 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
     pipeline/exchange/multi_cast_local_exchange.cpp
+    pipeline/exchange/mem_limited_chunk_queue.cpp
+    pipeline/exchange/spillable_multi_cast_local_exchange.cpp
+    pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
+    pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
@@ -277,6 +281,8 @@ set(EXEC_FILES
     pipeline/group_execution/execution_group.cpp
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/group_execution/group_operator.cpp
+    workgroup/pipeline_executor_set.cpp
+    workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp

@@ -131,6 +131,7 @@ The following table shows the correspondence between the aggregate function in t
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 [COMMENT ""]
+-- You must specify either `distribution_desc` or `refresh_scheme`, or both.
 -- distribution_desc
 [DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
 -- refresh_desc
@@ -187,11 +188,11 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
   DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
   ```
 
-  For more information, see [Data distribution](../../../table_design/Data_distribution.md#data-distribution).
+  For more information, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md#data-distribution).
 
   > **NOTE**
   >
-  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
+  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 - **Random bucketing**:
 
@@ -205,7 +206,7 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
   >
   > Asynchronous materialized views with a random bucketing strategy cannot be assigned to a colocation group.
 
-  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31)
+  For more information, see [Random bucketing](../../../table_design/data_distribution/Data_distribution.md#random-bucketing-since-v31)
 
 **refresh_moment** (optional)
 
@@ -234,14 +235,18 @@ The partitioning strategy of the asynchronous materialized view. As for the curr
 
 > **CAUTION**
 >
-> Currently, asynchronous materialized views do not support the list partitioning strategy.
+> From v3.3.3 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
+>
+> - You can create list-partitioned materialized views based on tables that are created with the List Partitioning or Expression partitioning strategy.
+> - Currently, you can only specify one Partition Key when creating materialized views with the List Partitioning strategy. You must choose one Partition Key if the base table has more than one Partition Key.
+> - The refresh behavior and query rewrite logic of materialized views with the List Partitioning strategy are consistent with those with the Range Partitioning strategy.
 
 Valid values:
 
 - `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
 - `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
 - `str2date` function: The function used to partition string type parititions of base table into materialized view's partition. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a string date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
-- `time_slice` or `date_slice` functions: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice and date_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
+- `time_slice` function: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
 
 If this parameter is not specified, no partitioning strategy is adopted by default.
 
@@ -258,7 +263,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `storage_medium`: Storage medium type. Valid values: `HDD` and `SSD`.
 - `storage_cooldown_time`: the storage cooldown time for a partition. If both HDD and SSD storage mediums are used, data in the SSD storage is moved to the HDD storage after the time specified by this property. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this property is not explicitly specified, the storage cooldown is not performed by default.
 - `partition_ttl`: The time-to-live (TTL) for partitions. Partitions whose data is within the specified time range are retained. Expired partitions are deleted automatically. Unit: `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. For example, you can specify this property as `2 MONTH`. This property is recommended over `partition_ttl_number`. It is supported from v3.1.5 onwards.
-- `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
+- `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/data_distribution/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fail to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, the automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. The default value is an empty string.
 - `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes the current partition and N-1 most recent partitions. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes all pre-created partitions.
@@ -296,10 +301,6 @@ Properties of the asynchronous materialized view. You can modify the properties 
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
-
-> **CAUTION**
->
-> Currently, StarRocks does not support creating asynchronous materialized views with base tables created with the list partitioning strategy.
 
 ### Query an asynchronous materialized view
 

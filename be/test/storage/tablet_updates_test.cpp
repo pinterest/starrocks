@@ -1560,8 +1560,16 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
         rs1->rowset_meta()->set_segments_overlap_pb(NONOVERLAPPING);
         ASSERT_TRUE(_tablet2->rowset_commit(2, rs1).ok());
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_EQ(100, read_tablet(_tablet, 2));
         ASSERT_TRUE(_tablet2->updates()->compaction(_compaction_mem_tracker.get()).ok());
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        int32_t count = 0;
+        while (_tablet->updates()->compaction_running()) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            // wait for compaction finish at most 60 seconds
+            if (++count > 60) {
+                break;
+            }
+        }
 
         ASSERT_EQ(_tablet2->updates()->num_rowsets(), 1);
         ASSERT_EQ(_tablet2->updates()->version_history_count(), 3);
@@ -3591,19 +3599,6 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
     // 14. get del_vec failed
     test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
-
-    // 15. write meta failed
-    test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", 16, N / 2);
-
-    // 16. cache del vec failed
-    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    fp_name = "tablet_meta_manager_apply_rowset_manager_fake_ok";
-    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
-    fp->setMode(trigger_mode);
-    test_fail_point("tablet_apply_cache_del_vec_failed", 17, N / 2);
-
-    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-    fp->setMode(trigger_mode);
 }
 
 TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}

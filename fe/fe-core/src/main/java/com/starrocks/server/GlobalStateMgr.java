@@ -73,6 +73,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -487,6 +488,7 @@ public class GlobalStateMgr {
     private TemporaryTableCleaner temporaryTableCleaner;
 
     private final GtidGenerator gtidGenerator;
+    private final GlobalConstraintManager globalConstraintManager;
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -729,6 +731,7 @@ public class GlobalStateMgr {
         this.lockManager = new LockManager();
 
         this.gtidGenerator = new GtidGenerator();
+        this.globalConstraintManager = new GlobalConstraintManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -752,6 +755,9 @@ public class GlobalStateMgr {
             try {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
                     loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
+                }
+                if (Config.max_broker_load_job_concurrency != pendingLoadTaskScheduler.getCorePoolSize()) {
+                    pendingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
@@ -1012,6 +1018,10 @@ public class GlobalStateMgr {
 
     public GtidGenerator getGtidGenerator() {
         return gtidGenerator;
+    }
+
+    public GlobalConstraintManager getGlobalConstraintManager() {
+        return globalConstraintManager;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1281,6 +1291,7 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+        resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
         keyMgr.initDefaultMasterKey();
     }
 

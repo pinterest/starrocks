@@ -14,6 +14,7 @@
 
 package com.starrocks.system;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.DecommissionType;
@@ -74,8 +75,11 @@ public class ComputeNode implements IComputable, Writable {
     private volatile int beRpcPort; // be rpc port
     @SerializedName("brpcPort")
     private volatile int brpcPort = -1;
+
     @SerializedName("cpuCores")
     private volatile int cpuCores = 0; // Cpu cores of node
+    @SerializedName("mlb")
+    private volatile long memLimitBytes = 0;
 
     @SerializedName("lastUpdateMs")
     private volatile long lastUpdateMs;
@@ -127,7 +131,6 @@ public class ComputeNode implements IComputable, Writable {
     private volatile DataCacheMetrics dataCacheMetrics = null;
 
     private volatile int numRunningQueries = 0;
-    private volatile long memLimitBytes = 0;
     private volatile long memUsedBytes = 0;
     private volatile int cpuUsedPermille = 0;
     private volatile long lastUpdateResourceUsageMs = 0;
@@ -398,11 +401,9 @@ public class ComputeNode implements IComputable, Writable {
         return cpuUsedPermille;
     }
 
-    public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
-                                    int cpuUsedPermille) {
-
+    public void updateResourceUsage(int numRunningQueries, long memUsedBytes, int cpuUsedPermille) {
         this.numRunningQueries = numRunningQueries;
-        this.memLimitBytes = memLimitBytes;
+        // memLimitBytes is set by heartbeats instead of reports.
         this.memUsedBytes = memUsedBytes;
         this.cpuUsedPermille = cpuUsedPermille;
         this.lastUpdateResourceUsageMs = System.currentTimeMillis();
@@ -499,6 +500,16 @@ public class ComputeNode implements IComputable, Writable {
         return cpuCores;
     }
 
+    @VisibleForTesting
+    public void setCpuCores(int cpuCores) {
+        this.cpuCores = cpuCores;
+    }
+
+    @VisibleForTesting
+    public void setMemLimitBytes(long memLimitBytes) {
+        this.memLimitBytes = memLimitBytes;
+    }
+
     /**
      * handle Compute node's heartbeat response.
      * return true if any port changed, or alive state is changed.
@@ -567,7 +578,17 @@ public class ComputeNode implements IComputable, Writable {
 
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
-                    BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                    BackendResourceStat.getInstance().setNumHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                }
+            }
+
+            if (this.memLimitBytes != hbResponse.getMemLimitBytes()) {
+                isChanged = true;
+                this.memLimitBytes = hbResponse.getMemLimitBytes();
+
+                // BackendCoreStat is a global state, checkpoint should not modify it.
+                if (!GlobalStateMgr.isCheckpointThread()) {
+                    BackendResourceStat.getInstance().setMemLimitBytesOfBe(hbResponse.getBeId(), hbResponse.getMemLimitBytes());
                 }
             }
 

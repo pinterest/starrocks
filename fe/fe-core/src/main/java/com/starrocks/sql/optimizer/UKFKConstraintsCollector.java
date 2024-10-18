@@ -17,9 +17,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -135,8 +135,8 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
             List<UniqueConstraint> ukConstraints = table.getUniqueConstraints();
             for (UniqueConstraint ukConstraint : ukConstraints) {
                 // For now, we only handle one column primary key or foreign key
-                if (ukConstraint.getUniqueColumnNames().size() == 1) {
-                    String ukColumn = ukConstraint.getUniqueColumnNames().get(0);
+                if (ukConstraint.getUniqueColumnNames(table).size() == 1) {
+                    String ukColumn = ukConstraint.getUniqueColumnNames(table).get(0);
                     ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
                             .map(Column::getName)
                             .filter(columnNameToColRefMap::containsKey)
@@ -154,7 +154,7 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
                                         nonUkColumnRefs, usedColumns.isEmpty()));
                     }
                 } else {
-                    List<String> ukColNames = ukConstraint.getUniqueColumnNames();
+                    List<String> ukColNames = ukConstraint.getUniqueColumnNames(table);
                     boolean containsAllUk = true;
                     for (String colName : ukColNames) {
                         ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(colName);

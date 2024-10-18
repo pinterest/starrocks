@@ -20,7 +20,8 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -205,7 +206,7 @@ public class AggregateTest extends PlanTestBase {
             int cpuCores = 8;
             int expectedTotalDop = cpuCores / 2;
             {
-                BackendCoreStat.setDefaultCoresOfBe(cpuCores);
+                BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
                 assertContains(explainString, "2:Project\n" +
@@ -256,7 +257,7 @@ public class AggregateTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setPipelineDop(originPipelineDop);
             connectContext.getSessionVariable().setPipelineDop(originInstanceNum);
-            BackendCoreStat.setDefaultCoresOfBe(1);
+            BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(1);
         }
     }
 
@@ -2393,12 +2394,22 @@ public class AggregateTest extends PlanTestBase {
         String plan = getCostExplain(sql);
         assertContains(plan, "percentile_approx[(1.0, 0.4); args: DOUBLE,DOUBLE");
 
+        sql = "with cc as (select 1 as a) select percentile_approx(1, cc.a) from cc;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: percentile_approx(1.0, 1.0)\n" +
+                "  |  group by: ");
+        Exception exception = Assert.assertThrows(StarRocksPlannerException.class, () -> {
+            String testSql = "with cc as (select 1 as a, v1 from t0) select percentile_approx(1, cc.a, cc.v1) from cc;";
+            getFragmentPlan(testSql);
+        });
+        Assert.assertTrue(exception.getMessage().contains("the third parameter's type is numeric constant type"));
+
         sql = "select percentile_approx(1, cast(1.3 as DOUBLE));";
         expectedException.expect(SemanticException.class);
         expectedException.expectMessage("Getting analyzing error. " +
                 "Detail message: percentile_approx second parameter'value must be between 0 and 1.");
         getCostExplain(sql);
-        plan = getCostExplain(sql);
 
         sql = "select percentile_cont(1, cast(0.4 as DOUBLE));";
         expectedException.expect(SemanticException.class);
@@ -2767,7 +2778,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 1: v1\n" +
                 "  |  having: abs(1) > abs(2)");
 
-
         sql = "select count(*), abs(1) as a, abs(2) as b from t0 group by a + b, v1 having a > b";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:Project\n" +
@@ -2783,8 +2793,8 @@ public class AggregateTest extends PlanTestBase {
         sql = "select max(a), a from (select v1, abs(1) as a, abs(2) as b from t0) t group by a, v1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:Project\n" +
-                "  |  <slot 4> : abs(1)\n" +
-                "  |  <slot 6> : 6: max\n" +
+                "  |  <slot 7> : abs(1)\n" +
+                "  |  <slot 8> : 8: max\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: max(abs(1))\n" +

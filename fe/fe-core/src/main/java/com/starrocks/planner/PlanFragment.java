@@ -661,6 +661,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return dataPartition;
     }
 
+    public boolean isGatherFragment() {
+        return getDataPartition() == DataPartition.UNPARTITIONED;
+    }
+
     public void setOutputPartition(DataPartition outputPartition) {
         this.outputPartition = outputPartition;
     }
@@ -968,4 +972,22 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         removeRfOfRightOffspring(getPlanRoot(), localRightOffsprings, filterIds);
     }
+
+    public void removeDictMappingProbeRuntimeFilters() {
+        removeDictMappingProbeRuntimeFilters(getPlanRoot());
+    }
+
+    private void removeDictMappingProbeRuntimeFilters(PlanNode root) {
+        root.getProbeRuntimeFilters().removeIf(filter -> {
+            Expr probExpr = filter.getNodeIdToProbeExpr().get(root.getId().asInt());
+            return probExpr.containsDictMappingExpr();
+        });
+
+        for (PlanNode child : root.getChildren()) {
+            if (child.getFragmentId().equals(root.getFragmentId())) {
+                removeDictMappingProbeRuntimeFilters(child);
+            }
+        }
+    }
+
 }

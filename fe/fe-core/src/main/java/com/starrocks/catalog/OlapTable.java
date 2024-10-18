@@ -66,6 +66,9 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
@@ -568,6 +571,7 @@ public class OlapTable extends Table {
         }
 
         // change name
+        String oldTableName = this.name;
         this.name = newName;
 
         // change single partition name
@@ -587,6 +591,25 @@ public class OlapTable extends Table {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprsSize() == 1);
             expressionRangePartitionInfo.renameTableName("", newName);
+        }
+
+        if (tableProperty != null) {
+            // renew unique constraints
+            List<UniqueConstraint> tpUniqueConstraints = tableProperty.getUniqueConstraints();
+            if (!CollectionUtils.isEmpty(tpUniqueConstraints)) {
+                for (UniqueConstraint constraint : tpUniqueConstraints) {
+                    constraint.onTableRename(this, oldTableName);
+                }
+                setUniqueConstraints(tpUniqueConstraints);
+            }
+            // renew foreign constraints
+            List<ForeignKeyConstraint> tpForeignConstraints = tableProperty.getForeignKeyConstraints();
+            if (!CollectionUtils.isEmpty(tpForeignConstraints)) {
+                for (ForeignKeyConstraint constraint : tpForeignConstraints) {
+                    constraint.onTableRename(this, oldTableName);
+                }
+                setForeignKeyConstraints(tpForeignConstraints);
+            }
         }
     }
 
@@ -2107,6 +2130,15 @@ public class OlapTable extends Table {
     public Partition replacePartition(Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
 
+        // For cloud native table, add partition into recycle Bin after truncate table.
+        // It is no necessary for share nothing mode because file will be deleted throught
+        // tablet report in this case.
+        if (this.isCloudNativeTableOrMaterializedView()) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(-1, oldPartition);
+            recyclePartitionInfo.setRecoverable(false);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+        }
+
         oldPartition.getSubPartitions().forEach(physicalPartition -> {
             physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
             physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
@@ -2989,6 +3021,10 @@ public class OlapTable extends Table {
         analyzePartitionInfo();
         analyzeRollupIndexMeta();
         tryToAssignIndexId();
+
+        // register constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.registerConstraint(this);
     }
 
     @Override
@@ -3120,6 +3156,10 @@ public class OlapTable extends Table {
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
         }
+
+        // unregister constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.unRegisterConstraint(this);
     }
 
     public void removeTableBinds(boolean isReplay) {
@@ -3338,7 +3378,7 @@ public class OlapTable extends Table {
         String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
         if (!Strings.isNullOrEmpty(uniqueConstraint)) {
             properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
-                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints()));
+                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints(), this));
         }
 
         // foreign key constraint
@@ -3522,4 +3562,15 @@ public class OlapTable extends Table {
         }
     }
 
+    public int getPartitionsCount() {
+        return physicalPartitionIdToPartitionId.size();
+    }
+
+    public PhysicalPartition getPartitionSample() {
+        if (!idToPartition.isEmpty()) {
+            return idToPartition.values().iterator().next().getSubPartitions().iterator().next();
+        } else {
+            return null;
+        }
+    }
 }

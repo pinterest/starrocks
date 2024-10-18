@@ -274,7 +274,9 @@ private:
     // then return column iterator and delta column's fillname.
     // Or just return null
     StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(const TabletColumn& column,
-                                                                       std::string* filename, ColumnAccessPath* path);
+                                                                       std::string* filename,
+                                                                       FileEncryptionInfo* encryption_info,
+                                                                       ColumnAccessPath* path);
 
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
@@ -503,7 +505,7 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
         // cols file index -> column index in corresponding file
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first >= 0) {
-            auto column_file = dcg->column_files(parent_name(_segment->file_name()))[idx.first];
+            ASSIGN_OR_RETURN(auto column_file, dcg->column_file_by_idx(parent_name(_segment->file_name()), idx.first));
             if (_dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
                 _dcg_segments[column_file] = dcg_segment;
@@ -517,12 +519,16 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
 
 StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(const TabletColumn& column,
                                                                                     std::string* filename,
+                                                                                    FileEncryptionInfo* encryption_info,
                                                                                     ColumnAccessPath* path) {
     // build column iter from delta column group
     ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(column.unique_id()));
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
+        }
+        if (encryption_info != nullptr && dcg_segment->encryption_info()) {
+            *encryption_info = *dcg_segment->encryption_info();
         }
         return dcg_segment->new_column_iterator(column, path);
     }
@@ -549,6 +555,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
@@ -563,13 +570,14 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     }
 
     std::string dcg_filename;
+    FileEncryptionInfo dcg_encryption_info;
     if (ucid < 0) {
         LOG(ERROR) << "invalid unique columnid in segment iterator, ucid: " << ucid
                    << ", segment: " << _segment->file_name();
     }
     auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
     const auto& col = tablet_schema->column(cid);
-    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, access_path));
+    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
@@ -599,6 +607,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         // create delta column iterator
         // TODO io_coalesce
         _column_iterators[cid] = std::move(col_iter);
+        opts.encryption_info = dcg_encryption_info;
         ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
         iter_opts.read_file = dcg_file.get();
         _column_files[cid] = std::move(dcg_file);
@@ -1787,8 +1796,9 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
             }
 
             IndexReadOptions opts;
-            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
-            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
+            opts.use_page_cache = !_opts.temporary_data && (config::enable_bitmap_index_memory_page_cache ||
+                                                            !config::disable_storage_page_cache);
+            opts.kept_in_memory = !_opts.temporary_data && config::enable_bitmap_index_memory_page_cache;
             opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;

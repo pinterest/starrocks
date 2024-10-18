@@ -374,7 +374,7 @@ createTableStatement
 
 
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
+    : identifier type? charsetName? KEY? aggDesc? columnNullable?
     (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
     comment?
     ;
@@ -417,6 +417,19 @@ orderByDesc
     : ORDER BY identifierList
     ;
 
+columnNullable
+    : NULL
+    | NOT NULL
+    ;
+
+typeWithNullable
+    : type columnNullable?
+    ;
+
+aggStateDesc
+    : identifier '(' typeWithNullable (',' typeWithNullable)* ')'
+    ;
+
 aggDesc
     : SUM
     | MAX
@@ -426,6 +439,7 @@ aggDesc
     | BITMAP_UNION
     | PERCENTILE_UNION
     | REPLACE_IF_NOT_NULL
+    | aggStateDesc
     ;
 
 rollupDesc
@@ -525,7 +539,7 @@ showAlterStatement
     ;
 
 descTableStatement
-    : (DESC | DESCRIBE) table=qualifiedName ALL?
+    : (DESC | DESCRIBE) ((table=qualifiedName ALL?) | (FILES propertyList))
     ;
 
 createTableLikeStatement
@@ -1240,8 +1254,8 @@ alterResourceGroupStatement
     ;
 
 showResourceGroupStatement
-    : SHOW RESOURCE GROUP identifier
-    | SHOW RESOURCE GROUPS ALL?
+    : SHOW VERBOSE? RESOURCE GROUP identifier
+    | SHOW VERBOSE? RESOURCE GROUPS ALL?
     ;
 
 showResourceGroupUsageStatement

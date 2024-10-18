@@ -20,12 +20,12 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -1004,25 +1004,25 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     Assert.assertNotNull(olapTable.getUniqueConstraints());
                     Assert.assertEquals(1, olapTable.getUniqueConstraints().size());
                     UniqueConstraint uniqueConstraint = olapTable.getUniqueConstraints().get(0);
-                    Assert.assertEquals(2, uniqueConstraint.getUniqueColumnNames().size());
-                    Assert.assertEquals("k1", uniqueConstraint.getUniqueColumnNames().get(0));
-                    Assert.assertEquals("k2", uniqueConstraint.getUniqueColumnNames().get(1));
+                    Assert.assertEquals(2, uniqueConstraint.getUniqueColumnNames(olapTable).size());
+                    Assert.assertEquals("k1", uniqueConstraint.getUniqueColumnNames(olapTable).get(0));
+                    Assert.assertEquals("k2", uniqueConstraint.getUniqueColumnNames(olapTable).get(1));
 
                     cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2; k3; k4\")");
                     Assert.assertNotNull(olapTable.getUniqueConstraints());
                     Assert.assertEquals(3, olapTable.getUniqueConstraints().size());
                     UniqueConstraint uniqueConstraint2 = olapTable.getUniqueConstraints().get(0);
-                    Assert.assertEquals(2, uniqueConstraint2.getUniqueColumnNames().size());
-                    Assert.assertEquals("k1", uniqueConstraint2.getUniqueColumnNames().get(0));
-                    Assert.assertEquals("k2", uniqueConstraint2.getUniqueColumnNames().get(1));
+                    Assert.assertEquals(2, uniqueConstraint2.getUniqueColumnNames(olapTable).size());
+                    Assert.assertEquals("k1", uniqueConstraint2.getUniqueColumnNames(olapTable).get(0));
+                    Assert.assertEquals("k2", uniqueConstraint2.getUniqueColumnNames(olapTable).get(1));
 
                     UniqueConstraint uniqueConstraint3 = olapTable.getUniqueConstraints().get(1);
-                    Assert.assertEquals(1, uniqueConstraint3.getUniqueColumnNames().size());
-                    Assert.assertEquals("k3", uniqueConstraint3.getUniqueColumnNames().get(0));
+                    Assert.assertEquals(1, uniqueConstraint3.getUniqueColumnNames(olapTable).size());
+                    Assert.assertEquals("k3", uniqueConstraint3.getUniqueColumnNames(olapTable).get(0));
 
                     UniqueConstraint uniqueConstraint4 = olapTable.getUniqueConstraints().get(2);
-                    Assert.assertEquals(1, uniqueConstraint4.getUniqueColumnNames().size());
-                    Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumnNames().get(0));
+                    Assert.assertEquals(1, uniqueConstraint4.getUniqueColumnNames(olapTable).size());
+                    Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumnNames(olapTable).get(0));
 
                     cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
                     Assert.assertTrue(olapTable.getUniqueConstraints().isEmpty());
