@@ -1536,6 +1536,13 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     manager->update_state_cache().remove(state_entry);
     int64_t t_index = MonotonicMillis();
 
+    // NOTE:
+    // If the apply fails at the following stages, an intolerable error must be returned right now.
+    // Because the metadata may have already been persisted.
+    // If you need to return a tolerable error, please make sure the following:
+    //   1. The latest meta should be roll back.
+    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
+    //   3. The rowset stats maybe invalid, need to recalculate
     span->AddEvent("gen_delvec");
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -1622,12 +1629,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
 
-    // NOTE:
-    // If the apply fails at the following stages, an intolerable error must be returned right now.
-    // Because the metadata may have already been persisted.
-    // If you need to return a tolerable error, please make sure the following:
-    //   1. The latest meta should be roll back.
-    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
     {
         std::lock_guard wl(_lock);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_tablet_drop, { _edit_version_infos.clear(); });
@@ -4170,7 +4171,6 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
               << " #column:" << _tablet.thread_safe_get_tablet_schema()->num_columns()
               << " #rowset:" << src_rowsets.size() << " #file:" << total_files << " #row:" << total_rows
               << " bytes:" << total_bytes;
-    ;
     return Status::OK();
 }
 
@@ -5034,7 +5034,8 @@ static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext&
     for (const auto& dcg : ctx.dcgs) {
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first >= 0) {
-            std::string column_file = dcg->column_files(parent_name(ctx.segment->file_name()))[idx.first];
+            ASSIGN_OR_RETURN(std::string column_file,
+                             dcg->column_file_by_idx(parent_name(ctx.segment->file_name()), idx.first));
             if (ctx.dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema));
                 ctx.dcg_segments[column_file] = dcg_segment;
@@ -5550,24 +5551,6 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
     }
-
-    // 3. reset rowset_stats
-    {
-        std::lock_guard lg(_rowset_stats_lock);
-        _rowset_stats.clear();
-        for (auto& [rsid, rowset] : _rowsets) {
-            auto stats = std::make_unique<RowsetStats>();
-            stats->num_segments = rowset->num_segments();
-            stats->num_rows = rowset->num_rows();
-            stats->byte_size = rowset->data_disk_size();
-            stats->num_dels = 0;
-            stats->partial_update_by_column = rowset->is_column_mode_partial_update();
-            DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
-            _calc_compaction_score(stats.get());
-            _rowset_stats.emplace(rsid, std::move(stats));
-        }
-    }
-    _update_total_stats(version_info_apply.rowsets, nullptr, nullptr);
 }
 
 } // namespace starrocks

@@ -86,7 +86,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PhysicalPartitionImpl;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -132,6 +131,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mv.MVMetaVersionRepairer;
 import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.mv.analyzer.MVPartitionExprResolver;
@@ -284,7 +284,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
-public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
+public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
 
     private final ConcurrentHashMap<Long, Database> idToDb = new ConcurrentHashMap<>();
@@ -3262,7 +3262,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                         materializedView.getWarehouseId());
                 materializedView.addPartition(partition);
             } else {
-                Expr partitionExpr = stmt.getPartitionExpDesc().getExpr();
+                Expr partitionExpr = stmt.getPartitionByExpr();
                 Map<Expr, SlotRef> partitionExprMaps = MVPartitionExprResolver.getMVPartitionExprsChecked(partitionExpr,
                         stmt.getQueryStatement(), stmt.getBaseTableInfos());
                 LOG.info("Generate mv {} partition exprs: {}", mvName, partitionExprMaps);
@@ -3306,30 +3306,35 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     }
 
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
-        ExpressionPartitionDesc expressionPartitionDesc = stmt.getPartitionExpDesc();
-        if (expressionPartitionDesc != null) {
-            Expr expr = expressionPartitionDesc.getExpr();
-            if (expr instanceof SlotRef) {
-                SlotRef slotRef = (SlotRef) expr;
-                if (slotRef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
-                    return new ListPartitionInfo(PartitionType.LIST,
-                            Collections.singletonList(stmt.getPartitionColumn()));
+        Expr partitionByExpr = stmt.getPartitionByExpr();
+        PartitionType partitionType = stmt.getPartitionType();
+        if (partitionByExpr != null) {
+            if (partitionType == PartitionType.LIST) {
+                if (!(partitionByExpr instanceof SlotRef)) {
+                    throw new DdlException("List partition only support partition by slot ref column:"
+                            + partitionByExpr.toSql());
                 }
-            }
-            if ((expr instanceof FunctionCallExpr)) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-                    Column partitionColumn = new Column(stmt.getPartitionColumn());
-                    partitionColumn.setType(com.starrocks.catalog.Type.DATE);
-                    return expressionPartitionDesc.toPartitionInfo(
-                            Collections.singletonList(partitionColumn),
-                            Maps.newHashMap(), false);
+                return new ListPartitionInfo(PartitionType.LIST, Collections.singletonList(stmt.getPartitionColumn()));
+            } else {
+                ExpressionPartitionDesc expressionPartitionDesc = new ExpressionPartitionDesc(partitionByExpr);
+                if ((partitionByExpr instanceof FunctionCallExpr)) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionByExpr;
+                    if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                        Column partitionColumn = new Column(stmt.getPartitionColumn());
+                        partitionColumn.setType(com.starrocks.catalog.Type.DATE);
+                        return expressionPartitionDesc.toPartitionInfo(
+                                Collections.singletonList(partitionColumn),
+                                Maps.newHashMap(), false);
+                    }
                 }
+                return expressionPartitionDesc.toPartitionInfo(
+                        Collections.singletonList(stmt.getPartitionColumn()),
+                        Maps.newHashMap(), false);
             }
-            return expressionPartitionDesc.toPartitionInfo(
-                    Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false);
         } else {
+            if (partitionType != PartitionType.UNPARTITIONED && partitionType != null) {
+                throw new DdlException("Partition type is " + stmt.getPartitionType() + ", but partition by expr is null");
+            }
             return new SinglePartitionInfo();
         }
     }
@@ -5209,5 +5214,48 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     @Override
     public void handleMVRepair(Database db, Table table, List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, table, partitionRepairInfos);
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    Locker locker = new Locker();
+                    locker.lockDatabase(database, LockType.READ);
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        locker.unLockDatabase(database, LockType.READ);
+                    }
+                }).sum();
+        List<Object> samples = new ArrayList<>();
+        // get every olap table's first partition
+        for (Database database : idToDb.values()) {
+            Locker locker = new Locker();
+            locker.lockDatabase(database, LockType.READ);
+            try {
+                samples.addAll(database.getPartitionSamples());
+            } finally {
+                locker.unLockDatabase(database, LockType.READ);
+            }
+        }
+        return Lists.newArrayList(Pair.create(samples, totalCount));
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    Locker locker = new Locker();
+                    locker.lockDatabase(database, LockType.READ);
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        locker.unLockDatabase(database, LockType.READ);
+                    }
+                }).sum();
+        return ImmutableMap.of("Partition", totalCount);
     }
 }

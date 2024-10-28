@@ -83,8 +83,10 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
@@ -94,6 +96,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -104,10 +108,12 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
@@ -950,18 +956,61 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private ColumnDef getColumnDef(StarRocksParser.ColumnDescContext context) {
         Identifier colIdentifier = (Identifier) visit(context.identifier());
         String columnName = colIdentifier.getValue();
-        TypeDef typeDef = new TypeDef(getType(context.type()), createPos(context.type()));
+        Pair<Type, AggStateDesc> typeWithAggStateDesc = getAggStateDesc(context.aggDesc());
+
+        // get column's type
+        Type columnType = null;
+        if (context.type() == null) {
+            // This can only happen when aggStateDesc is not null.
+            if (typeWithAggStateDesc == null) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedType("Column's type is null and it's not agg " +
+                        "state column" + columnName), colIdentifier.getPos());
+            } else {
+                columnType = typeWithAggStateDesc.first;
+            }
+        } else {
+            columnType = getType(context.type());
+        }
+
+        // get column's agg state desc
+        AggStateDesc aggStateDesc = typeWithAggStateDesc == null ? null : typeWithAggStateDesc.second;
+        NodePosition pos = context.type() == null ? NodePosition.ZERO : createPos(context.type());
+        TypeDef typeDef = new TypeDef(columnType, pos);
         String charsetName = context.charsetName() != null ?
                 ((Identifier) visit(context.charsetName().identifier())).getValue() : null;
-        boolean isKey = context.KEY() != null;
-        AggregateType aggregateType =
-                context.aggDesc() != null ? AggregateType.valueOf(context.aggDesc().getText().toUpperCase()) : null;
-        Boolean isAllowNull = null;
-        if (context.NOT() != null && context.NULL() != null) {
-            isAllowNull = false;
-        } else if (context.NULL() != null) {
-            isAllowNull = true;
+
+        // get column's aggregate type
+        AggregateType aggregateType = null;
+        if (typeWithAggStateDesc != null) {
+            aggregateType = AggregateType.AGG_STATE_UNION;
+        } else {
+            aggregateType = context.aggDesc() != null ?
+                    AggregateType.valueOf(context.aggDesc().getText().toUpperCase()) : null;
         }
+
+        // get column's nullable
+        Boolean isAllowNull = null;
+        if (context.columnNullable() != null) {
+            if (context.columnNullable().NOT() != null) {
+                isAllowNull = false;
+            } else if (context.columnNullable().NULL() != null) {
+                isAllowNull = true;
+            }
+        }
+        // AGG_STATE_UNION can only be nullable for now, optimize it later.
+        if (aggregateType != null && aggregateType.equals(AggregateType.AGG_STATE_UNION)) {
+            if (isAllowNull != null && !isAllowNull) {
+                throw new ParsingException(PARSER_ERROR_MSG.foundNotNull("Agg state column " + columnName),
+                        colIdentifier.getPos());
+            }
+            if (aggStateDesc == null) {
+                throw new ParsingException(PARSER_ERROR_MSG.invalidColumnDef(columnName), colIdentifier.getPos());
+            }
+            // use agg state column's nullable
+            isAllowNull = aggStateDesc.getResultNullable();
+        }
+
+        boolean isKey = context.KEY() != null;
         Boolean isAutoIncrement = null;
         if (context.AUTO_INCREMENT() != null) {
             isAutoIncrement = true;
@@ -1003,7 +1052,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
-        return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
+        return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef,
                 isAutoIncrement, expr, comment, createPos(context));
     }
 
@@ -1233,9 +1282,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDescTableStatement(StarRocksParser.DescTableStatementContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        return new DescribeStmt(targetTableName, context.ALL() != null, createPos(context));
+        if (context.qualifiedName() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+            return new DescribeStmt(targetTableName, context.ALL() != null, createPos(context));
+        }
+
+        Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
+        return new DescribeStmt(tableFunctionProperties, createPos(context));
     }
 
     @Override
@@ -1703,7 +1757,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
-        ExpressionPartitionDesc expressionPartitionDesc = null;
+        Expr partitionByExpr = null;
         DistributionDesc distributionDesc = null;
         List<String> sortKeys = null;
 
@@ -1729,16 +1783,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             // process partition by
             if (desc.primaryExpression() != null) {
-                if (expressionPartitionDesc != null) {
+                if (partitionByExpr != null) {
                     throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PARTITION"), clausePos);
                 }
                 Expr expr = (Expr) visit(desc.primaryExpression());
                 if (expr instanceof SlotRef) {
-                    expressionPartitionDesc = new ExpressionPartitionDesc(expr);
+                    partitionByExpr = expr;
                 } else if (expr instanceof FunctionCallExpr) {
                     AnalyzerUtils.checkAndExtractPartitionCol((FunctionCallExpr) expr, null,
                             AnalyzerUtils.MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT);
-                    expressionPartitionDesc = new ExpressionPartitionDesc(expr);
+                    partitionByExpr = expr;
                 } else {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
                             expr.getPos());
@@ -1771,9 +1825,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
-            if (expressionPartitionDesc != null) {
+            if (partitionByExpr != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "PARTITION BY"),
-                        expressionPartitionDesc.getPos());
+                        partitionByExpr.getPos());
             }
             if (distributionDesc != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
@@ -1794,7 +1848,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
-                expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
+                partitionByExpr, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
                 createPos(context));
     }
 
@@ -2565,10 +2619,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowResourceGroupStatement(StarRocksParser.ShowResourceGroupStatementContext context) {
         NodePosition pos = createPos(context);
         if (context.GROUPS() != null) {
-            return new ShowResourceGroupStmt(null, context.ALL() != null, pos);
+            return new ShowResourceGroupStmt(null, context.ALL() != null, context.VERBOSE() != null, pos);
         } else {
             Identifier identifier = (Identifier) visit(context.identifier());
-            return new ShowResourceGroupStmt(identifier.getValue(), false, pos);
+            return new ShowResourceGroupStmt(identifier.getValue(), false, context.VERBOSE() != null, pos);
         }
     }
 
@@ -2712,8 +2766,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (formatPropsContext.booleanValue() != null) {
                 trimspace = Boolean.parseBoolean(formatPropsContext.booleanValue().getText());
             }
-            csvFormat = new CsvFormat(enclose == null ? 0 : (byte) enclose.charAt(0),
-                    escape == null ? 0 : (byte) escape.charAt(0),
+            csvFormat = new CsvFormat((enclose == null || enclose.isEmpty()) ? 0 : (byte) enclose.charAt(0),
+                    (escape == null || escape.isEmpty()) ? 0 : (byte) escape.charAt(0),
                     skipheader, trimspace);
         } else {
             csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
@@ -6215,6 +6269,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
         }
 
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_USER)) {
+            return new InformationFunction(FunctionSet.SESSION_USER.toUpperCase());
+        }
+
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_ID)) {
             return new InformationFunction(FunctionSet.SESSION_ID.toUpperCase());
         }
@@ -7494,6 +7552,83 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return getMapType(context.mapType());
         }
+    }
+
+    /**
+     * Whether the input decimal is wildcard which is no precision or scale.
+     */
+    private boolean isWildcardDecimalType(StarRocksParser.TypeContext typeContext) {
+        if (typeContext.decimalType() == null) {
+            return false;
+        }
+        StarRocksParser.DecimalTypeContext context = typeContext.decimalType();
+        Integer precision = null;
+        Integer scale = null;
+        if (context.precision != null) {
+            precision = Integer.parseInt(context.precision.getText());
+            if (context.scale != null) {
+                scale = Integer.parseInt(context.scale.getText());
+            }
+        }
+        return precision == null && scale == null;
+    }
+
+    /**
+     * Create an agg state desc from ast context.
+     * @param context agg desc context from parser
+     * @return the deduced agg function's intermediate type and its associated agg state desc pair
+     */
+    public Pair<Type, AggStateDesc> getAggStateDesc(StarRocksParser.AggDescContext context) {
+        if (context == null || context.aggStateDesc() == null) {
+            return null;
+        }
+        StarRocksParser.AggStateDescContext aggStateDescContext = context.aggStateDesc();
+        Identifier aggFuncNameId = (Identifier) visit(aggStateDescContext.identifier());
+        String aggFuncName = aggFuncNameId.getValue();
+        if (FunctionSet.UNSUPPORTED_AGG_STATE_FUNCTIONS.contains(aggFuncName)) {
+            throw new ParsingException(String.format("AggStateType function %s is not supported", aggFuncName),
+                    createPos(context));
+        }
+        List<StarRocksParser.TypeWithNullableContext> typeWithNullables = aggStateDescContext.typeWithNullable();
+        List<Type> argTypes = Lists.newArrayList();
+        for (StarRocksParser.TypeWithNullableContext typeWithNullableContext : typeWithNullables) {
+            Type argType = getType(typeWithNullableContext.type());
+            if (isWildcardDecimalType(typeWithNullableContext.type())) {
+                throw new ParsingException(String.format("AggStateType function %s with input %s has wildcard decimal",
+                        aggFuncName, argType), createPos(context));
+            }
+            argTypes.add(argType);
+        }
+        if (argTypes.stream().anyMatch(t -> t.isUnknown() || t.isTime() ||
+                t.isBitmapType() || t.isHllType() || t.isPercentile() || t.isNull() || t.isDecimalV2())) {
+            throw new ParsingException(String.format("AggStateType function %s with input %s has unsupported type",
+                    aggFuncName, argTypes), createPos(context));
+        }
+
+        // distinct or order by are not supported yet in agg_state desc.
+        FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+        Type[] argumentTypes = argTypes.toArray(Type[]::new);
+        Boolean[] isArgumentConstants = argTypes.stream().map(x -> false).toArray(Boolean[]::new);
+        Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(), aggFuncName, params, argumentTypes,
+                isArgumentConstants, createPos(context));
+        if (result == null) {
+            throw new ParsingException(String.format("AggStateType function %s with input %s not found", aggFuncName,
+                    argTypes), createPos(context));
+        }
+        if (!(result instanceof AggregateFunction)) {
+            throw new ParsingException(String.format("AggStateType function %s with input %s found but not an aggregate " +
+                            "function", aggFuncName, argTypes), createPos(context));
+        }
+        AggregateFunction aggFunc = (AggregateFunction) result;
+        if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+            throw new ParsingException(String.format("AggStateType function %s with input %s is not supported yet.",
+                    aggFuncName, argTypes), createPos(context));
+        }
+        Type intermediateType = aggFunc.getIntermediateTypeOrReturnType();
+        Type finalType = AnalyzerUtils.transformTableColumnType(intermediateType, false);
+        AggStateDesc aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType().clone(),
+                argTypes.stream().map(c -> c.clone()).collect(toList()));
+        return Pair.create(finalType.clone(), aggStateDesc);
     }
 
     private Type getBaseType(StarRocksParser.BaseTypeContext context) {
