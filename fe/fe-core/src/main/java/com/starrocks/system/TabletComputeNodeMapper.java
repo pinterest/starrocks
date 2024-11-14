@@ -45,6 +45,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -63,7 +66,6 @@ import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_
  * If using multiple replicas, consider the earlier-index CN for a given tablet to be more preferred
  * If some CN is removed, and it was the primary CN for some tablet, the first backup CN will become the primary
  * Thread-safe after initialization.
- *
  */
 
 public class TabletComputeNodeMapper {
@@ -76,9 +78,9 @@ public class TabletComputeNodeMapper {
 
     private class TabletMap {
         private final HashRing<Long, Long> tabletToComputeNodeId;
+
         TabletMap() {
-            tabletToComputeNodeId = new ConsistentHashRing<>(
-                    Hashing.murmur3_128(), new LongIdFunnel(), new LongIdFunnel(),
+            tabletToComputeNodeId = new ConsistentHashRing<>(Hashing.murmur3_128(), new LongIdFunnel(), new LongIdFunnel(),
                     Collections.emptyList(), CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
         }
 
@@ -93,6 +95,10 @@ public class TabletComputeNodeMapper {
     private final Lock readLock = stateLock.readLock();
     private final Lock writeLock = stateLock.writeLock();
 
+    // Tracking usage since the instantiation of this Mapper.
+    private final ConcurrentMap<Long, AtomicLong> tabletMappingCount = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, AtomicLong> computeNodeReturnCount = new ConcurrentHashMap<>();
+
     public TabletComputeNodeMapper() {
         resourceIsolationGroupToTabletMapping = new HashMap<>();
     }
@@ -100,6 +106,8 @@ public class TabletComputeNodeMapper {
     @TestOnly
     public void clear() {
         resourceIsolationGroupToTabletMapping.clear();
+        tabletMappingCount.clear();
+        computeNodeReturnCount.clear();
     }
 
     public int numResourceIsolationGroups() {
@@ -120,12 +128,12 @@ public class TabletComputeNodeMapper {
 
     public String debugString() {
         return resourceIsolationGroupToTabletMapping.entrySet().stream()
-                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue()))
-                .collect(Collectors.joining("\n"));
+                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue())).collect(Collectors.joining("\n"));
     }
 
     public void addComputeNode(Long computeNodeId, String resourceIsolationGroup) {
         resourceIsolationGroup = getResourceIsolationGroupName(resourceIsolationGroup);
+        LOG.info("Adding the cn {} to resource isolation group {}", computeNodeId, resourceIsolationGroup);
         writeLock.lock();
         try {
             addComputeNodeUnsynchronized(computeNodeId, resourceIsolationGroup);
@@ -149,6 +157,7 @@ public class TabletComputeNodeMapper {
     // This will succeed even if the resource isolation group is not being tracked.
     public void removeComputeNode(Long computeNodeId, String resourceIsolationGroup) {
         resourceIsolationGroup = getResourceIsolationGroupName(resourceIsolationGroup);
+        LOG.info("Removing the cn {} from resource isolation group {}", computeNodeId, resourceIsolationGroup);
         writeLock.lock();
         try {
             removeComputeNodeUnsynchronized(computeNodeId, resourceIsolationGroup);
@@ -168,10 +177,11 @@ public class TabletComputeNodeMapper {
         }
     }
 
-    public void modifyComputeNode(Long computeNodeId,
-                                  String oldResourceIsolationGroup, String newResourceIsolationGroup) {
+    public void modifyComputeNode(Long computeNodeId, String oldResourceIsolationGroup, String newResourceIsolationGroup) {
         oldResourceIsolationGroup = getResourceIsolationGroupName(oldResourceIsolationGroup);
         newResourceIsolationGroup = getResourceIsolationGroupName(newResourceIsolationGroup);
+        LOG.info("Modifying the resource isolation group for cn {} from {} to {}", computeNodeId, oldResourceIsolationGroup,
+                newResourceIsolationGroup);
         // We run the following even if oldResourceIsolationGroup.equals(newResourceIsolationGroup)
         // because we want to cleanly handle edge cases where the compute node hasn't already been
         // added to the TabletComputeNode mapper. This can happen in at least one situation, which
@@ -192,8 +202,7 @@ public class TabletComputeNodeMapper {
     }
 
     public List<Long> computeNodesForTablet(Long tabletId, int count) {
-        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
-                getResourceIsolationGroup();
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
         return computeNodesForTablet(tabletId, count, thisResourceIsolationGroup);
     }
 
@@ -201,15 +210,51 @@ public class TabletComputeNodeMapper {
         readLock.lock();
         try {
             if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
-                LOG.warn(String.format("Requesting node for resource isolation group %s, to which"
-                        + " there is not a known CN assigned.", resourceIsolationGroup));
+                LOG.warn(String.format(
+                        "Requesting node for resource isolation group %s, to which" + " there is not a known CN assigned.",
+                        resourceIsolationGroup));
                 return Collections.emptyList();
             }
             TabletMap m = this.resourceIsolationGroupToTabletMapping.get(resourceIsolationGroup);
-            return m.tabletToComputeNodeId.get(tabletId, count);
+            List<Long> computeNodes = m.tabletToComputeNodeId.get(tabletId, count);
+            // Update tracking information
+            tabletMappingCount.computeIfAbsent(tabletId, k -> new AtomicLong()).incrementAndGet();
+            computeNodes.forEach(
+                    nodeId -> computeNodeReturnCount.computeIfAbsent(nodeId, k -> new AtomicLong()).incrementAndGet());
+            return computeNodes;
         } finally {
             readLock.unlock();
         }
+    }
+
+    // Number of times that this mapper has returned the given compute node as the return value for `computeNodesForTablet`.
+    public Long getComputeNodeReturnCount(Long computeNodeId) {
+        return computeNodeReturnCount.getOrDefault(computeNodeId, new AtomicLong(0)).get();
+    }
+
+    // Returns the tablet mapped to the number of times which some caller has requested the appropriate CN.
+    // Only reports the number of times since this particular FE came up.
+    public ConcurrentMap<Long, AtomicLong> getTabletMappingCount() {
+        return tabletMappingCount;
+    }
+
+    // Key is compute node id. Value is number of distinct tablets for which this mapper instance has returned the given CN.
+    // Note, this is a kind of best-effort count -- it is possible that the given CN "owns" many more tablets, but we simply
+    // haven't scanned them due to a query that has been issued to this FE since this mapper has been instantiated.
+    // Note: this function is kind of expensive (~1 ms for largish databases), don't call it often.
+    public Map<Long, Long> computeNodeToOwnedTabletCount() throws IllegalStateException {
+        long startTime = System.currentTimeMillis();
+        HashMap<Long, Long> computeNodeToOwnedTabletCount = new HashMap<>();
+        for (Long tabletId : tabletMappingCount.keySet()) {
+            List<Long> primaryCnForTablet = computeNodesForTablet(tabletId, 1);
+            if (primaryCnForTablet.isEmpty()) {
+                throw new IllegalStateException("No owner for tablet, seemingly no cn for resource isolation group");
+            }
+            // Instantiate to 1 or increment.
+            computeNodeToOwnedTabletCount.merge(primaryCnForTablet.get(0), 1L, Long::sum);
+        }
+        LOG.info("millis passed calculating computeNodeToOwnedTabletCount: {}", System.currentTimeMillis() - startTime);
+        return computeNodeToOwnedTabletCount;
     }
 
     class LongIdFunnel implements Funnel<Long> {

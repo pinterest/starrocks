@@ -136,6 +136,47 @@ public class TabletComputeNodeMapperTest {
     }
 
     @Test
+    public void testTabletTracking() throws Exception {
+        TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
+        String thisRig = ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+
+        Set<Long> cnIds = new java.util.HashSet<>(Set.of(0L, 1L));
+        for (Long cnId : cnIds) {
+            mapper.addComputeNode(cnId, thisRig);
+        }
+        Assert.assertEquals(1, mapper.numResourceIsolationGroups());
+
+        long[] cnToReturnCount = new long[2];
+
+
+        // Ask for tablet 1 twice, track which cn is returned.
+        Long cnWhichOwnsT1 = mapper.computeNodesForTablet(1L, 1, thisRig).get(0);
+        cnToReturnCount[cnWhichOwnsT1.intValue()]++;
+        cnToReturnCount[mapper.computeNodesForTablet(1L, 1, thisRig).get(0).intValue()]++;
+        // Ask for a CN for tablet 2 thrice
+        Long cnWhichOwnsT2 = mapper.computeNodesForTablet(2L, 1, thisRig).get(0);
+        cnToReturnCount[cnWhichOwnsT2.intValue()]++;
+        cnToReturnCount[mapper.computeNodesForTablet(2L, 1, thisRig).get(0).intValue()]++;
+        cnToReturnCount[mapper.computeNodesForTablet(2L, 1, thisRig).get(0).intValue()]++;
+
+        Assert.assertEquals(2L, mapper.getTabletMappingCount().get(1L).get());
+        Assert.assertEquals(3L, mapper.getTabletMappingCount().get(2L).get());
+
+        Assert.assertEquals(cnToReturnCount[0], mapper.getComputeNodeReturnCount(0L).longValue());
+        Assert.assertEquals(cnToReturnCount[1], mapper.getComputeNodeReturnCount(1L).longValue());
+
+        // We don't want to assume which CN owns each tablet so making the assumption works like this
+        Map<Long, Long> expectedCnToOwnedTCount = new HashMap<>();
+        expectedCnToOwnedTCount.put(cnWhichOwnsT1, 1L);
+        if (!cnWhichOwnsT2.equals(cnWhichOwnsT1)) {
+            expectedCnToOwnedTCount.put(cnWhichOwnsT2, 1L);
+        } else {
+            expectedCnToOwnedTCount.put(cnWhichOwnsT1, 2L);
+        }
+        Assert.assertEquals(expectedCnToOwnedTCount, mapper.computeNodeToOwnedTabletCount());
+    }
+
+    @Test
     public void testTabletToCnMapping() throws Exception {
         TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
 
