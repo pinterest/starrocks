@@ -1228,7 +1228,9 @@ public class SystemInfoService implements GsonPostProcessable {
         newComputeNode.setBackendState(BackendState.using);
 
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
-        tabletComputeNodeMapper.addComputeNode(newComputeNode.getId(), DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        // TODO(cbrennan) Should this be using the given newComputeNode resource isolation group?
+        //  Technically the modify should get replayed right?
+        tabletComputeNodeMapper.addComputeNode(newComputeNode.getId(), newComputeNode.getResourceIsolationGroup());
     }
 
     public void replayAddBackend(Backend newBackend) {
