@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
@@ -234,6 +235,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     private void reportWorkerNotFoundException(long workerId) throws NonRecoverableException {
+        LOG.error("Worker not found {}", LogUtil.getCurrentStackTrace());
         throw new NonRecoverableException(
                 FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + this);
     }
