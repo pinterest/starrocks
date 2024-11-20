@@ -251,14 +251,10 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
      */
     @Override
     public long selectBackupWorker(long workerId, Optional<Long> tabletId) {
-        if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
+        if (availableID2ComputeNode.isEmpty()) {
+            LOG.info("availableID2ComputeNode is empty when looking for backup for worker: {}", workerId);
             return -1;
         }
-        if (allComputeNodeIds == null) {
-            createAvailableIdList();
-        }
-        Preconditions.checkNotNull(allComputeNodeIds);
-        Preconditions.checkState(allComputeNodeIds.contains(workerId));
 
         if (tabletId.isPresent()) {
             // If we've been provided the relevant tablet id, we try to select a backup that's based on the "next best"
@@ -284,11 +280,22 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                         return possibleBackup;
                     }
                 }
-                LOG.warn(String.format("Tried to use internal tablet to CN mapper but it failed to find an available" +
-                        " cn for the given tablet %d", tabletId.get()));
+                LOG.warn("Tried to use internal tablet to CN mapper but it failed to find an available cn for the given" +
+                                " tablet {}. Num compute nodes returned by mapper: {}. Size of availableID2ComputeNode: {} ",
+                        tabletId.get(), cnIdsOrderedByPreference.size(), availableID2ComputeNode.size());
                 return -1;
             }
         }
+
+        if (!id2ComputeNode.containsKey(workerId)) {
+            LOG.error("cannot select backup because list of all cn does not contain worker id {}: {}", workerId, id2ComputeNode);
+            return -1;
+        }
+        if (allComputeNodeIds == null) {
+            createAvailableIdList();
+        }
+        Preconditions.checkNotNull(allComputeNodeIds);
+        Preconditions.checkState(allComputeNodeIds.contains(workerId));
 
         int startPos = allComputeNodeIds.indexOf(workerId);
         int attempts = allComputeNodeIds.size();

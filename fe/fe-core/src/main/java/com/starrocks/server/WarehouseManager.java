@@ -138,7 +138,7 @@ public class WarehouseManager implements Writable {
                 throw new IllegalArgumentException(String.format("Cannot use resource groups with non-default" +
                         " warehouse %d or non-default worker group id %d", warehouseId, workerGroupId));
             }
-            return systemInfoService.getAvailableComputeNodeIds();
+            return systemInfoService.getRigMatchingComputeNodeIds();
         }
 
 
