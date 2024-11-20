@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /*
     This class is responsible for giving information about Tablets. It is limited in that it will only report information about
      tablets which this FE has needed to scan to fulfill a query which it received since it came up.
+     This is meant to help us understand if some tablet is very hot right now, and to know which CN is/are handling that load.
  */
 public class TabletMappingProcNode implements ProcDirInterface {
 
@@ -64,6 +65,7 @@ public class TabletMappingProcNode implements ProcDirInterface {
             tabletInfo.add(tabletToMappingCount.getKey().toString());
             tabletInfo.add(tabletToMappingCount.getValue().toString());
 
+            // We ask for 2 compute node ids since we're outputting the main tablet owner and the first backup.
             List<Long> computeNodeIds = tabletComputeNodeMapper.computeNodesForTablet(tabletToMappingCount.getKey(), 2);
             for (Long computeNodeId : computeNodeIds) {
                 tabletInfo.add(computeNodeId.toString());

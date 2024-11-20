@@ -128,7 +128,8 @@ public class TabletComputeNodeMapper {
 
     public String debugString() {
         return resourceIsolationGroupToTabletMapping.entrySet().stream()
-                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue())).collect(Collectors.joining("\n"));
+                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue()))
+                .collect(Collectors.joining("\n"));
     }
 
     public void addComputeNode(Long computeNodeId, String resourceIsolationGroup) {

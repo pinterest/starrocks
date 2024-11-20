@@ -60,7 +60,11 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("WorkerId")
                 .add("WarehouseName")
                 .add("TabletNum")
-                .add("UsedForTabletScanCount")
+                // This field is meant to help us understand how often we're using this CN to scan any tablet. It's meant to help
+                // us detect if some tablet which this CN currently "owns" is very hot. It's about relative magnitude with a given
+                // FE. If some CN have very high values for this field and other CN have very low values, we know the
+                // TabletComputeNodeMapper is not doing a good job distributing load across CN.
+                .add("OwnedTabletScanCount")
                 .add("ResourceIsolationGroup");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
