@@ -968,6 +968,21 @@ public class SystemInfoService implements GsonPostProcessable {
         return backendIds;
     }
 
+    public List<Long> getRigMatchingComputeNodeIds() {
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
+                getResourceIsolationGroup();
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNodeRef.keySet());
+
+        Iterator<Long> iter = computeNodeIds.iterator();
+        while (iter.hasNext()) {
+            ComputeNode cn = this.getComputeNode(iter.next());
+            if (cn == null || !resourceIsolationGroupMatches(cn.getResourceIsolationGroup(), thisResourceIsolationGroup)) {
+                iter.remove();
+            }
+        }
+        return computeNodeIds;
+    }
+
     public List<Long> getAvailableComputeNodeIds() {
         String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
                 getResourceIsolationGroup();
@@ -1106,7 +1121,9 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         newComputeNode.setBackendState(BackendState.using);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
-        tabletComputeNodeMapper.addComputeNode(newComputeNode.getId(), DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        // Technically the modify which assigns a non-default resource isolation group should always be replayed after the ADD
+        // COMPUTE NODE is replayed, but it can't hurt to call getResourceIsolationGroup in any case.
+        tabletComputeNodeMapper.addComputeNode(newComputeNode.getId(), newComputeNode.getResourceIsolationGroup());
     }
 
     public void replayAddBackend(Backend newBackend) {
@@ -1321,6 +1338,10 @@ public class SystemInfoService implements GsonPostProcessable {
             idToReportVersion.put(beId, new AtomicLong(0));
         }
         idToReportVersionRef = ImmutableMap.copyOf(idToReportVersion);
+
+        for (Map.Entry<Long, ComputeNode> cn : idToComputeNodeRef.entrySet()) {
+            tabletComputeNodeMapper.addComputeNode(cn.getKey(), cn.getValue().getResourceIsolationGroup());
+        }
 
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
