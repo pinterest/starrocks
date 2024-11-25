@@ -23,6 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.system.ResourceIsolationGroupUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
 import mockit.Expectations;
@@ -178,7 +179,7 @@ public class EditLogTest {
         feToWrite.setResourceIsolationGroup("somegroup2");
         JournalEntity journal = new JournalEntity();
         journal.setData(feToWrite);
-        journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
+        journal.setOpCode(OperationType.OP_UPDATE_FRONTEND_V2);
         EditLog editLog = new EditLog(null);
         editLog.loadJournal(mgr, journal);
         List<Frontend> updatedFrontends = mgr.getNodeMgr().getFrontends(null);
@@ -203,7 +204,8 @@ public class EditLogTest {
         TabletComputeNodeMapper tabletComputeNodeMapper = systemInfoService.internalTabletMapper();
         new Expectations(tabletComputeNodeMapper) {
             {
-                tabletComputeNodeMapper.modifyComputeNode(cnToWrite.getId(), null, "somegroup");
+                tabletComputeNodeMapper.modifyComputeNode(cnToWrite.getId(),
+                        ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID, "somegroup");
                 minTimes = 1;
             }
         };
