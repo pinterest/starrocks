@@ -138,6 +138,19 @@ public class DecimalV3FunctionAnalyzer {
             ArrayType commonType = new ArrayType(Type.getAssignmentCompatibleType(childTypes[0], childTypes[1], false));
             return new Type[] {commonType, commonType};
         }
+        if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) || FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName)) {
+            Preconditions.checkState(argTypes.length == 2);
+            Type[] childTypes = Arrays.stream(argTypes).map(a -> {
+                if (a.isArrayType()) {
+                    return ((ArrayType) a).getItemType();
+                } else {
+                    return a;
+                }
+            }).toArray(Type[]::new);
+            Type commonType = Type.getAssignmentCompatibleType(childTypes[0], childTypes[1], false);
+            ArrayType arrayType = new ArrayType(commonType);
+            return new Type[] {arrayType, commonType};
+        }
 
         return argTypes;
     }
@@ -305,6 +318,13 @@ public class DecimalV3FunctionAnalyzer {
         if (FunctionSet.DECIMAL_ROUND_FUNCTIONS.contains(fnName)) {
             return true;
         }
+
+        if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) ||
+                FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName)) {
+            return argumentTypes[0].isArrayType() &&
+                    (((ArrayType) argumentTypes[0]).getItemType().isDecimalV3() || argumentTypes[1].isDecimalV3());
+        }
+
 
         if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
             return true;
@@ -544,6 +564,11 @@ public class DecimalV3FunctionAnalyzer {
             }
             case FunctionSet.ARRAY_SLICE: {
                 newFn.setRetType(argumentTypes[0]);
+                return newFn;
+            }
+            case FunctionSet.ARRAY_CONTAINS:
+            case FunctionSet.ARRAY_POSITION: {
+                newFn.setArgsType(argumentTypes);
                 return newFn;
             }
             default:

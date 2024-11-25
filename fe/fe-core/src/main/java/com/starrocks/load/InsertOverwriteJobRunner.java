@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -51,6 +52,8 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.transaction.InsertOverwriteJobStats;
+import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -81,8 +84,10 @@ public class InsertOverwriteJobRunner {
     private final long tableId;
     private final String postfix;
 
+    // execution stat
     private long createPartitionElapse;
     private long insertElapse;
+    private TransactionState transactionState;
 
     public InsertOverwriteJobRunner(InsertOverwriteJob job, ConnectContext context, StmtExecutor stmtExecutor) {
         this.job = job;
@@ -404,9 +409,11 @@ public class InsertOverwriteJobRunner {
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                            // hash set is able to deduplicate the elements
-                            sourceTablets.addAll(index.getTablets());
+                        for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex index : subPartition.getMaterializedIndices(
+                                    MaterializedIndex.IndexExtState.ALL)) {
+                                sourceTablets.addAll(index.getTablets());
+                            }
                         }
                         targetTable.dropTempPartition(partition.getName(), true);
                     } else {
@@ -441,6 +448,9 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         OlapTable tmpTargetTable = null;
+        InsertOverwriteJobStats stats = new InsertOverwriteJobStats();
+        stats.setSourcePartitionIds(job.getSourcePartitionIds());
+        stats.setTargetPartitionIds(job.getTmpPartitionIds());
         try {
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -463,10 +473,16 @@ public class InsertOverwriteJobRunner {
             Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    sourceTablets.addAll(index.getTablets());
+                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        sourceTablets.addAll(index.getTablets());
+                    }
                 }
             });
+            long sumSourceRows = job.getSourcePartitionIds().stream()
+                    .mapToLong(p -> targetTable.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
+                    .sum();
+            stats.setSourceRows(sumSourceRows);
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
@@ -476,6 +492,11 @@ public class InsertOverwriteJobRunner {
             } else {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }
+
+            long sumTargetRows = job.getTmpPartitionIds().stream()
+                    .mapToLong(p -> targetTable.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
+                    .sum();
+            stats.setTargetRows(sumTargetRows);
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
@@ -504,9 +525,12 @@ public class InsertOverwriteJobRunner {
             locker.unLockDatabase(db, tableId, LockType.WRITE);
         }
 
-        // trigger listeners after insert overwrite committed, trigger listeners after
-        // write unlock to avoid holding lock too long
-        GlobalStateMgr.getCurrentState().getOperationListenerBus().onInsertOverwriteJobCommitFinish(db, tmpTargetTable);
+        if (!isReplay) {
+            // trigger listeners after insert overwrite committed, trigger listeners after
+            // write unlock to avoid holding lock too long
+            GlobalStateMgr.getCurrentState().getOperationListenerBus()
+                    .onInsertOverwriteJobCommitFinish(db, tmpTargetTable, stats);
+        }
     }
 
     private void prepareInsert() {

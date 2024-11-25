@@ -654,7 +654,7 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE? (WITH (SYNC | ASYNC) MODE)?
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -2403,15 +2403,24 @@ listPartitionDesc
     ;
 
 singleItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN listPartitionValueList propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN singleListPartitionValues propertyList?
     ;
 
 multiItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' listPartitionValueList (',' listPartitionValueList)* ')' propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN  multiListPartitionValues propertyList?
     ;
 
-listPartitionValueList
-    : '(' listPartitionValue (',' listPartitionValue)* ')'
+multiListPartitionValues
+    :'(' singleListPartitionValues (',' singleListPartitionValues)* ')' // list partition values with multi partition columns: ('a, 'b', 'c'), ('d', 'e', 'f')
+    ;
+
+singleListPartitionValues
+    : '(' listPartitionValue (',' listPartitionValue)* ')' // list partition value: ('a, 'b', 'c')
+    ;
+
+listPartitionValues // list partition values which can be with single or multi partition columns
+    : singleListPartitionValues
+    | multiListPartitionValues
     ;
 
 listPartitionValue
