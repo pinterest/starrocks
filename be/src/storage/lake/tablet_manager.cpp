@@ -26,6 +26,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
+#include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/horizontal_compaction_task.h"
@@ -274,6 +275,26 @@ Status TabletManager::delete_tablet_metadata(int64_t tablet_id, int64_t version)
         return ignore_not_found(fs::delete_file(location));
     }
     return fs::delete_file(location);
+}
+
+Status TabletManager::tablet_metadata_exists(int64_t tablet_id, int64_t version) {
+    if (version <= kInitialVersion) {
+        // Handle tablet initial metadata
+        auto status = tablet_metadata_exists(tablet_initial_metadata_location(tablet_id));
+        if (status.ok()) {
+            return status;
+        }
+    }
+    return tablet_metadata_exists(tablet_metadata_location(tablet_id, version));
+}
+
+Status TabletManager::tablet_metadata_exists(const std::string& path) {
+    if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
+        TRACE("got cached tablet metadata");
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->path_exists(path);
 }
 
 StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_id) {
@@ -595,10 +616,13 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
     if (algorithm == VERTICAL_COMPACTION) {
         return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
                                                         std::move(tablet_schema));
-    } else {
-        DCHECK(algorithm == HORIZONTAL_COMPACTION);
+    } else if (algorithm == HORIZONTAL_COMPACTION) {
         return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
                                                           std::move(tablet_schema));
+    } else {
+        DCHECK(algorithm == CLOUD_NATIVE_INDEX_COMPACTION);
+        return std::make_shared<CloudNativeIndexCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
+                                                                std::move(tablet_schema));
     }
 }
 

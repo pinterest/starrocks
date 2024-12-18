@@ -5656,4 +5656,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.dropMaterializedView("test_mv1");
         starRocksAssert.dropTable("s1");
     }
+
+    @Test
+    public void testRangePredicateRewriteCase1() {
+        String mv = "select lo_orderkey, lo_orderdate, lo_linenumber, lo_shipmode from lineorder";
+        String query = "select distinct lo_orderkey from lineorder where lo_shipmode in (upper('a'), lower('a')) and " +
+                "lo_linenumber = 1";
+        String plan = testRewriteOK(mv, query)
+                .getExecPlan();
+        PlanTestBase.assertContains(plan, "   TABLE: mv0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 20: lo_linenumber = 1, 21: lo_shipmode IN ('A', 'a')");
+    }
 }

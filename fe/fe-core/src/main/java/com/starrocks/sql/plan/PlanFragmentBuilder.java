@@ -389,6 +389,8 @@ public class PlanFragmentBuilder {
         }
 
         fragments.forEach(PlanFragment::removeDictMappingProbeRuntimeFilters);
+        fragments.forEach(PlanFragment::collectBuildRuntimeFilters);
+        fragments.forEach(PlanFragment::collectProbeRuntimeFilters);
 
         if (useQueryCache(execPlan)) {
             for (PlanFragment fragment : execPlan.getFragments()) {
@@ -2750,7 +2752,10 @@ public class PlanFragmentBuilder {
                     // do nothing
                 } else {
                     // we don't support group execution for other join
-                    currentExecGroup.setDisableColocateGroup();
+                    currentExecGroup.disableColocateGroup(leftFragmentPlanRoot);
+                    rightExecGroup.disableColocateGroup(rightFragmentPlanRoot);
+                    currentExecGroup.merge(rightExecGroup);
+                    execGroups.remove(rightExecGroup);
                 }
             }
             currentExecGroup.add(joinNode);
@@ -3026,6 +3031,7 @@ public class PlanFragmentBuilder {
 
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            List<PlanFragment> childFragments = Lists.newArrayList();
             for (int i = 0; i < optExpr.getInputs().size(); i++) {
                 List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(i);
                 ExecGroup setExecGroup = this.currentExecGroup;
@@ -3053,9 +3059,16 @@ public class PlanFragmentBuilder {
                         new ExchangeNode(context.getNextNodeId(), fragment.getPlanRoot(), fragment.getDataPartition());
                 this.currentExecGroup.add(exchangeNode, true);
 
+                childFragments.add(fragment);
                 exchangeNode.setFragment(setOperationFragment);
-                fragment.setDestination(exchangeNode);
                 setOperationNode.addChild(exchangeNode);
+            }
+
+            // keep the fragment child order with execution order
+            // for intersect and except. child(0) is build node.
+            for (int i = setOperationNode.getChildren().size() - 1; i >= 0; i--) {
+                final PlanFragment planFragment = childFragments.get(i);
+                planFragment.setDestination((ExchangeNode) setOperationNode.getChild(i));
             }
 
             // reset column is nullable, for handle union select xx join select xxx...

@@ -76,6 +76,7 @@
 #include "exprs/match_expr.h"
 #include "exprs/placeholder_ref.h"
 #include "exprs/subfield_expr.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -652,6 +653,12 @@ int Expr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     }
 
     return n;
+}
+
+void Expr::for_each_slot_id(const std::function<void(SlotId)>& cb) const {
+    for (auto child : _children) {
+        child->for_each_slot_id(cb);
+    }
 }
 
 int Expr::get_subfields(std::vector<std::vector<std::string>>* subfields) const {
