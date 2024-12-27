@@ -15,6 +15,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.ScanNode;
@@ -27,6 +29,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -64,24 +67,55 @@ public class CacheSelectBackendSelector implements BackendSelector {
     private Set<Long> assignedCnByTabletId(SystemInfoService systemInfoService, Long tabletId,
                                            String resourceIsolationGroupId) throws UserException {
         TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
+        int count = Math.max(props.numReplicasDesired, props.numBackupReplicasDesired);
+        // skipCount variable uses for backup cache replicas CN nodes selection
+        // to skip first CN node (primary) from the selected nodes
+        int skipCount = props.numBackupReplicasDesired > 0 ? 1 : 0;
         List<Long> cnIdsOrderedByPreference =
-                mapper.computeNodesForTablet(tabletId, props.numReplicasDesired, resourceIsolationGroupId);
-        if (cnIdsOrderedByPreference.size() < props.numReplicasDesired) {
-            throw new DdlException(String.format("Requesting more replicas than we have available CN" +
-                            " for the specified resource group. desiredReplicas: %d, resourceGroup: %s, tabletId: %d",
-                    props.numReplicasDesired, resourceIsolationGroupId, tabletId));
+                mapper.computeNodesForTablet(tabletId, count, resourceIsolationGroupId, skipCount);
+        if (cnIdsOrderedByPreference.isEmpty()) {
+            throw new DdlException(
+                    String.format("No CN nodes available for the specified resource group." +
+                                    " resourceGroup: %s, tabletId: %d",
+                            resourceIsolationGroupId, tabletId));
+        }
+        if (cnIdsOrderedByPreference.size() < count) {
+            throw new DdlException(
+                    String.format("Requesting more replicas than we have available CN" +
+                                    " for the specified resource group. desiredReplicas: %d," +
+                                    " desiredBackupReplicas: %d, resourceGroup: %s, tabletId: %d",
+                            props.numReplicasDesired, props.numBackupReplicasDesired,
+                            resourceIsolationGroupId, tabletId));
         }
         return new HashSet<>(cnIdsOrderedByPreference);
     }
 
     private Set<Long> assignedCnByBackupWorker(Long mainTargetCnId, String resourceIsolationGroupId)
             throws UserException {
-        Set<Long> selectedCn = new HashSet<>();
-        DefaultSharedDataWorkerProvider workerProvider =
-                new DefaultSharedDataWorkerProvider.Factory().captureAvailableWorkers(warehouseId,
-                        resourceIsolationGroupId);
+        DefaultSharedDataWorkerProvider workerProvider;
+        try {
+            workerProvider = new DefaultSharedDataWorkerProvider.Factory().captureAvailableWorkers(warehouseId,
+                    resourceIsolationGroupId);
+        } catch (ErrorReportException ex) {
+            // captureAvailableWorkers() can throw an ErrorReportException (RuntimeException) with
+            // error code as ERR_NO_NODES_IN_WAREHOUSE, which should be considered as
+            // expected behaviour in this particular case, so transforming it to checked DdlException
+            // would be consistent with this class logic.
+            if (ex.getErrorCode() == ErrorCode.ERR_NO_NODES_IN_WAREHOUSE) {
+                throw new DdlException(
+                        String.format("No CN nodes available for the specified resource group. resourceGroup: %s",
+                                resourceIsolationGroupId));
+            } else {
+                throw ex;
+            }
+        }
+        List<Long> selectedCn = new ArrayList<>();
+        int count = Math.max(props.numReplicasDesired, props.numBackupReplicasDesired);
+        // skipCount variable uses for backup cache replicas CN nodes selection
+        // to skip first CN node (primary) from the selected nodes
+        int skipCount = props.numBackupReplicasDesired > 0 ? 1 : 0;
         long targetBackendId = mainTargetCnId;
-        while (selectedCn.size() < props.numReplicasDesired) {
+        while (selectedCn.size() < count + skipCount) {
             if (selectedCn.contains(targetBackendId) || !workerProvider.isDataNodeAvailable(targetBackendId)) {
                 targetBackendId = workerProvider.selectBackupWorker(targetBackendId, Optional.empty());
                 if (targetBackendId < 0 || selectedCn.contains(targetBackendId)) {
@@ -93,17 +127,24 @@ public class CacheSelectBackendSelector implements BackendSelector {
             }
             selectedCn.add(targetBackendId);
         }
-        return selectedCn;
+        if (selectedCn.isEmpty()) {
+            throw new DdlException(
+                    String.format("No CN nodes available for the specified resource group. resourceGroup: %s",
+                            resourceIsolationGroupId));
+        }
+        return selectedCn.stream().skip(skipCount).collect(Collectors.toSet());
     }
 
     @Override
     public void computeScanRangeAssignment() throws UserException {
-        if (props.resourceIsolationGroups == null || props.resourceIsolationGroups.isEmpty()) {
+        if (props.resourceIsolationGroups.isEmpty()) {
             throw new UserException("Should not have constructed CacheSelectBackendSelector with no" +
                     " resourceIsolationGroups specified.");
         }
-        if (props.numReplicasDesired < 1) {
-            throw new UserException("Num replicas desired in cache must be at least 1: " + props.numReplicasDesired);
+        if (props.numReplicasDesired < 1 && props.numBackupReplicasDesired < 1) {
+            throw new UserException(String.format(
+                    "Num replicas or backup replicas desired in cache must be at least 1: replicas [%d] backup replicas [%d]",
+                    props.numReplicasDesired, props.numBackupReplicasDesired));
         }
 
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -146,9 +187,8 @@ public class CacheSelectBackendSelector implements BackendSelector {
         // Note that although we're not using the provided callerWorkerProvider above, the caller assumes that we used
         // it to note the selected backend ids. This is used for things like checking if the worker has died
         // and cancelling queries.
-        for (long workerId : allSelectedWorkerIds) {
-            callerWorkerProvider.selectWorkerUnchecked(workerId);
-        }
+        allSelectedWorkerIds.forEach(callerWorkerProvider::selectWorkerUnchecked);
+
         // Also, caller upstream will use the workerProvider to get ComputeNode references corresponding to the compute
         // nodes chosen in this function, so we must enable getting any worker regardless of availability.
         callerWorkerProvider.setAllowGetAnyWorker(true);

@@ -15,7 +15,6 @@ package com.starrocks.qe;
 
 import com.starrocks.server.GlobalStateMgr;
 
-import java.util.ArrayList;
 import java.util.List;
 
 // Describes how a CACHE SELECT statement should choose compute nodes to populate with the data.
@@ -26,15 +25,19 @@ import java.util.List;
 public class CacheSelectComputeNodeSelectionProperties {
     public List<String> resourceIsolationGroups;
     public int numReplicasDesired;
+    public int numBackupReplicasDesired;
 
-    public CacheSelectComputeNodeSelectionProperties(List<String> resourceIsolationGroups, int numReplicasDesired) {
-        if (resourceIsolationGroups == null || resourceIsolationGroups.isEmpty()) {
-            this.resourceIsolationGroups = new ArrayList<>();
-            this.resourceIsolationGroups.add(GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf()
-                    .getResourceIsolationGroup());
+    public CacheSelectComputeNodeSelectionProperties(List<String> resourceIsolationGroups,
+                                                     int numReplicasDesired,
+                                                     int numBackupReplicasDesired) {
+        if (resourceIsolationGroups.isEmpty()) {
+            this.resourceIsolationGroups = List.of(
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup()
+            );
         } else {
             this.resourceIsolationGroups = resourceIsolationGroups;
         }
-        this.numReplicasDesired = Math.max(numReplicasDesired, 1);
+        this.numReplicasDesired = Math.max(numReplicasDesired, 0);
+        this.numBackupReplicasDesired = Math.max(numBackupReplicasDesired, 0);
     }
 }

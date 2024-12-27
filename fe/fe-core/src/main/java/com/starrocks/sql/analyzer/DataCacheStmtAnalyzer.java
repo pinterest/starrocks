@@ -44,8 +44,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class DataCacheStmtAnalyzer {
+
     private DataCacheStmtAnalyzer() {
     }
 
@@ -54,6 +56,16 @@ public class DataCacheStmtAnalyzer {
     }
 
     static class DataCacheStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+
+        private static final String VERBOSE = "verbose";
+        private static final String PRIORITY = "priority";
+        private static final String TTL = "ttl";
+        private static final String RESOURCE_ISOLATION_GROUPS = "resource_isolation_groups";
+        private static final String NUM_REPLICAS = "num_replicas";
+        private static final String NUM_BACKUP_REPLICAS = "num_backup_replicas";
+        private static final Set<String> CACHE_SELECT_PROPS_KEYS =
+                Set.of(VERBOSE, PRIORITY, TTL, RESOURCE_ISOLATION_GROUPS, NUM_REPLICAS, NUM_BACKUP_REPLICAS);
+        private static final String CACHE_SELECT_PROPS_KEYS_STRING = String.join(",", CACHE_SELECT_PROPS_KEYS);
         private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -141,11 +153,15 @@ public class DataCacheStmtAnalyzer {
             statement.setCatalog(tableName.getCatalog());
 
             Map<String, String> properties = statement.getProperties();
-            statement.setVerbose(Boolean.parseBoolean(properties.getOrDefault("verbose", "false")));
+            if (properties.entrySet().stream().noneMatch(entry -> CACHE_SELECT_PROPS_KEYS.contains(entry.getKey()))) {
+                throw new SemanticException(
+                        String.format("Cache select supported properties [%s]", CACHE_SELECT_PROPS_KEYS_STRING));
+            }
+            statement.setVerbose(Boolean.parseBoolean(properties.getOrDefault(VERBOSE, "false")));
 
-            int priority = Integer.parseInt(properties.getOrDefault("priority", "0"));
+            int priority = Integer.parseInt(properties.getOrDefault(PRIORITY, "0"));
             if (priority != 0 && priority != 1) {
-                throw new SemanticException("DataCache's priority can only be set to 0 or 1");
+                throw new SemanticException(String.format("DataCache's %s can only be set to 0 or 1", PRIORITY));
             }
             statement.setPriority(priority);
 
@@ -154,28 +170,56 @@ public class DataCacheStmtAnalyzer {
             // Use duration specified in ISO-8601 duration format (PnDTnHnMn).
             long ttlSeconds = 0L;
             try {
-                ttlSeconds = Duration.parse(properties.getOrDefault("ttl", "PT0M")).toSeconds();
+                ttlSeconds = Duration.parse(properties.getOrDefault(TTL, "PT0M")).toSeconds();
             } catch (DateTimeParseException e) {
                 throw new SemanticException(String.format(
-                        "Illegal ttl format, use duration specified in ISO-8601 duration format (PnDTnHnMn). Error msg: %s",
-                        e.getMessage()));
+                        "Illegal %s format, use duration specified in ISO-8601 duration format (PnDTnHnMn). Error msg: %s",
+                        TTL, e.getMessage()));
             }
             if (priority > 0 && ttlSeconds == 0) {
-                throw new SemanticException("TTL must be specified when priority > 0");
+                throw new SemanticException(String.format("%s must be specified when %s > 0", TTL, PRIORITY));
             }
             statement.setTTLSeconds(ttlSeconds);
 
-            statement.setNumReplicasDesired(Integer.parseInt(
-                    properties.getOrDefault("num_replicas", "1")));
-            if (statement.getNumReplicasDesired() < 1) {
-                throw new SemanticException("Num replicas must be positive");
+            Optional<Integer> maybeNumReplicas =
+                    Optional.ofNullable(properties.get(NUM_REPLICAS)).map(Integer::parseInt);
+            Optional<Integer> maybeNumBackupReplicas =
+                    Optional.ofNullable(properties.get(NUM_BACKUP_REPLICAS)).map(Integer::parseInt);
+
+            // accept only num_replicas or num_backup_replicas, not both
+            if (maybeNumReplicas.isPresent() && maybeNumBackupReplicas.isPresent()) {
+                throw new SemanticException(
+                        String.format("Only one of %s or %s properties should be specified", NUM_REPLICAS,
+                                NUM_BACKUP_REPLICAS));
             }
 
-            String resourceIsolationGroupsString = properties.getOrDefault("resource_isolation_groups",
-                    "");
-            if (!resourceIsolationGroupsString.isEmpty()) {
-                statement.setResourceIsolationGroups(Arrays.asList(resourceIsolationGroupsString.split(",")));
+            if (maybeNumReplicas.isPresent()) {
+                statement.setNumReplicasDesired(
+                        maybeNumReplicas
+                                // check it for positive
+                                .filter(n -> n > 0)
+                                .orElseThrow(
+                                        () -> new SemanticException(String.format("%s must be positive", NUM_REPLICAS)))
+                );
             }
+
+            if (maybeNumBackupReplicas.isPresent()) {
+                statement.setNumBackupReplicasDesired(
+                        maybeNumBackupReplicas
+                                // check it for positive
+                                .filter(n -> n > 0)
+                                .orElseThrow(() -> new SemanticException(
+                                        String.format("%s must be positive", NUM_BACKUP_REPLICAS)))
+                );
+            } else if (maybeNumReplicas.isEmpty()) {
+                // if num_backup_replicas is not specified and num_replicas is not specified set num_replicas to 1 as default
+                statement.setNumReplicasDesired(1);
+            }
+
+            Optional.ofNullable(properties.get(RESOURCE_ISOLATION_GROUPS))
+                    .map(rig -> Arrays.asList(rig.split(",")))
+                    .ifPresent(statement::setResourceIsolationGroups);
+
             return null;
         }
     }
@@ -204,7 +248,8 @@ public class DataCacheStmtAnalyzer {
         }
     }
 
-    private static Optional<Table> getTable(String catalogName, String dbName, String tblName) throws SemanticException {
+    private static Optional<Table> getTable(String catalogName, String dbName, String tblName)
+            throws SemanticException {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         // Check target is existed

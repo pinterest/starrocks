@@ -73,10 +73,10 @@ public class TabletComputeNodeMapperTest {
         Long arbitraryTablet = 9000L;
         TabletComputeNodeMapper mapper = new TabletComputeNodeMapper();
         Assert.assertEquals(0, mapper.numResourceIsolationGroups());
-        Assert.assertEquals(Collections.emptyList(), mapper.computeNodesForTablet(arbitraryTablet, 1, ""));
+        Assert.assertEquals(Collections.emptyList(), mapper.computeNodesForTablet(arbitraryTablet, 1, "", 0));
         mapper.modifyComputeNode(1L, "", "");
         Assert.assertEquals(1, mapper.numResourceIsolationGroups());
-        Assert.assertEquals(List.of(1L), mapper.computeNodesForTablet(arbitraryTablet, 1, ""));
+        Assert.assertEquals(List.of(1L), mapper.computeNodesForTablet(arbitraryTablet, 1, "", 0));
     }
 
     @Test
@@ -148,16 +148,15 @@ public class TabletComputeNodeMapperTest {
 
         long[] cnToReturnCount = new long[2];
 
-
         // Ask for tablet 1 twice, track which cn is returned.
-        Long cnWhichOwnsT1 = mapper.computeNodesForTablet(1L, 1, thisRig).get(0);
+        Long cnWhichOwnsT1 = mapper.computeNodesForTablet(1L, 1, thisRig, 0).get(0);
         cnToReturnCount[cnWhichOwnsT1.intValue()]++;
-        cnToReturnCount[mapper.computeNodesForTablet(1L, 1, thisRig).get(0).intValue()]++;
+        cnToReturnCount[mapper.computeNodesForTablet(1L, 1, thisRig, 0).get(0).intValue()]++;
         // Ask for a CN for tablet 2 thrice
-        Long cnWhichOwnsT2 = mapper.computeNodesForTablet(2L, 1, thisRig).get(0);
+        Long cnWhichOwnsT2 = mapper.computeNodesForTablet(2L, 1, thisRig, 0).get(0);
         cnToReturnCount[cnWhichOwnsT2.intValue()]++;
-        cnToReturnCount[mapper.computeNodesForTablet(2L, 1, thisRig).get(0).intValue()]++;
-        cnToReturnCount[mapper.computeNodesForTablet(2L, 1, thisRig).get(0).intValue()]++;
+        cnToReturnCount[mapper.computeNodesForTablet(2L, 1, thisRig, 0).get(0).intValue()]++;
+        cnToReturnCount[mapper.computeNodesForTablet(2L, 1, thisRig, 0).get(0).intValue()]++;
 
         Assert.assertEquals(2L, mapper.getTabletMappingCount().get(1L).get());
         Assert.assertEquals(3L, mapper.getTabletMappingCount().get(2L).get());

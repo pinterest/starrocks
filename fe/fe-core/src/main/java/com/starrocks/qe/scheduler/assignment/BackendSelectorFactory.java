@@ -63,6 +63,7 @@ public class BackendSelectorFactory {
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
 
         int desiredDatacacheReplicas = sessionVariable.getNumDesiredDatacacheReplicas();
+        int desiredDatacacheBackupReplicas = sessionVariable.getNumDesiredDatacacheBackupReplicas();
         List<String> datacacheSelectResourceGroups = sessionVariable.getDatacacheSelectResourceGroups();
 
         if (scanNode instanceof SchemaScanNode) {
@@ -74,13 +75,19 @@ public class BackendSelectorFactory {
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),
                     sessionVariable.getHDFSBackendSelectorScanRangeShuffle());
-        } else if (desiredDatacacheReplicas > 1 || datacacheSelectResourceGroups != null) {
+        } else if (desiredDatacacheReplicas > 1 ||
+                desiredDatacacheBackupReplicas > 0 ||
+                !datacacheSelectResourceGroups.isEmpty()) {
             // Note that a cacheSelect should never be hasReplicated (because currently shared-data mode otherwise
             // doesn't support multiple replicas in cache), and it should never be hasColocate (because a cache select
             // statement is for a single table).
             return new CacheSelectBackendSelector(
-                    scanNode, locations, assignment, workerProvider, new CacheSelectComputeNodeSelectionProperties(
-                    datacacheSelectResourceGroups, desiredDatacacheReplicas), connectContext.getCurrentWarehouseId());
+                    scanNode, locations, assignment, workerProvider,
+                    new CacheSelectComputeNodeSelectionProperties(
+                            datacacheSelectResourceGroups,
+                            desiredDatacacheReplicas,
+                            desiredDatacacheBackupReplicas
+                    ), connectContext.getCurrentWarehouseId());
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
