@@ -86,6 +86,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -264,7 +265,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
-    public static final String MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT = "max_buckets_per_be_to_use_balancer_assignment";
+    public static final String MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT =
+            "max_buckets_per_be_to_use_balancer_assignment";
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
@@ -583,7 +585,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_materialized_view_transparent_union_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
-    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE = "enable_materialized_view_agg_pushdown_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE =
+            "enable_materialized_view_agg_pushdown_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE =
             "enable_materialized_view_timeseries_agg_pushdown_rewrite";
 
@@ -2050,8 +2053,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private boolean enableCacheSelect = false;
 
-    private List<String> datacacheSelectResourceGroups = null;
-    private int numDesiredDatacacheReplicas = -1;
+    private List<String> datacacheSelectResourceGroups = Collections.emptyList();
+    private int numDesiredDatacacheReplicas = 0;
+    private int numDesiredDatacacheBackupReplicas = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
@@ -2953,8 +2957,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
                         StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
         if (result == null) {
-            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
-            throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
+            String legalValues =
+                    Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+            throw new IllegalArgumentException(
+                    "Legal values of computation_fragment_scheduling_policy are " + legalValues);
         }
         this.computationFragmentSchedulingPolicy = StringUtils.upperCase(computationFragmentSchedulingPolicy);
     }
@@ -4245,7 +4251,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewRewritePartitionCompensate;
     }
 
-    public void setEnableMaterializedViewRewritePartitionCompensate(boolean enableMaterializedViewRewritePartitionCompensate) {
+    public void setEnableMaterializedViewRewritePartitionCompensate(
+            boolean enableMaterializedViewRewritePartitionCompensate) {
         this.enableMaterializedViewRewritePartitionCompensate = enableMaterializedViewRewritePartitionCompensate;
     }
 
@@ -4253,7 +4260,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewTransparentUnionRewrite;
     }
 
-    public void setEnableMaterializedViewTransparentUnionRewrite(boolean enableMaterializedViewTransparentUnionRewrite) {
+    public void setEnableMaterializedViewTransparentUnionRewrite(
+            boolean enableMaterializedViewTransparentUnionRewrite) {
         this.enableMaterializedViewTransparentUnionRewrite = enableMaterializedViewTransparentUnionRewrite;
     }
 
@@ -5078,9 +5086,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return numDesiredDatacacheReplicas;
     }
 
+    public int getNumDesiredDatacacheBackupReplicas() {
+        return numDesiredDatacacheBackupReplicas;
+    }
+
     public void setNumDesiredDatacacheReplicas(int numDesiredDatacacheReplicas) {
         this.numDesiredDatacacheReplicas = numDesiredDatacacheReplicas;
 >>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
+    }
+
+    public void setNumDesiredDatacacheBackupReplicas(int numDesiredDatacacheBackupReplicas) {
+        this.numDesiredDatacacheBackupReplicas = numDesiredDatacacheBackupReplicas;
     }
 
     // Serialize to thrift object

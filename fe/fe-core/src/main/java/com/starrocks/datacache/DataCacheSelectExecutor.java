@@ -34,7 +34,7 @@ public class DataCacheSelectExecutor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectExecutor.class);
 
     public static DataCacheSelectMetrics cacheSelect(DataCacheSelectStatement statement,
-                                                             ConnectContext connectContext) throws Exception {
+                                                     ConnectContext connectContext) throws Exception {
         // backup original session variable
         SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
         // clone an new session variable
@@ -54,14 +54,9 @@ public class DataCacheSelectExecutor {
         tmpSessionVariable.setEnableCacheSelect(true);
         // Note that although setting these values in the SessionVariable is not ideal, it's way more disruptive to pipe
         // this information to where it needs to be through the insertStmt.
-        if (statement.getNumReplicasDesired() > 1) {
-            // We only set this value if it is larger than the default assumption.
-            tmpSessionVariable.setNumDesiredDatacacheReplicas(statement.getNumReplicasDesired());
-        }
-        if (statement.getResourceIsolationGroups() != null && !statement.getResourceIsolationGroups().isEmpty()) {
-            // We only set this value if it is the non-default.
-            tmpSessionVariable.setDatacacheSelectResourceGroups(statement.getResourceIsolationGroups());
-        }
+        tmpSessionVariable.setNumDesiredDatacacheReplicas(statement.getNumReplicasDesired());
+        tmpSessionVariable.setNumDesiredDatacacheBackupReplicas(statement.getNumBackupReplicasDesired());
+        tmpSessionVariable.setDatacacheSelectResourceGroups(statement.getResourceIsolationGroups());
         connectContext.setSessionVariable(tmpSessionVariable);
 
         InsertStmt insertStmt = statement.getInsertStmt();
