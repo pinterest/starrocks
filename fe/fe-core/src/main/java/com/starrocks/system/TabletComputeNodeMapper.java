@@ -80,9 +80,8 @@ public class TabletComputeNodeMapper {
         private final HashRing<Long, Long> tabletToComputeNodeId;
 
         TabletMap() {
-            tabletToComputeNodeId =
-                    new ConsistentHashRing<>(Hashing.murmur3_128(), new LongIdFunnel(), new LongIdFunnel(),
-                            Collections.emptyList(), CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
+            tabletToComputeNodeId = new ConsistentHashRing<>(Hashing.murmur3_128(), new LongIdFunnel(), new LongIdFunnel(),
+                    Collections.emptyList(), CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
         }
 
         // Returns whether any single compute node has been added to this TabletMap
@@ -179,12 +178,10 @@ public class TabletComputeNodeMapper {
         }
     }
 
-    public void modifyComputeNode(Long computeNodeId, String oldResourceIsolationGroup,
-                                  String newResourceIsolationGroup) {
+    public void modifyComputeNode(Long computeNodeId, String oldResourceIsolationGroup, String newResourceIsolationGroup) {
         oldResourceIsolationGroup = getResourceIsolationGroupName(oldResourceIsolationGroup);
         newResourceIsolationGroup = getResourceIsolationGroupName(newResourceIsolationGroup);
-        LOG.info("Modifying the resource isolation group for cn {} from {} to {}", computeNodeId,
-                oldResourceIsolationGroup,
+        LOG.info("Modifying the resource isolation group for cn {} from {} to {}", computeNodeId, oldResourceIsolationGroup,
                 newResourceIsolationGroup);
         // We run the following even if oldResourceIsolationGroup.equals(newResourceIsolationGroup)
         // because we want to cleanly handle edge cases where the compute node hasn't already been
@@ -206,8 +203,7 @@ public class TabletComputeNodeMapper {
     }
 
     public List<Long> computeNodesForTablet(Long tabletId, int count) {
-        String thisResourceIsolationGroup =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
         return computeNodesForTablet(tabletId, count, thisResourceIsolationGroup, 0);
     }
 
@@ -216,8 +212,7 @@ public class TabletComputeNodeMapper {
         try {
             if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
                 LOG.warn(String.format(
-                        "Requesting node for resource isolation group %s, to which" +
-                                " there is not a known CN assigned.",
+                        "Requesting node for resource isolation group %s, to which there is not a known CN assigned.",
                         resourceIsolationGroup));
                 return Collections.emptyList();
             }

@@ -77,6 +77,7 @@ public class TabletComputeNodeMapperTest {
         mapper.modifyComputeNode(1L, "", "");
         Assert.assertEquals(1, mapper.numResourceIsolationGroups());
         Assert.assertEquals(List.of(1L), mapper.computeNodesForTablet(arbitraryTablet, 1, "", 0));
+        Assert.assertEquals(Collections.emptyList(), mapper.computeNodesForTablet(arbitraryTablet, 1, "", 1));
     }
 
     @Test
@@ -113,6 +114,8 @@ public class TabletComputeNodeMapperTest {
         mapper.addComputeNode(3L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
         mapper.addComputeNode(4L, ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
         Assert.assertEquals(3, mapper.computeNodesForTablet(arbitraryTablet, 3).size());
+        Assert.assertEquals(2, mapper.computeNodesForTablet(arbitraryTablet, 2,
+                ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID, 1).size());
         Assert.assertFalse(mapper.trackingNonDefaultResourceIsolationGroup());
 
         String otherGroup = "someothergroup";
@@ -147,6 +150,7 @@ public class TabletComputeNodeMapperTest {
         Assert.assertEquals(1, mapper.numResourceIsolationGroups());
 
         long[] cnToReturnCount = new long[2];
+
 
         // Ask for tablet 1 twice, track which cn is returned.
         Long cnWhichOwnsT1 = mapper.computeNodesForTablet(1L, 1, thisRig, 0).get(0);

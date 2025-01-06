@@ -45,9 +45,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class DataCacheStmtAnalyzer {
-
     private DataCacheStmtAnalyzer() {
     }
 
@@ -65,7 +65,8 @@ public class DataCacheStmtAnalyzer {
         private static final String NUM_BACKUP_REPLICAS = "num_backup_replicas";
         private static final Set<String> CACHE_SELECT_PROPS_KEYS =
                 Set.of(VERBOSE, PRIORITY, TTL, RESOURCE_ISOLATION_GROUPS, NUM_REPLICAS, NUM_BACKUP_REPLICAS);
-        private static final String CACHE_SELECT_PROPS_KEYS_STRING = String.join(",", CACHE_SELECT_PROPS_KEYS);
+        private static final String CACHE_SELECT_PROPS_KEYS_STRING = CACHE_SELECT_PROPS_KEYS.stream().sorted()
+                .collect(Collectors.joining(","));
         private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -153,7 +154,8 @@ public class DataCacheStmtAnalyzer {
             statement.setCatalog(tableName.getCatalog());
 
             Map<String, String> properties = statement.getProperties();
-            if (properties.entrySet().stream().noneMatch(entry -> CACHE_SELECT_PROPS_KEYS.contains(entry.getKey()))) {
+            if (!properties.isEmpty() && properties.entrySet().stream().noneMatch(entry ->
+                    CACHE_SELECT_PROPS_KEYS.contains(entry.getKey().toLowerCase()))) {
                 throw new SemanticException(
                         String.format("Cache select supported properties [%s]", CACHE_SELECT_PROPS_KEYS_STRING));
             }
@@ -248,8 +250,7 @@ public class DataCacheStmtAnalyzer {
         }
     }
 
-    private static Optional<Table> getTable(String catalogName, String dbName, String tblName)
-            throws SemanticException {
+    private static Optional<Table> getTable(String catalogName, String dbName, String tblName) throws SemanticException {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         // Check target is existed
