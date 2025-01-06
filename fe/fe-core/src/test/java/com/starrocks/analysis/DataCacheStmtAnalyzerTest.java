@@ -29,6 +29,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 >>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -151,6 +152,11 @@ public class DataCacheStmtAnalyzerTest {
 
     @Test
     public void testCacheSelectProperties() {
+        analyzeFail("cache select * from hive0.datacache_db.multi_partition_table" +
+                " properties(\"unknownparam1\"=\"1\",\"unknownparam2\"=\"somethingelse\")",
+                "Cache select supported properties" +
+                        " [num_backup_replicas,num_replicas,priority,resource_isolation_groups,ttl,verbose]");
+
         DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"verBose\"=\"true\")");
         Assertions.assertTrue(stmt.isVerbose());
@@ -158,7 +164,7 @@ public class DataCacheStmtAnalyzerTest {
         Assertions.assertEquals(0, stmt.getTTLSeconds());
 
         analyzeFail("cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\")",
-                "TTL must be specified when priority > 0");
+                "ttl must be specified when priority > 0");
 
         analyzeFail(
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1Y\")");
@@ -169,23 +175,37 @@ public class DataCacheStmtAnalyzerTest {
         Assertions.assertEquals(24 * 3600, stmt.getTTLSeconds());
 
         stmt = (DataCacheSelectStatement) analyzeSuccess(
-<<<<<<< HEAD
-                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", " +
-                        "\"TTL\"=\"P1DT1S\")");
-        Assertions.assertEquals(1, stmt.getPriority());
-        Assertions.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
-=======
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1DT1S\")");
         Assert.assertEquals(1, stmt.getPriority());
         Assert.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
         Assert.assertEquals(1, stmt.getNumReplicasDesired());
-        Assert.assertNull(stmt.getResourceIsolationGroups());
+        Assert.assertEquals(Collections.emptyList(), stmt.getResourceIsolationGroups());
 
         stmt = (DataCacheSelectStatement) analyzeSuccess("cache select * from" +
                 " hive0.datacache_db.multi_partition_table properties(\"resource_isolation_groups\"=\"somegroup1,somegroup2\"," +
                 " \"num_replicas\"=\"2\")");
         Assert.assertEquals(2, stmt.getNumReplicasDesired());
         Assert.assertEquals(List.of("somegroup1", "somegroup2"), stmt.getResourceIsolationGroups());
->>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
+
+        // check for exception if num_replicas and num_backup_replicas specified
+        analyzeFail("cache select * from hive0.datacache_db.multi_partition_table" +
+                " properties(\"resource_isolation_groups\"=\"somegroup1\"," +
+                "\"num_replicas\"=\"1\",\"num_backup_replicas\"=\"1\")",
+                "Only one of num_replicas or num_backup_replicas properties should be specified");
+
+        // check for default resource isolation groups, num_replicas and num_backup_replicas if no properties specified
+        stmt = (DataCacheSelectStatement) analyzeSuccess("cache select * from" +
+                " hive0.datacache_db.multi_partition_table");
+        Assert.assertEquals(1, stmt.getNumReplicasDesired());
+        Assert.assertEquals(0, stmt.getNumBackupReplicasDesired());
+        Assert.assertEquals(Collections.emptyList(), stmt.getResourceIsolationGroups());
+
+        // check for num_backup_replicas value if it is specified
+        stmt = (DataCacheSelectStatement) analyzeSuccess("cache select * from" +
+                " hive0.datacache_db.multi_partition_table properties(\"num_backup_replicas\"=\"1\")");
+        Assert.assertEquals(0, stmt.getNumReplicasDesired());
+        Assert.assertEquals(1, stmt.getNumBackupReplicasDesired());
+        Assert.assertEquals(Collections.emptyList(), stmt.getResourceIsolationGroups());
+>>>>>>> 3e414ba0aac (Added unit tests, revert linter unnecessary changes)
     }
 }

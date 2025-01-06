@@ -265,8 +265,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
-    public static final String MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT =
-            "max_buckets_per_be_to_use_balancer_assignment";
+    public static final String MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT = "max_buckets_per_be_to_use_balancer_assignment";
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
@@ -585,8 +584,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_materialized_view_transparent_union_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
-    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE =
-            "enable_materialized_view_agg_pushdown_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE = "enable_materialized_view_agg_pushdown_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE =
             "enable_materialized_view_timeseries_agg_pushdown_rewrite";
 
@@ -1248,6 +1246,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Add a global shuffle between the connector sink fragment and its child fragment.
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
+
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
@@ -2955,19 +2954,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
         SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
                 Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                        StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+                                   StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
         if (result == null) {
-            String legalValues =
-                    Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
-            throw new IllegalArgumentException(
-                    "Legal values of computation_fragment_scheduling_policy are " + legalValues);
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+            throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
         }
         this.computationFragmentSchedulingPolicy = StringUtils.upperCase(computationFragmentSchedulingPolicy);
     }
 
     public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
         return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                        StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                StringUtils.upperCase(computationFragmentSchedulingPolicy))
                 .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
@@ -4251,8 +4248,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewRewritePartitionCompensate;
     }
 
-    public void setEnableMaterializedViewRewritePartitionCompensate(
-            boolean enableMaterializedViewRewritePartitionCompensate) {
+    public void setEnableMaterializedViewRewritePartitionCompensate(boolean enableMaterializedViewRewritePartitionCompensate) {
         this.enableMaterializedViewRewritePartitionCompensate = enableMaterializedViewRewritePartitionCompensate;
     }
 
@@ -4260,8 +4256,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewTransparentUnionRewrite;
     }
 
-    public void setEnableMaterializedViewTransparentUnionRewrite(
-            boolean enableMaterializedViewTransparentUnionRewrite) {
+    public void setEnableMaterializedViewTransparentUnionRewrite(boolean enableMaterializedViewTransparentUnionRewrite) {
         this.enableMaterializedViewTransparentUnionRewrite = enableMaterializedViewTransparentUnionRewrite;
     }
 

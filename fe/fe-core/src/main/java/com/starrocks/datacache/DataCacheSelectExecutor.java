@@ -34,7 +34,7 @@ public class DataCacheSelectExecutor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectExecutor.class);
 
     public static DataCacheSelectMetrics cacheSelect(DataCacheSelectStatement statement,
-                                                     ConnectContext connectContext) throws Exception {
+                                                             ConnectContext connectContext) throws Exception {
         // backup original session variable
         SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
         // clone an new session variable
