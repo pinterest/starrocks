@@ -97,7 +97,7 @@ public class StarOSAgent {
         return true;
     }
 
-    // This method MUST be called before calling any other method which uses serviceId. Fulfill this prerequisite by calling
+    // This method must be called before calling any other method which uses serviceId. Fulfill this prerequisite by calling
     // `prepare` as soon as possible after the given StarManagerServer to which the `client` is connected is otherwise fully
     // initialized. This is to minimize redundant calls to this method.
     public void prepare() {
