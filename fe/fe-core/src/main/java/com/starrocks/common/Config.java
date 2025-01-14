@@ -1785,6 +1785,12 @@ public class Config extends ConfigBase {
     public static boolean authorization_enable_column_level_privilege = false;
 
     /**
+     *  Implementation of CauthzAuthorizer class to be used for external access control 
+     */
+    @ConfField(mutable = false)
+    public static String cauthz_authorization_class_name = "";
+
+    /**
      * The authentication_chain configuration specifies the sequence of security integrations
      * that will be used to authenticate a user. Each security integration in the chain will be
      * tried in the order they are defined until one of them successfully authenticates the user.
@@ -3042,7 +3048,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int primary_key_disk_schedule_time = 3600; // 1h
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = false)
     public static String access_control = "native";
 
     /**
