@@ -82,6 +82,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1665,8 +1666,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private boolean enableCacheSelect = false;
 
-    private List<String> datacacheSelectResourceGroups = null;
-    private int numDesiredDatacacheReplicas = -1;
+    private List<String> datacacheSelectResourceGroups = Collections.emptyList();
+    private int numDesiredDatacacheReplicas = 0;
+    private int numDesiredDatacacheBackupReplicas = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
@@ -4017,8 +4019,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return numDesiredDatacacheReplicas;
     }
 
+    public int getNumDesiredDatacacheBackupReplicas() {
+        return numDesiredDatacacheBackupReplicas;
+    }
+
     public void setNumDesiredDatacacheReplicas(int numDesiredDatacacheReplicas) {
         this.numDesiredDatacacheReplicas = numDesiredDatacacheReplicas;
+    }
+
+    public void setNumDesiredDatacacheBackupReplicas(int numDesiredDatacacheBackupReplicas) {
+        this.numDesiredDatacacheBackupReplicas = numDesiredDatacacheBackupReplicas;
     }
 
     // Serialize to thrift object

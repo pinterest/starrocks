@@ -15,7 +15,6 @@ package com.starrocks.qe;
 
 import com.starrocks.server.GlobalStateMgr;
 
-import java.util.ArrayList;
 import java.util.List;
 
 // Describes how a CACHE SELECT statement should choose compute nodes to populate with the data.
@@ -26,15 +25,29 @@ import java.util.List;
 public class CacheSelectComputeNodeSelectionProperties {
     public List<String> resourceIsolationGroups;
     public int numReplicasDesired;
+    public int numBackupReplicasDesired;
 
-    public CacheSelectComputeNodeSelectionProperties(List<String> resourceIsolationGroups, int numReplicasDesired) {
+    /**
+     * CACHE SELECT compute node properties constructor
+     * @param resourceIsolationGroups - list of resource isolation groups
+     * @param numReplicasDesired - number of cache replicas to be created including primary compute node
+     *        (should be >= 1 if numBackupReplicasDesired is 0)
+     * @param numBackupReplicasDesired - number of cache backup replicas to be created excluding primary compute node
+     *        (should be >= 1 if numReplicasDesired is 0)
+     * @apiNote if numReplicasDesired = 0 and numBackupReplicasDesired = 0 then
+     *          DataCacheSelectExecutor.computeScanRangeAssignment method will throw UseException
+     */
+    public CacheSelectComputeNodeSelectionProperties(List<String> resourceIsolationGroups,
+                                                     int numReplicasDesired,
+                                                     int numBackupReplicasDesired) {
         if (resourceIsolationGroups == null || resourceIsolationGroups.isEmpty()) {
-            this.resourceIsolationGroups = new ArrayList<>();
-            this.resourceIsolationGroups.add(GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf()
-                    .getResourceIsolationGroup());
+            this.resourceIsolationGroups = List.of(
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup()
+            );
         } else {
             this.resourceIsolationGroups = resourceIsolationGroups;
         }
-        this.numReplicasDesired = Math.max(numReplicasDesired, 1);
+        this.numReplicasDesired = Math.max(numReplicasDesired, 0);
+        this.numBackupReplicasDesired = Math.max(numBackupReplicasDesired, 0);
     }
 }
