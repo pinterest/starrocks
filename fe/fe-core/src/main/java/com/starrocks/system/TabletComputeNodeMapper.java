@@ -240,9 +240,10 @@ public class TabletComputeNodeMapper {
         return tabletMappingCount;
     }
 
-    // Key is compute node id. Value is number of distinct tablets for which this mapper instance has returned the given CN.
+    // Key is compute node id. Value is number of distinct tablets for which this mapper instance will currently assign primary
+    // ownership to the given CN.
     // Note, this is a kind of best-effort count -- it is possible that the given CN "owns" many more tablets, but we simply
-    // haven't scanned them due to a query that has been issued to this FE since this mapper has been instantiated.
+    // haven't scanned some of those tablets since this mapper has been instantiated (when this FE came up).
     // Note: this function is kind of expensive (~1 ms for largish databases), don't call it often.
     public Map<Long, Long> computeNodeToOwnedTabletCount() throws IllegalStateException {
         long startTime = System.currentTimeMillis();
