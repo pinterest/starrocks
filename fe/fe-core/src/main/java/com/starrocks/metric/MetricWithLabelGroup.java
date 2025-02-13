@@ -16,7 +16,6 @@ package com.starrocks.metric;
 
 import com.google.common.collect.Maps;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -39,9 +38,4 @@ public class MetricWithLabelGroup<E extends Metric<?>> {
             return metric;
         });
     }
-
-    public Collection<E> getAllMetrics() {
-        return labelValueToMetric.values();
-    }
-
 }

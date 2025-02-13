@@ -41,8 +41,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -55,8 +53,6 @@ import java.util.TimerTask;
  * such QPS, and save the result for users to get.
  */
 public class MetricCalculator extends TimerTask {
-    private static final Logger LOG = LogManager.getLogger(MetricCalculator.class);
-
     private long lastTs = -1;
     private long lastQueryCounter = -1;
     private long lastRequestCounter = -1;
