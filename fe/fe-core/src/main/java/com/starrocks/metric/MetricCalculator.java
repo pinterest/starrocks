@@ -39,13 +39,21 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
+=======
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+>>>>>>> d040c2db555 (metrics for tracking cn to tablet mappings)
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.TimerTask;
 
 /*
@@ -53,6 +61,8 @@ import java.util.TimerTask;
  * such QPS, and save the result for users to get.
  */
 public class MetricCalculator extends TimerTask {
+    private static final Logger LOG = LogManager.getLogger(MetricCalculator.class);
+
     private long lastTs = -1;
     private long lastQueryCounter = -1;
     private long lastRequestCounter = -1;
@@ -62,6 +72,7 @@ public class MetricCalculator extends TimerTask {
     private long lastQueryTimeOutCounter = -1;
 
     private long lastQueryEventTime = -1;
+    private long lastTabletMappingTs = -1;
 
     @Override
     public void run() {
@@ -194,30 +205,34 @@ public class MetricCalculator extends TimerTask {
         if (RunMode.isSharedDataMode() && timeSinceLastTabletMappingUpdate >= 60) {
             lastTabletMappingTs = currentTs;
             final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            // First, update tablet counts using StarOS for RIG-aware environments
             List<ComputeNode> computeNodes = clusterInfoService.getComputeNodes();
             for (ComputeNode computeNode : computeNodes) {
                 String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
                 long tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
                 MetricRepo.GAUGE_CN_TO_OWNED_TABLET_COUNT.getMetric(String.valueOf(computeNode.getId())).setValue(tabletNum);
             }
-            // We don't have a way of easily assessing which CN will act as backup for tablets if we're not using our
-            // internal mapper.
-            TabletComputeNodeMapper mapper = clusterInfoService.internalTabletMapper();
-            if (mapper != null) {
-                Map<Long, Long> computeNodeToActingAsBackupForTabletCount = mapper.computeNodeToActingAsBackupForTabletCount();
-                // Note that this will only return information about tablets which this FE has needed to ask for a backup.
-                for (Map.Entry<Long, Long> pair : computeNodeToActingAsBackupForTabletCount.entrySet()) {
-                    String cnId = String.valueOf(pair.getKey());
-                    long actingAsBackupCount = pair.getValue();
-                    if (actingAsBackupCount <= 0) {
+            
+            // Second, update backup selection metrics using internal mapper when available
+            boolean usingInternalMapper = clusterInfoService.shouldUseInternalTabletToCnMapper();
+            if (usingInternalMapper) {
+                TabletComputeNodeMapper mapper = clusterInfoService.internalTabletMapper();
+                if (mapper != null) {
+                    // Update backup selection counts
+                    Map<Long, Long> computeNodeToActingAsBackupForTabletCount = mapper.computeNodeToActingAsBackupForTabletCount();
+                    for (Map.Entry<Long, Long> pair : computeNodeToActingAsBackupForTabletCount.entrySet()) {
+                        String cnId = String.valueOf(pair.getKey());
+                        long actingAsBackupCount = pair.getValue();
+                        if (actingAsBackupCount <= 0) {
                         // For CN in different resource isolation groups from this FE, this FE won't have information about owned
                         // tablet counts. Rather than report useless information, we skip this.
                         continue;
-                    }
+                        }
 
-                    LongCounterMetric m = MetricRepo.COUNTER_CN_SELECTED_FOR_BACKUP_TABLET_SCAN.getMetric(cnId);
-                    Long newSelectCount = mapper.getComputeNodeReturnCount(pair.getKey());
-                    m.increase(newSelectCount - m.getValue());
+                        LongCounterMetric m = MetricRepo.COUNTER_CN_SELECTED_FOR_BACKUP_TABLET_SCAN.getMetric(cnId);
+                        Long newSelectCount = mapper.getComputeNodeReturnCount(pair.getKey());
+                        m.increase(newSelectCount - m.getValue());
+                    }
                 }
             }
         }
