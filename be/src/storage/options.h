@@ -77,6 +77,7 @@ struct LakeIOOptions {
     bool fill_data_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+    bool cache_file_only = false; // only used for CACHE SELECT
 };
 
 } // namespace starrocks
