@@ -39,10 +39,13 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.TimerTask;
 
 /*
@@ -55,6 +58,7 @@ public class MetricCalculator extends TimerTask {
     private long lastRequestCounter = -1;
     private long lastQueryErrCounter = -1;
     private long lastQueryEventTime = -1;
+    private long lastTabletMappingTs = -1;
 
     @Override
     public void run() {
@@ -158,5 +162,34 @@ public class MetricCalculator extends TimerTask {
         }
 
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
+
+        // Update the count of tablets owned by each CN and times a CN was used for a scan
+        // update the owned tablet counts less often because it's expensive to calculate and doesn't change frequently.
+        long timeSinceLastTabletMappingUpdate = (currentTs - lastTabletMappingTs) / 1000 + 1;
+        if (RunMode.isSharedDataMode() && timeSinceLastTabletMappingUpdate >= 60) {
+            lastTabletMappingTs = currentTs;
+            final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            boolean usingInternalMapper = clusterInfoService.shouldUseInternalTabletToCnMapper();
+            // We don't have a way of easily assessing which CN owns which tablets if we're not using our internal mapper.
+            if (usingInternalMapper) {
+                TabletComputeNodeMapper mapper =  clusterInfoService.internalTabletMapper();
+                Map<Long, Long> computeNodeToOwnedTabletCount = mapper.computeNodeToOwnedTabletCount();
+                // Note that this will only return information about tablets which this FE has needed to scan.
+                for (Map.Entry<Long, Long> pair : computeNodeToOwnedTabletCount.entrySet()) {
+                    String cnId = String.valueOf(pair.getKey());
+                    long ownedTabletCount = pair.getValue();
+                    if (ownedTabletCount <= 0) {
+                        // For CN in different resource isolation groups from this FE, this FE won't have information about owned
+                        // tablet counts. Rather than report useless information, we skip this.
+                        continue;
+                    }
+                    MetricRepo.GAUGE_CN_TO_OWNED_TABLET_COUNT.getMetric(cnId).setValue(ownedTabletCount);
+
+                    LongCounterMetric m = MetricRepo.COUNTER_CN_SELECTED_FOR_TABLET_SCAN.getMetric(cnId);
+                    Long newSelectCount = mapper.getComputeNodeReturnCount(pair.getKey());
+                    m.increase(newSelectCount - m.getValue());
+                }
+            }
+        }
     }
 }

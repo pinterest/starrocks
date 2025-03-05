@@ -141,6 +141,16 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("query_queue_v2_category_state", MetricUnit.REQUESTS,
                             "the current state of each category"));
 
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CN_SELECTED_FOR_TABLET_SCAN =
+            new MetricWithLabelGroup<>("cn_id",
+                    () -> new LongCounterMetric("cn_selected_for_tablet_scan", MetricUnit.NOUNIT,
+                            "times this FE selected the given CN for a scan of some tablet"));
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Long>> GAUGE_CN_TO_OWNED_TABLET_COUNT =
+            new MetricWithLabelGroup<>("cn_id",
+                    () -> new GaugeMetricImpl<>("cn_to_owned_tablet_count", MetricUnit.NOUNIT,
+                            "Number of tablets for which the cn is primarily responsible " +
+                                    "(only populated appropriately for CN in the same Resource isolation group as this FE)"));
+
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
 
