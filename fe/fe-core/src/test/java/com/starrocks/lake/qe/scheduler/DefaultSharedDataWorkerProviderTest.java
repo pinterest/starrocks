@@ -448,7 +448,77 @@ public class DefaultSharedDataWorkerProviderTest {
         Assert.assertEquals(selectedNodeId.size(), availList.size());
 
         // a random workerId that doesn't exist in workerProvider
-        Assert.assertEquals(-1, provider.selectBackupWorker(15678));
+        Assert.assertEquals(-1, provider.selectBackupWorker(15678, Optional.empty()));
+    }
+
+    @Test
+    public void testSelectBackupWorkerStableGivenTabletAndResourceIsolationGroups() {
+        id2ComputeNode.clear();
+        id2AllNodes.clear();
+        TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
+        int totalNumComputeNodes = 100;
+        for (long computeNodeId = 0; computeNodeId < totalNumComputeNodes; computeNodeId++) {
+            ComputeNode cn = new ComputeNode(computeNodeId, "whatever", 100);
+            cn.setAlive(true);
+            if (computeNodeId % 3 == 0) {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group1");
+                cn.setResourceIsolationGroup("group1");
+            } else if (computeNodeId % 3 == 1) {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group2");
+                cn.setResourceIsolationGroup("group2");
+            } else {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group3");
+                cn.setResourceIsolationGroup("group3");
+            }
+            id2ComputeNode.put(computeNodeId, cn);
+            id2AllNodes.put(computeNodeId, cn);
+        }
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        new Expectations(warehouseManager) {
+            {
+                warehouseManager.getAllComputeNodeIds(anyLong);
+                result = Lists.newArrayList(id2AllNodes.keySet());
+                minTimes = 0;
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                ComputeNode node = id2ComputeNode.get(nodeId);
+                return node;
+            }
+
+            @Mock
+            public TabletComputeNodeMapper internalTabletMapper() {
+                return tabletComputeNodeMapper;
+            }
+        };
+
+        Frontend thisFe = new Frontend();
+        thisFe.setResourceIsolationGroup("group2");
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return thisFe;
+            }
+        };
+
+        long cnToBlock = 1;
+        // Block some CN and check that the right backup is chosen for each tablet
+        SimpleScheduler.getHostBlacklist().add(cnToBlock);
+        DefaultSharedDataWorkerProvider provider =
+                factory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, -1,
+                        ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Set<Long> chosenBackups = new HashSet<>();
+        for (long tabletId = 1L; tabletId < 1000; tabletId++) {
+            List<Long> cnsInOrder = tabletComputeNodeMapper.backupComputeNodesForTablet(tabletId, cnToBlock, 2);
+            Assert.assertEquals((long) cnsInOrder.get(0), provider.selectBackupWorker(cnToBlock, Optional.of(tabletId)));
+            Assert.assertNotEquals(cnToBlock, (long) cnsInOrder.get(0));
+            chosenBackups.add(cnsInOrder.get(0));
+        }
+        // check that we're not using the same backup for every tablet
+        Assert.assertTrue(chosenBackups.size() > 1);
+>>>>>>> 733b7282580 (manage worker groups for RIG, use StarOs for primary tablet->CN assignment)
     }
 
     private OlapScanNode newOlapScanNode(int id, int numBuckets) {

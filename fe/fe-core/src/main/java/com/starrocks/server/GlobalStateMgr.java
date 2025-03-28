@@ -225,6 +225,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.WorkerGroupManager;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TNetworkAddress;
@@ -520,6 +521,7 @@ public class GlobalStateMgr {
     private final WarehouseIdleChecker warehouseIdleChecker;
 
     private final ClusterSnapshotMgr clusterSnapshotMgr;
+    private final WorkerGroupManager workerGroupMgr;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -603,6 +605,10 @@ public class GlobalStateMgr {
 
     public RefreshDictionaryCacheTaskDaemon getRefreshDictionaryCacheTaskDaemon() {
         return refreshDictionaryCacheTaskDaemon;
+    }
+
+    public WorkerGroupManager getWorkerGroupMgr() {
+        return workerGroupMgr;
     }
 
     private static class SingletonHolder {
@@ -828,6 +834,7 @@ public class GlobalStateMgr {
                         "query-deploy", true);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
+        this.workerGroupMgr = new WorkerGroupManager();
     }
 
     public static void destroyCheckpoint() {

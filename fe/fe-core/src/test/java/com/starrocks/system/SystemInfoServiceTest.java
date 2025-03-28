@@ -388,11 +388,65 @@ public class SystemInfoServiceTest {
                 return true;
             }
         };
-        Backend be = new Backend(100, "originalHost", 1000);
-        service.addBackend(be);
-        ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
-        // throw not support exception
-        service.modifyBackendHost(clause);
+        com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
+
+        try {
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt.getHostPortPairs());
+        } catch (DdlException e) {
+            Assert.fail();
+        }
+
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+                getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
+
+        try {
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Compute node already exists with same host"));
+        }
+    }
+
+    @Test
+    public void resourceIsolationGroupTest() throws DdlException {
+        Frontend thisFe = new Frontend();
+        thisFe.setResourceIsolationGroup(ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
+                minTimes = 0;
+            }
+        };
+        new Expectations() {
+            {
+                globalStateMgr.getNextId();
+                returns(1L, 2L, 3L);
+            }
+        };
+        service.addComputeNodes(List.of(Pair.create("host1", 1000), Pair.create("host2", 1000), Pair.create("host3", 1000)));
+        List<ComputeNode> allComputeNodes = service.getComputeNodes();
+        // Set all compute nodes as alive for sake of testing
+        for (ComputeNode cn : allComputeNodes) {
+            cn.setAlive(true);
+        }
+        Assert.assertEquals(3, allComputeNodes.size());
+        Assert.assertEquals(3, service.getAvailableComputeNodeIds().size());
+        Assert.assertEquals(allComputeNodes, service.getAvailableComputeNodes());
+
+        // Modify host3 to belong to another non-default group and check on consequences
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:othergroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("host3:1000", properties);
+        service.modifyComputeNodeProperty(clause);
+        Assert.assertEquals(List.of(1L, 2L), service.getAvailableComputeNodeIds());
+
+        // Reassign this FE and ensure it knows which compute node is available
+        thisFe.setResourceIsolationGroup("othergroup");
+        Assert.assertEquals(List.of(3L), service.getAvailableComputeNodeIds());
+
+        service.dropComputeNode("host3", 1000);
+>>>>>>> 733b7282580 (manage worker groups for RIG, use StarOs for primary tablet->CN assignment)
     }
 
 }

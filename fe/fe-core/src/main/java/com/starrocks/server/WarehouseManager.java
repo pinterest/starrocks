@@ -150,7 +150,10 @@ public class WarehouseManager implements Writable {
     }
 
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
-        Warehouse warehouse = getWarehouse(warehouseId);
+        Warehouse warehouse = idToWh.get(warehouseId);
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
+        }
 
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
@@ -178,22 +181,23 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-        try {
-            long workerGroupId = selectWorkerGroupInternal(warehouseId)
-                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), workerGroupId);
+        if (tablet == null) {
+            LOG.warn("Calling getComputeNodeId with null tablet");
+            return null;
+        }
+        return getComputeNodeId(warehouseId, tablet.getId());
+    }
 
-            Long nodeId;
-            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(shardInfo, true);
-            if (!ids.isEmpty()) {
-                nodeId = ids.iterator().next();
-                return nodeId;
-            } else {
-                return null;
-            }
-        } catch (StarClientException e) {
+    public Long getComputeNodeId(Long warehouseId, Long tabletId) {
+        Warehouse warehouse = idToWh.get(warehouseId);
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
+        }
+
+        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouseId, tabletId);
+        if (ids != null && !ids.isEmpty()) {
+            return ids.iterator().next();
+        } else {
             return null;
         }
     }
@@ -220,17 +224,21 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+    private Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, Long tabletId) {
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), workerGroupId);
+                    .getShardInfo(tabletId, workerGroupId);
 
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(shardInfo, true);
         } catch (StarClientException e) {
             return null;
         }
+    }
+
+    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        return getAllComputeNodeIdsAssignToTablet(warehouseId, tablet.getShardId());
     }
 
     public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
@@ -285,7 +293,18 @@ public class WarehouseManager implements Writable {
         return workerGroupId;
     }
 
+    // Warehouse id is unused in pinterest. In this version of starrocks we use resource isolation group instead of warehouse id.
     private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
+        if (warehouseId == DEFAULT_WAREHOUSE_ID) {
+            String thisRig = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
+            Optional<Long> workerGroup = GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getWorkerGroup(thisRig);
+            if (workerGroup.isPresent()) {
+                return workerGroup;
+            }
+            LOG.warn("Could not get worker group using WorkerGroupManager, falling back on earlier implementation");
+        } else {
+            LOG.warn("Violating expectations that we don't use warehouse feature: {}", warehouseId);
+        }
         Warehouse warehouse = getWarehouse(warehouseId);
         if (warehouse == null) {
             LOG.warn("failed to get warehouse by id {}", warehouseId);

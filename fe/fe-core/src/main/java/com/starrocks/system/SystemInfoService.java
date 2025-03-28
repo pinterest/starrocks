@@ -129,6 +129,10 @@ public class SystemInfoService implements GsonPostProcessable {
         nodeSelector = new NodeSelector(this);
     }
 
+    public TabletComputeNodeMapper internalTabletMapper() {
+        return tabletComputeNodeMapper;
+    }
+
     public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
             throws DdlException {
         for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
@@ -308,6 +312,67 @@ public class SystemInfoService implements GsonPostProcessable {
         return new ShowResultSet(builder.build(), messageResult);
     }
 
+    public ShowResultSet modifyComputeNodeProperty(ModifyComputeNodeClause modifyComputeNodeClause) throws DdlException {
+        String computeNodeHostPort = modifyComputeNodeClause.getComputeNodeHostPort();
+        Map<String, String> properties = modifyComputeNodeClause.getProperties();
+
+        // check compute node existence
+        ComputeNode computeNode = getComputeNodeWithHeartbeatPort(computeNodeHostPort.split(":")[0],
+                Integer.parseInt(computeNodeHostPort.split(":")[1]));
+        if (computeNode == null) {
+            throw new DdlException(String.format("computeNode [%s] not found", computeNodeHostPort));
+        }
+
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        List<List<String>> messageResult = new ArrayList<>();
+
+        // update backend based on properties
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equals(AlterSystemStmtAnalyzer.PROP_KEY_GROUP)) {
+                String oldResourceIsolationGroup = computeNode.getResourceIsolationGroup();
+                String newResourceIsolationGroup = DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+                // "" value in the properties means use default group label
+                if (!entry.getValue().isEmpty()) {
+                    newResourceIsolationGroup = getResourceIsolationGroupFromProperties(properties);
+                }
+                // Step 1: Communicate with staros that we're dropping the CN from the old worker group.
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(), computeNode.getStarletPort());
+                LOG.info("Trying to modify compute node {}: cnid: {}, old rig: {}, new rig: {}, original wgid: {}, ", workerAddr,
+                        computeNode.getId(), oldResourceIsolationGroup, newResourceIsolationGroup,
+                        computeNode.getWorkerGroupId());
+                Long originalWorkerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+                if (computeNode.getStarletPort() != 0) {
+                    originalWorkerGroupId = computeNode.getWorkerGroupId();
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, originalWorkerGroupId);
+                }
+                // Step 2: update in-memory representation of compute node.
+                computeNode.setResourceIsolationGroup(newResourceIsolationGroup);
+                // Step 3: update internal table mapper to reflect the new membership of compute node
+                tabletComputeNodeMapper.modifyComputeNode(computeNode.getId(), oldResourceIsolationGroup,
+                        newResourceIsolationGroup);
+                // Step 4: use WorkerGroupManager to get associated worker group, set it in the compute node state.
+                Long workerGroupId =
+                        GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getOrCreateWorkerGroup(newResourceIsolationGroup);
+                computeNode.setWorkerGroupId(workerGroupId);
+                // Step 5 (in background) StarOs will be updated of new worker group information in heartbeat mgr
+                String opMessage = String.format(
+                        "%s:%d's group has been modified from %s to %s, and worker group has been changed from %d to %d",
+                        computeNode.getHost(), computeNode.getHeartbeatPort(), oldResourceIsolationGroup,
+                        newResourceIsolationGroup, originalWorkerGroupId, workerGroupId);
+                LOG.info(opMessage);
+                messageResult.add(Collections.singletonList(opMessage));
+            } else {
+                throw new UnsupportedOperationException("unsupported property: " + entry.getKey());
+            }
+        }
+
+        // persistence
+        GlobalStateMgr.getCurrentState().getEditLog().logComputeNodeStateChange(computeNode);
+
+        // Return message
+        return new ShowResultSet(builder.build(), messageResult);
+    }
     public ShowResultSet modifyBackendProperty(ModifyBackendClause modifyBackendClause) throws DdlException {
         String backendHostPort = modifyBackendClause.getBackendHostPort();
         Map<String, String> properties = modifyBackendClause.getProperties();
@@ -1143,6 +1208,25 @@ public class SystemInfoService implements GsonPostProcessable {
         inMemoryState.setLocation(persistentState.getLocation());
     }
 
+    public void updateInMemoryStateComputeNode(ComputeNode persistentState) {
+        long id = persistentState.getId();
+        ComputeNode inMemoryState = getComputeNode(id);
+        if (inMemoryState == null) {
+            // ComputeNode may already be dropped. this may happen when
+            // 1. SystemHandler drop the decommission compute node
+            // 2. at same time, user try to cancel the decommission of that compute node.
+            // These two operations do not guarantee the order.
+            LOG.warn(String.format("Not updating in memory state for compute node, could be legitimate reason or bug:" +
+                    " [%s]", persistentState));
+            return;
+        }
+        tabletComputeNodeMapper.modifyComputeNode(id, inMemoryState.getResourceIsolationGroup(),
+                persistentState.getResourceIsolationGroup());
+        updateCommonInMemoryState(persistentState, inMemoryState);
+        // The difference between this function and updateInMemoryState is that we set group and not location nor disks
+        inMemoryState.setResourceIsolationGroup(persistentState.getResourceIsolationGroup());
+        inMemoryState.setWorkerGroupId(persistentState.getWorkerGroupId());
+    }
     public long getClusterAvailableCapacityB() {
         List<Backend> clusterBackends = getBackends();
         long capacity = 0L;
