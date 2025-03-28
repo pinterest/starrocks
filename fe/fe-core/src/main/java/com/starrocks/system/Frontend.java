@@ -223,6 +223,7 @@ public class Frontend extends JsonWriter {
         StringBuilder sb = new StringBuilder();
         sb.append("name: ").append(nodeName).append(", role: ").append(role.name());
         sb.append(", ").append(host).append(":").append(editLogPort);
+        sb.append(", rig: ").append(resourceIsolationGroup);
         return sb.toString();
     }
 }

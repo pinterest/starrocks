@@ -16,6 +16,7 @@ package com.starrocks.common.proc;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
 import org.apache.logging.log4j.LogManager;
@@ -24,11 +25,12 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /*
     This class is responsible for giving information about Tablets. It is limited in that it will only report information about
-     tablets which this FE has needed to scan to fulfill a query which it received since it came up.
+     tablets which this FE has needed to scan to fulfill a query for multiple replicas which it received since it came up.
      This is meant to help us understand if some tablet is very hot right now, and to know which CN is/are handling that load.
  */
 public class TabletMappingProcNode implements ProcDirInterface {
@@ -39,7 +41,7 @@ public class TabletMappingProcNode implements ProcDirInterface {
 
     static {
         ImmutableList.Builder<String> builder =
-                new ImmutableList.Builder<String>().add("TabletId").add("RequestCount").add("PrimaryCnOwner")
+                new ImmutableList.Builder<String>().add("TabletId").add("BackupRequestCount").add("PrimaryCnOwner")
                         .add("SecondaryCnOwner");
         TITLE_NAMES = builder.build();
     }
@@ -47,7 +49,7 @@ public class TabletMappingProcNode implements ProcDirInterface {
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        if (!clusterInfoService.shouldUseInternalTabletToCnMapper()) {
+        if (clusterInfoService.internalTabletMapper() == null) {
             LOG.warn("Requesting tablet mapping information but it's not internally maintained.");
             BaseProcResult result = new BaseProcResult();
             result.setNames(List.of("N/A"));
@@ -55,25 +57,40 @@ public class TabletMappingProcNode implements ProcDirInterface {
             return result;
         }
 
+        final TabletComputeNodeMapper tabletComputeNodeMapper = clusterInfoService.internalTabletMapper();
+        // TODO(cbrennan) Make this work even when we haven't asked for backup replicas through cache select.
+        Map<Long, AtomicLong> tabletToMappingCount = tabletComputeNodeMapper.getTabletMappingCount();
+        if (tabletToMappingCount.isEmpty()) {
+            LOG.warn("Cannot provide tablet mapping information when we haven't requested backup/multiple cache replicas.");
+            BaseProcResult result = new BaseProcResult();
+            result.setNames(List.of("N/A"));
+            result.addRow(List.of("Backup tablet mapping information not yet requested"));
+            return result;
+        }
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        final TabletComputeNodeMapper tabletComputeNodeMapper = clusterInfoService.internalTabletMapper();
-
-        for (Map.Entry<Long, AtomicLong> tabletToMappingCount : tabletComputeNodeMapper.getTabletMappingCount().entrySet()) {
+        String thisRig = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
+        for (Map.Entry<Long, AtomicLong> entry : tabletToMappingCount.entrySet()) {
             List<String> tabletInfo = new ArrayList<>(TITLE_NAMES.size());
+            Long tabletId = entry.getKey();
+            long backupRequestCount = entry.getValue().get();
 
-            tabletInfo.add(tabletToMappingCount.getKey().toString());
-            tabletInfo.add(tabletToMappingCount.getValue().toString());
+            tabletInfo.add(tabletId.toString());
+            tabletInfo.add(Long.toString(backupRequestCount));
 
-            // We ask for 2 compute node ids since we're outputting the main tablet owner and the first backup.
-            List<Long> computeNodeIds = tabletComputeNodeMapper.computeNodesForTablet(tabletToMappingCount.getKey(), 2);
-            for (Long computeNodeId : computeNodeIds) {
-                tabletInfo.add(computeNodeId.toString());
-            }
-            while (tabletInfo.size() < TITLE_NAMES.size()) {
+            Long primaryCnOwner = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, tabletId);
+
+            tabletInfo.add(primaryCnOwner.toString());
+
+            // We ask for 1 compute node ids since we're outputting the main tablet owner and the first backup.
+            List<Long> backupCn = tabletComputeNodeMapper.backupComputeNodesForTablet(tabletId, primaryCnOwner, 1, thisRig);
+            if (backupCn.isEmpty()) {
                 // If there's only 1 CN in this resource isolation group, there can be no SecondaryCnOwner,
                 // fill in the row to reflect that.
                 tabletInfo.add("N/A");
+            } else {
+                tabletInfo.add(backupCn.get(0).toString());
             }
             result.addRow(tabletInfo);
         }

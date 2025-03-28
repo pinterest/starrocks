@@ -25,6 +25,7 @@ import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.InternalErrorCode;
@@ -47,6 +48,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -277,6 +279,35 @@ public class StarOSAgent2ndTest {
             Assert.assertEquals(info.toBuilder().clearFullPath().toString(),
                     fsPathBuilder.build().toBuilder().clearFullPath().toString());
         }
+    }
+
+    @Test
+    public void testWorkerGroupMgmt(@Mocked StarClient client) throws StarClientException, UserException {
+        String owner1 = "some_owner";
+        long workerGroup1 = 101L;
+        WorkerGroupDetailInfo defaultWorkerGroupDetailInfo =
+                WorkerGroupDetailInfo.newBuilder().setGroupId(0).setOwner("OwnByStarManager").build();
+        WorkerGroupDetailInfo workerGroupDetailInfo =
+                WorkerGroupDetailInfo.newBuilder().setGroupId(workerGroup1).setOwner(owner1).build();
+        new Expectations() {
+            {
+                client.listWorkerGroup("1", Collections.emptyMap());
+                times = 3; // tryGet the first time, getOrCreate twice
+                result = Lists.newArrayList(defaultWorkerGroupDetailInfo);
+                result = Lists.newArrayList(defaultWorkerGroupDetailInfo);
+                result = Lists.newArrayList(defaultWorkerGroupDetailInfo, workerGroupDetailInfo);
+
+                client.createWorkerGroup("1", owner1, WorkerGroupSpec.getDefaultInstance(), Collections.emptyMap(),
+                        Collections.emptyMap());
+                times = 1;
+                result = workerGroupDetailInfo;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals(Optional.empty(), starosAgent.tryGetWorkerGroupForOwner(owner1));
+        Assert.assertEquals(workerGroup1, starosAgent.getOrCreateWorkerGroupForOwner(owner1));
+        Assert.assertEquals(workerGroup1, starosAgent.getOrCreateWorkerGroupForOwner(owner1));
+
     }
 
     private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {

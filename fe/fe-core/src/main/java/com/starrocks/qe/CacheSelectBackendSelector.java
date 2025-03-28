@@ -14,6 +14,8 @@
 
 package com.starrocks.qe;
 
+import com.staros.client.StarClientException;
+import com.staros.proto.ShardInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -23,7 +25,6 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
@@ -64,47 +65,67 @@ public class CacheSelectBackendSelector implements BackendSelector {
         this.warehouseId = warehouseId;
     }
 
-    private Set<Long> assignedCnByTabletId(SystemInfoService systemInfoService, Long tabletId,
-                                           String resourceIsolationGroupId) throws UserException {
-        TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
+    private Set<Long> assignedCnByTabletId(SystemInfoService systemInfoService, Long tabletId, String resourceIsolationGroupId)
+            throws UserException {
+        Optional<Long> workerGroupId =
+                GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getWorkerGroup(resourceIsolationGroupId);
+        if (workerGroupId.isEmpty()) {
+            throw new DdlException(
+                    String.format("No worker group created which corresponds specified resource group." + " resourceGroup: %s",
+                            resourceIsolationGroupId));
+        }
+        ShardInfo shardInfo = null;
+        try {
+            shardInfo =  GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tabletId, workerGroupId.get());
+        } catch (StarClientException e) {
+            throw new RuntimeException(e);
+        }
         int count = Math.max(props.numReplicasDesired, props.numBackupReplicasDesired);
         // skipCount variable uses for backup cache replicas CN nodes selection
         // to skip first CN node (primary) from the selected nodes
         int skipCount = props.numBackupReplicasDesired > 0 ? 1 : 0;
-        List<Long> cnIdsOrderedByPreference =
-                mapper.computeNodesForTablet(tabletId, count, resourceIsolationGroupId, skipCount);
+        Set<Long> primaryCn = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
+        if (primaryCn.isEmpty()) {
+            throw new UserException(String.format("Could not get primary cn for tablet %d, shard info: %s", tabletId, shardInfo));
+        }
+        if (count == 1 && skipCount == 0) {
+            return primaryCn;
+        }
+        Long primaryId = primaryCn.iterator().next();
+        List<Long> cnIdsOrderedByPreference = new ArrayList<>();
+        if (skipCount == 0) {
+            cnIdsOrderedByPreference.add(primaryId);
+        }
+        List<Long> backupCn = systemInfoService.internalTabletMapper()
+                .backupComputeNodesForTablet(tabletId, primaryId, count, resourceIsolationGroupId);
+        cnIdsOrderedByPreference.addAll(backupCn);
         if (cnIdsOrderedByPreference.isEmpty()) {
             throw new DdlException(
-                    String.format("No CN nodes available for the specified resource group." +
-                                    " resourceGroup: %s, tabletId: %d",
+                    String.format("No CN nodes available for the specified resource group." + " resourceGroup: %s, tabletId: %d",
                             resourceIsolationGroupId, tabletId));
         }
         if (cnIdsOrderedByPreference.size() < count) {
-            throw new DdlException(
-                    String.format("Requesting more replicas than we have available CN" +
-                                    " for the specified resource group. desiredReplicas: %d," +
-                                    " desiredBackupReplicas: %d, resourceGroup: %s, tabletId: %d",
-                            props.numReplicasDesired, props.numBackupReplicasDesired,
-                            resourceIsolationGroupId, tabletId));
+            throw new DdlException(String.format("Requesting more replicas than we have available CN" +
+                            " for the specified resource group. desiredReplicas: %d," +
+                            " desiredBackupReplicas: %d, resourceGroup: %s, tabletId: %d", props.numReplicasDesired,
+                    props.numBackupReplicasDesired, resourceIsolationGroupId, tabletId));
         }
         return new HashSet<>(cnIdsOrderedByPreference);
     }
 
-    private Set<Long> assignedCnByBackupWorker(Long mainTargetCnId, String resourceIsolationGroupId)
-            throws UserException {
+    private Set<Long> assignedCnByBackupWorker(Long mainTargetCnId, String resourceIsolationGroupId) throws UserException {
         DefaultSharedDataWorkerProvider workerProvider;
         try {
-            workerProvider = new DefaultSharedDataWorkerProvider.Factory().captureAvailableWorkers(warehouseId,
-                    resourceIsolationGroupId);
+            workerProvider =
+                    new DefaultSharedDataWorkerProvider.Factory().captureAvailableWorkers(warehouseId, resourceIsolationGroupId);
         } catch (ErrorReportException ex) {
             // captureAvailableWorkers() can throw an ErrorReportException (RuntimeException) with
             // error code as ERR_NO_NODES_IN_WAREHOUSE, which should be considered as
             // expected behaviour in this particular case, so transforming it to checked DdlException
             // would be consistent with this class logic.
             if (ex.getErrorCode() == ErrorCode.ERR_NO_NODES_IN_WAREHOUSE) {
-                throw new DdlException(
-                        String.format("No CN nodes available for the specified resource group. resourceGroup: %s",
-                                resourceIsolationGroupId));
+                throw new DdlException(String.format("No CN nodes available for the specified resource group. resourceGroup: %s",
+                        resourceIsolationGroupId));
             } else {
                 throw ex;
             }
@@ -122,15 +143,15 @@ public class CacheSelectBackendSelector implements BackendSelector {
                     workerProvider.reportDataNodeNotFoundException();
                     throw new DdlException(String.format("Requesting more replicas than we have available CN" +
                                     " for the specified resource group. desiredReplicas: %d, resourceGroup: %s",
-                            props.numReplicasDesired, resourceIsolationGroupId));
+                            props.numReplicasDesired,
+                            resourceIsolationGroupId));
                 }
             }
             selectedCn.add(targetBackendId);
         }
         if (selectedCn.isEmpty()) {
-            throw new DdlException(
-                    String.format("No CN nodes available for the specified resource group. resourceGroup: %s",
-                            resourceIsolationGroupId));
+            throw new DdlException(String.format("No CN nodes available for the specified resource group. resourceGroup: %s",
+                    resourceIsolationGroupId));
         }
         return selectedCn.stream().skip(skipCount).collect(Collectors.toSet());
     }
@@ -138,8 +159,8 @@ public class CacheSelectBackendSelector implements BackendSelector {
     @Override
     public void computeScanRangeAssignment() throws UserException {
         if (props.resourceIsolationGroups.isEmpty()) {
-            throw new UserException("Should not have constructed CacheSelectBackendSelector with no" +
-                    " resourceIsolationGroups specified.");
+            throw new UserException(
+                    "Should not have constructed CacheSelectBackendSelector with no" + " resourceIsolationGroups specified.");
         }
         if (props.numReplicasDesired < 1 && props.numBackupReplicasDesired < 1) {
             throw new UserException(String.format(
@@ -158,24 +179,20 @@ public class CacheSelectBackendSelector implements BackendSelector {
                 // If we've been provided the relevant tablet id, and we're using resource isolation groups, which
                 // is when we prefer to use the internal mapping, then we populate the datacaches of the CN which
                 // are most preferred for the tablet.
-                if (tabletId.isPresent() && systemInfoService.shouldUseInternalTabletToCnMapper()) {
+                if (tabletId.isPresent()) {
                     selectedCn = assignedCnByTabletId(systemInfoService, tabletId.get(), resourceIsolationGroupId);
                 } else {
                     if (scanRangeLocations.getLocationsSize() != 1) {
                         throw new UserException(
                                 "CacheSelectBackendSelector expected to be used in situations where there is exactly" +
-                                        " one CN to which any given tablet is officially assigned: " +
-                                        scanRangeLocations);
+                                        " one CN to which any given tablet is officially assigned: " + scanRangeLocations);
                     }
-                    selectedCn =
-                            assignedCnByBackupWorker(scanRangeLocations.getLocations().get(0).getBackend_id(),
-                                    resourceIsolationGroupId);
+                    selectedCn = assignedCnByBackupWorker(scanRangeLocations.getLocations().get(0).getBackend_id(),
+                            resourceIsolationGroupId);
                 }
                 LOG.debug(String.format(
                         "done doing assignment for resource isolation group %s, tablet %d, location %s: CN chosen are %s",
-                        resourceIsolationGroupId,
-                        tabletId.orElse(-1L),
-                        scanRangeLocations.getLocations().get(0),
+                        resourceIsolationGroupId, tabletId.orElse(-1L), scanRangeLocations.getLocations().get(0),
                         selectedCn.stream().map(String::valueOf).collect(Collectors.joining(","))));
 
                 for (Long cnId : selectedCn) {

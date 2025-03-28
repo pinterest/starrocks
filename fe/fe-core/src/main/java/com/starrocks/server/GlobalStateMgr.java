@@ -219,6 +219,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.WorkerGroupManager;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TNetworkAddress;
@@ -499,6 +500,7 @@ public class GlobalStateMgr {
     private final Authorizer authorizer;
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
+    private final WorkerGroupManager workerGroupMgr;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -578,6 +580,10 @@ public class GlobalStateMgr {
 
     public RefreshDictionaryCacheTaskDaemon getRefreshDictionaryCacheTaskDaemon() {
         return refreshDictionaryCacheTaskDaemon;
+    }
+
+    public WorkerGroupManager getWorkerGroupMgr() {
+        return workerGroupMgr;
     }
 
     private static class SingletonHolder {
@@ -795,6 +801,7 @@ public class GlobalStateMgr {
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.temporaryTableCleaner = new TemporaryTableCleaner();
+        this.workerGroupMgr = new WorkerGroupManager();
     }
 
     public static void destroyCheckpoint() {
