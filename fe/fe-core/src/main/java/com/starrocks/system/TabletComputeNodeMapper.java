@@ -34,16 +34,20 @@ package com.starrocks.system;
 import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -52,20 +56,19 @@ import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_
 
 /**
  * What:
- * Maps tablet to compute node(s) which are responsible for operations there-on.
+ * Maps tablet to backup compute node(s) which are responsible for operations there-on.
  * Why:
- * Flexible replacement for StarOS/StarMgr management of the same type of mapping.
- * Useful for when the system is using resource-isolation groups, in that case each
- * ComputeNode should belong to exactly one TabletComputeNodeMapper (not necessarily on the same Frontend).
+ * Enables deterministically distributing load to living CN in the case that some CN dies.
+ * This enables smart caching of multiple replicas of each tablet to improve failover behavior in the case of some CN death.
  * Notes on use:
  * Updated whenever there's an addition or removal of a compute node to the resource-isolation-group.
  * If using multiple replicas, consider the earlier-index CN for a given tablet to be more preferred
  * If some CN is removed, and it was the primary CN for some tablet, the first backup CN will become the primary
  * Thread-safe after initialization.
- *
  */
 
 public class TabletComputeNodeMapper {
+    private static final Logger LOG = LogManager.getLogger(TabletComputeNodeMapper.class);
 
     private static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 256;
     private static final Long ARBITRARY_FAKE_TABLET = 1L;
@@ -74,9 +77,9 @@ public class TabletComputeNodeMapper {
 
     private class TabletMap {
         private final HashRing<Long, Long> tabletToComputeNodeId;
+
         TabletMap() {
-            tabletToComputeNodeId = new ConsistentHashRing<>(
-                    Hashing.murmur3_128(), new LongIdFunnel(), new LongIdFunnel(),
+            tabletToComputeNodeId = new ConsistentHashRing<>(Hashing.murmur3_128(), new LongIdFunnel(), new LongIdFunnel(),
                     Collections.emptyList(), CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
         }
 
@@ -91,6 +94,10 @@ public class TabletComputeNodeMapper {
     private final Lock readLock = stateLock.readLock();
     private final Lock writeLock = stateLock.writeLock();
 
+    // Tracking usage since the instantiation of this Mapper.
+    private final ConcurrentMap<Long, AtomicLong> tabletMappingCount = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, AtomicLong> computeNodeReturnCount = new ConcurrentHashMap<>();
+
     public TabletComputeNodeMapper() {
         resourceIsolationGroupToTabletMapping = new HashMap<>();
     }
@@ -98,6 +105,8 @@ public class TabletComputeNodeMapper {
     @TestOnly
     public void clear() {
         resourceIsolationGroupToTabletMapping.clear();
+        tabletMappingCount.clear();
+        computeNodeReturnCount.clear();
     }
 
     public int numResourceIsolationGroups() {
@@ -112,18 +121,18 @@ public class TabletComputeNodeMapper {
         return numGroups > 1 || !resourceIsolationGroupToTabletMapping.containsKey(DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
     }
 
-    private String remapResourceIsolationGroupIfNull(String resourceIsolationGroup) {
+    private String getResourceIsolationGroupName(String resourceIsolationGroup) {
         return resourceIsolationGroup == null ? DEFAULT_RESOURCE_ISOLATION_GROUP_ID : resourceIsolationGroup;
     }
 
-    public String DebugString() {
+    public String debugString() {
         return resourceIsolationGroupToTabletMapping.entrySet().stream()
-                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue()))
-                .collect(Collectors.joining("\n"));
+                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue())).collect(Collectors.joining("\n"));
     }
 
     public void addComputeNode(Long computeNodeId, String resourceIsolationGroup) {
-        resourceIsolationGroup = remapResourceIsolationGroupIfNull(resourceIsolationGroup);
+        resourceIsolationGroup = getResourceIsolationGroupName(resourceIsolationGroup);
+        LOG.info("Adding the cn {} to resource isolation group {}", computeNodeId, resourceIsolationGroup);
         writeLock.lock();
         try {
             addComputeNodeUnsynchronized(computeNodeId, resourceIsolationGroup);
@@ -146,7 +155,8 @@ public class TabletComputeNodeMapper {
 
     // This will succeed even if the resource isolation group is not being tracked.
     public void removeComputeNode(Long computeNodeId, String resourceIsolationGroup) {
-        resourceIsolationGroup = remapResourceIsolationGroupIfNull(resourceIsolationGroup);
+        resourceIsolationGroup = getResourceIsolationGroupName(resourceIsolationGroup);
+        LOG.info("Removing the cn {} from resource isolation group {}", computeNodeId, resourceIsolationGroup);
         writeLock.lock();
         try {
             removeComputeNodeUnsynchronized(computeNodeId, resourceIsolationGroup);
@@ -166,13 +176,17 @@ public class TabletComputeNodeMapper {
         }
     }
 
-    public void modifyComputeNode(Long computeNodeId,
-                                  String oldResourceIsolationGroup, String newResourceIsolationGroup) {
-        oldResourceIsolationGroup = remapResourceIsolationGroupIfNull(oldResourceIsolationGroup);
-        newResourceIsolationGroup = remapResourceIsolationGroupIfNull(newResourceIsolationGroup);
-        if (oldResourceIsolationGroup.equals(newResourceIsolationGroup)) {
-            return;
-        }
+    public void modifyComputeNode(Long computeNodeId, String oldResourceIsolationGroup, String newResourceIsolationGroup) {
+        oldResourceIsolationGroup = getResourceIsolationGroupName(oldResourceIsolationGroup);
+        newResourceIsolationGroup = getResourceIsolationGroupName(newResourceIsolationGroup);
+        LOG.info("Modifying the resource isolation group for cn {} from {} to {}", computeNodeId, oldResourceIsolationGroup,
+                newResourceIsolationGroup);
+        // We run the following even if oldResourceIsolationGroup.equals(newResourceIsolationGroup)
+        // because we want to cleanly handle edge cases where the compute node hasn't already been
+        // added to the TabletComputeNode mapper. This can happen in at least one situation, which
+        // is when the cluster is first upgraded to include resource isolation groups.
+        // Because the host ips match during a CN restart, upstream code which adds the ComputeNodes
+        // will not execute and therefore we won't call this.addComputeNode.
         writeLock.lock();
         try {
             removeComputeNodeUnsynchronized(computeNodeId, oldResourceIsolationGroup);
@@ -182,24 +196,68 @@ public class TabletComputeNodeMapper {
         }
     }
 
-    public List<Long> computeNodesForTablet(Long tabletId) {
-        return computeNodesForTablet(tabletId, DEFAULT_NUM_REPLICAS);
+    public List<Long> backupComputeNodesForTablet(Long tabletId, Long cnToExclude, int count) {
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
+        return backupComputeNodesForTablet(tabletId, cnToExclude, count, thisResourceIsolationGroup);
     }
 
-    public List<Long> computeNodesForTablet(Long tabletId, int count) {
+    public List<Long> backupComputeNodesForTablet(Long tabletId, Long cnToExclude, int count, String resourceIsolationGroup) {
         readLock.lock();
         try {
-            String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().
-                    getResourceIsolationGroup();
-            thisResourceIsolationGroup = remapResourceIsolationGroupIfNull(thisResourceIsolationGroup);
-            if (!this.resourceIsolationGroupToTabletMapping.containsKey(thisResourceIsolationGroup)) {
-                return null;
+            if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
+                LOG.warn("Requesting node for resource isolation group {}, to which there is not a known CN assigned.",
+                        resourceIsolationGroup);
+                return Collections.emptyList();
             }
-            TabletMap m = this.resourceIsolationGroupToTabletMapping.get(thisResourceIsolationGroup);
-            return m.tabletToComputeNodeId.get(tabletId, count);
+            TabletMap m = this.resourceIsolationGroupToTabletMapping.get(resourceIsolationGroup);
+            List<Long> computeNodes =
+                    m.tabletToComputeNodeId.get(tabletId, count + 1).stream().filter(cnId -> !cnId.equals(cnToExclude))
+                            .limit(count).collect(Collectors.toList());
+            if (computeNodes.size() < count) {
+                LOG.warn("Requesting more CN from resource isolation group {} than are available: available={}, requesting={}",
+                        resourceIsolationGroup, computeNodes.size(), count);
+
+            }
+            // Update tracking information
+            tabletMappingCount.computeIfAbsent(tabletId, k -> new AtomicLong()).incrementAndGet();
+            computeNodes.forEach(
+                    nodeId -> computeNodeReturnCount.computeIfAbsent(nodeId, k -> new AtomicLong()).incrementAndGet());
+            return computeNodes;
         } finally {
             readLock.unlock();
         }
+    }
+
+    // Number of times that this mapper has returned the given compute node as the return value for `backupComputeNodesForTablet`.
+    public Long getComputeNodeReturnCount(Long computeNodeId) {
+        return computeNodeReturnCount.getOrDefault(computeNodeId, new AtomicLong(0)).get();
+    }
+
+    // Returns the tablet mapped to the number of times which some caller has requested the appropriate CN.
+    // Only reports the number of times since this particular FE came up.
+    public ConcurrentMap<Long, AtomicLong> getTabletMappingCount() {
+        return tabletMappingCount;
+    }
+
+    // Key is compute node id. Value is number of distinct tablets for which this mapper instance will currently assign
+    // primary backup responsibility to the given CN.
+    // Note, this is a kind of best-effort count -- it is possible that the given CN acts as primary backup for many more
+    // tablets, but we simply haven't use the CN as backup for some of those tablets since this mapper has been instantiated
+    // (when this FE came up).
+    // Note: this function is kind of expensive (~1 ms for largish databases), don't call it often.
+    public Map<Long, Long> computeNodeToActingAsBackupForTabletCount() throws IllegalStateException {
+        long startTime = System.currentTimeMillis();
+        HashMap<Long, Long> computeNodeToOwnedTabletCount = new HashMap<>();
+        for (Long tabletId : tabletMappingCount.keySet()) {
+            List<Long> primaryCnForTablet = backupComputeNodesForTablet(tabletId, -1L, 1);
+            if (primaryCnForTablet.isEmpty()) {
+                throw new IllegalStateException("No owner for tablet, seemingly no cn for resource isolation group");
+            }
+            // Instantiate to 1 or increment.
+            computeNodeToOwnedTabletCount.merge(primaryCnForTablet.get(0), 1L, Long::sum);
+        }
+        LOG.info("millis passed calculating computeNodeToOwnedTabletCount: {}", System.currentTimeMillis() - startTime);
+        return computeNodeToOwnedTabletCount;
     }
 
     class LongIdFunnel implements Funnel<Long> {
