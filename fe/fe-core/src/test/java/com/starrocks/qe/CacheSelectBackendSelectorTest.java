@@ -14,27 +14,36 @@
 package com.starrocks.qe;
 
 import com.google.api.client.util.Lists;
+import com.staros.client.StarClientException;
+import com.staros.proto.ShardInfo;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
+import com.starrocks.system.WorkerGroupManager;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -46,6 +55,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -56,6 +66,7 @@ import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.junit.Assert.assertThrows;
 
 public class CacheSelectBackendSelectorTest {
+    private GlobalStateMgr globalStateMgr;
 
     @Before
     public void setUp() {
@@ -129,7 +140,9 @@ public class CacheSelectBackendSelectorTest {
 
     @Test
     public void testSelectBackendKnownTabletIdAndInternalMapping(@Mocked SystemInfoService systemInfoService,
-                                                                 @Mocked WorkerProvider callerWorkerProvider) {
+                                                                 @Mocked WorkerProvider callerWorkerProvider,
+                                                                 @Mocked WorkerGroupManager workerGroupManager,
+                                                                 @Mocked StarOSAgent starOsAgent) throws StarClientException {
         ScanNode scanNode = newOlapScanNode(1, 1);
         Map<Long, ComputeNode> nodes = new HashMap<>();
         List<Long> nodeIds = new ArrayList<>();
@@ -156,8 +169,8 @@ public class CacheSelectBackendSelectorTest {
         // Internal scans do have tabletIds and should therefore use the internalTabletMapper.
         List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
         // Confirm our assumption that the TScanRangeLocations we used in the test has the 0th CN assigned.
-        long givenTabletId = 0L;
-        Assert.assertEquals(givenTabletId, locations.get(0).scan_range.internal_scan_range.tablet_id);
+        Long givenTabletId = 0L;
+        Assert.assertEquals(givenTabletId.longValue(), locations.get(0).scan_range.internal_scan_range.tablet_id);
         CacheSelectComputeNodeSelectionProperties props =
                 new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3, 0);
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
@@ -165,17 +178,44 @@ public class CacheSelectBackendSelectorTest {
                 new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
                         DEFAULT_WAREHOUSE_ID);
 
-        List<Long> expectedSelections = Stream.concat(
-                tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired, "group1", 0)
-                        .stream(),
-                tabletComputeNodeMapper.computeNodesForTablet(givenTabletId, props.numReplicasDesired, "group3", 0)
-                        .stream()).collect(Collectors.toList());
+        Long starOsPreferredCnId = -1L;
+        ShardInfo mockedShardInfo = ShardInfo.newBuilder().build();
+        List<Long> expectedSelections = new ArrayList<>();
+        expectedSelections.add(starOsPreferredCnId);
+        expectedSelections.addAll(
+                tabletComputeNodeMapper.backupComputeNodesForTablet(givenTabletId, starOsPreferredCnId, props.numReplicasDesired,
+                        "group1"));
+        expectedSelections.add(starOsPreferredCnId);
+        expectedSelections.addAll(
+                tabletComputeNodeMapper.backupComputeNodesForTablet(givenTabletId, starOsPreferredCnId, props.numReplicasDesired,
+                        "group3"));
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
 
+                globalStateMgr.getStarOSAgent();
+                result = starOsAgent;
+            }
+        };
         new Expectations() {
             {
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                times = 2; // Once per resource isolation group
-                result = true;
+                workerGroupManager.getWorkerGroup("group1");
+                result = 1L;
+
+                workerGroupManager.getWorkerGroup("group3");
+                result = 3L;
+
+                starOsAgent.getShardInfo(givenTabletId, 1L);
+                result = mockedShardInfo;
+
+                starOsAgent.getShardInfo(givenTabletId, 3L);
+                result = mockedShardInfo;
+
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, true);
+                result = starOsPreferredCnId;
 
                 systemInfoService.internalTabletMapper();
                 result = tabletComputeNodeMapper;
@@ -193,87 +233,13 @@ public class CacheSelectBackendSelectorTest {
         try {
             selector.computeScanRangeAssignment();
         } catch (UserException e) {
+            System.out.printf("Error: %s%n", e);
             throw new RuntimeException(e);
         } finally {
             int givenScanNodeId = scanNode.getId().asInt();
             TScanRangeParams givenRangeParams = new TScanRangeParams(locations.get(0).scan_range);
             FragmentScanRangeAssignment expectedAssignment = new FragmentScanRangeAssignment();
             expectedSelections.forEach(id -> expectedAssignment.put(id, givenScanNodeId, givenRangeParams));
-            Assert.assertEquals(expectedAssignment, assignment);
-        }
-    }
-
-    @Test
-    public void testSelectBackendKnownTabletIdNoInternalTabletMapper(@Mocked WarehouseManager warehouseManager,
-                                                                     @Mocked SystemInfoService systemInfoService,
-                                                                     @Mocked WorkerProvider callerWorkerProvider) {
-        ScanNode scanNode = newOlapScanNode(1, 1);
-        Map<Long, ComputeNode> nodes = new HashMap<>();
-        List<Long> nodeIds = new ArrayList<>();
-        int totalCnCount = 100;
-        for (long computeNodeId = 0; computeNodeId < totalCnCount; computeNodeId++) {
-            ComputeNode cn = new ComputeNode(computeNodeId, "whatever", 100);
-            cn.setAlive(true);
-            if (computeNodeId % 3 == 0) {
-                cn.setResourceIsolationGroup("group1");
-            } else if (computeNodeId % 3 == 1) {
-                cn.setResourceIsolationGroup("group2");
-            } else {
-                cn.setResourceIsolationGroup("group3");
-            }
-            nodes.put(computeNodeId, cn);
-            nodeIds.add(computeNodeId);
-            long finalComputeNodeId = computeNodeId;
-            new Expectations() {
-                {
-                    systemInfoService.getBackendOrComputeNode(finalComputeNodeId);
-                    result = cn;
-                }
-            };
-        }
-
-        // Note the internal scan is true, meaning we will know the tablet
-        List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
-        // Confirm our assumption that the TScanRangeLocations we used in the test has the 0th CN assigned.
-        Assert.assertEquals(0, locations.get(0).locations.get(0).backend_id);
-
-        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-        CacheSelectComputeNodeSelectionProperties props =
-                new CacheSelectComputeNodeSelectionProperties(List.of("group1", "group3"), 3, 0);
-        CacheSelectBackendSelector selector =
-                new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
-                        DEFAULT_WAREHOUSE_ID);
-        new Expectations() {
-            {
-                warehouseManager.getAllComputeNodeIds(DEFAULT_WAREHOUSE_ID);
-                result = nodeIds;
-
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                times = 2; // Once per resource isolation group
-                result = false;
-
-                // For group1, CNs 0, 3, 6 will be assigned
-                // For group3, CNs 2, 5, 8 should be assigned.
-                for (Long cnId : Set.of(0L, 3L, 6L, 2L, 5L, 8L)) {
-                    callerWorkerProvider.selectWorkerUnchecked(cnId);
-                    minTimes = 1;
-                }
-
-                callerWorkerProvider.setAllowGetAnyWorker(true);
-                times = 1;
-            }
-        };
-
-        try {
-            selector.computeScanRangeAssignment();
-        } catch (UserException e) {
-            throw new RuntimeException(e);
-        } finally {
-            int givenScanNodeId = scanNode.getId().asInt();
-            TScanRangeParams givenRangeParams = new TScanRangeParams(locations.get(0).scan_range);
-            FragmentScanRangeAssignment expectedAssignment = new FragmentScanRangeAssignment();
-            Stream.of(0L, 3L, 6L, 2L, 5L, 8L)
-                    .forEach(id -> expectedAssignment.put(id, givenScanNodeId, givenRangeParams));
             Assert.assertEquals(expectedAssignment, assignment);
         }
     }
@@ -343,8 +309,7 @@ public class CacheSelectBackendSelectorTest {
             int givenScanNodeId = scanNode.getId().asInt();
             TScanRangeParams givenRangeParams = new TScanRangeParams(locations.get(0).scan_range);
             FragmentScanRangeAssignment expectedAssignment = new FragmentScanRangeAssignment();
-            Stream.of(0L, 3L, 6L, 2L, 5L, 8L)
-                    .forEach(id -> expectedAssignment.put(id, givenScanNodeId, givenRangeParams));
+            Stream.of(0L, 3L, 6L, 2L, 5L, 8L).forEach(id -> expectedAssignment.put(id, givenScanNodeId, givenRangeParams));
             Assert.assertEquals(expectedAssignment, assignment);
         }
     }
@@ -414,7 +379,9 @@ public class CacheSelectBackendSelectorTest {
 
     @Test
     public void testBackupReplicasKnownTabletIdAndInternalMapping(@Mocked SystemInfoService systemInfoService,
-                                                                  @Mocked WorkerProvider callerWorkerProvider) {
+                                                                  @Mocked WorkerProvider callerWorkerProvider,
+                                                                  @Mocked WorkerGroupManager workerGroupManager,
+                                                                  @Mocked StarOSAgent starOsAgent) throws StarClientException {
         ScanNode scanNode = newOlapScanNode(1, 1);
         TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
         Map<Long, ComputeNode> nodes = LongStream.range(0L, 4L).mapToObj(id -> {
@@ -435,14 +402,31 @@ public class CacheSelectBackendSelectorTest {
                 new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
                         DEFAULT_WAREHOUSE_ID);
 
-        List<Long> expectedSelections = tabletComputeNodeMapper.computeNodesForTablet(givenTabletId,
-                props.numBackupReplicasDesired, "somegroup", 1);
+        Long starOsPreferredCnId = -1L;
+        ShardInfo mockedShardInfo = ShardInfo.newBuilder().build();
+        List<Long> expectedSelections = tabletComputeNodeMapper.backupComputeNodesForTablet(givenTabletId, starOsPreferredCnId,
+                props.numBackupReplicasDesired, "somegroup");
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
 
+                globalStateMgr.getStarOSAgent();
+                result = starOsAgent;
+            }
+        };
         new Expectations() {
             {
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                times = 1; // Once per resource isolation group
-                result = true;
+                workerGroupManager.getWorkerGroup("somegroup");
+                result = 1L;
+
+                starOsAgent.getShardInfo(givenTabletId, 1L);
+                result = mockedShardInfo;
+
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, true);
+                result = starOsPreferredCnId;
 
                 systemInfoService.internalTabletMapper();
                 result = tabletComputeNodeMapper;
@@ -467,6 +451,111 @@ public class CacheSelectBackendSelectorTest {
             FragmentScanRangeAssignment expectedAssignment = new FragmentScanRangeAssignment();
             expectedSelections.forEach(id -> expectedAssignment.put(id, givenScanNodeId, givenRangeParams));
             Assert.assertEquals(expectedAssignment, assignment);
+        }
+    }
+
+    // Important test: checks that CacheSelectBackendSelector places second replica in same place that the
+    // DefaultSharedDataWorkerProvider would choose as a backup for the given tablet.
+    @Test
+    public void testChosenCnMatchDefaultBackup(@Mocked SystemInfoService systemInfoService,
+                                               @Mocked WorkerProvider callerWorkerProvider,
+                                               @Mocked WorkerGroupManager workerGroupManager, @Mocked StarOSAgent starOsAgent)
+            throws StarClientException {
+        ScanNode scanNode = newOlapScanNode(1, 1);
+        TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
+        Map<Long, ComputeNode> nodes = LongStream.range(1L, 100L).mapToObj(id -> {
+            ComputeNode cn = new ComputeNode(id, "somehost", 100);
+            cn.setAlive(true);
+            cn.setResourceIsolationGroup("somegroup");
+            tabletComputeNodeMapper.addComputeNode(cn.getId(), cn.getResourceIsolationGroup());
+            return cn;
+        }).collect(Collectors.toMap(ComputeNode::getId, Function.identity()));
+
+        List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
+        long givenTabletId = 1L;
+        locations.get(0).scan_range.internal_scan_range.tablet_id = givenTabletId;
+        Assert.assertEquals(givenTabletId, locations.get(0).scan_range.internal_scan_range.tablet_id);
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(List.of("somegroup"), 0, 1);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        CacheSelectBackendSelector selector =
+                new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
+                        DEFAULT_WAREHOUSE_ID);
+
+        Long starOsPreferredCnId = tabletComputeNodeMapper.backupComputeNodesForTablet(givenTabletId, -1L, 1, "somegroup").get(0);
+        ShardInfo mockedShardInfo = ShardInfo.newBuilder().build();
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getStarOSAgent();
+                result = starOsAgent;
+            }
+        };
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        new Expectations(warehouseManager) {
+            {
+                warehouseManager.getAllComputeNodeIds(anyLong);
+                result = Lists.newArrayList(nodes.keySet());
+                minTimes = 0;
+            }
+        };
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        Frontend thisFe = new Frontend();
+        thisFe.setResourceIsolationGroup("somegroup");
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                ComputeNode node = nodes.get(nodeId);
+                return node;
+            }
+        };
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
+                minTimes = 0;
+
+                nodeMgr.getClusterInfo();
+                result = systemInfoService;
+            }
+        };
+        new Expectations() {
+            {
+                workerGroupManager.getWorkerGroup("somegroup");
+                result = 1L;
+
+                starOsAgent.getShardInfo(givenTabletId, 1L);
+                result = mockedShardInfo;
+
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, true);
+                result = starOsPreferredCnId;
+
+                systemInfoService.internalTabletMapper();
+                result = tabletComputeNodeMapper;
+            }
+        };
+
+        try {
+            selector.computeScanRangeAssignment();
+        } catch (UserException e) {
+            throw new RuntimeException(e);
+        } finally {
+            Assert.assertEquals(1, assignment.size());
+            long cacheSelectCnSelectedAsBackup = assignment.keySet().iterator().next();
+            Assert.assertNotEquals(starOsPreferredCnId.longValue(), cacheSelectCnSelectedAsBackup);
+            DefaultSharedDataWorkerProvider.Factory factory = new DefaultSharedDataWorkerProvider.Factory();
+            DefaultSharedDataWorkerProvider provider =
+                    factory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, -1,
+                            SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+            Assert.assertEquals(provider.selectBackupWorker(starOsPreferredCnId, Optional.of(givenTabletId)),
+                    cacheSelectCnSelectedAsBackup);
         }
     }
 
@@ -584,15 +673,16 @@ public class CacheSelectBackendSelectorTest {
         };
 
         UserException exception = assertThrows(UserException.class, selector::computeScanRangeAssignment);
-        Assert.assertEquals(
-                "No CN nodes available for the specified resource group. resourceGroup: unknowngroup",
+        Assert.assertEquals("No CN nodes available for the specified resource group. resourceGroup: unknowngroup",
                 exception.getMessage());
 
     }
 
     @Test
     public void testNoResourceIsolationGroupExceptionInternalMapping(@Mocked SystemInfoService systemInfoService,
-                                                                     @Mocked WorkerProvider callerWorkerProvider) {
+                                                                     @Mocked WorkerProvider callerWorkerProvider,
+                                                                     @Mocked WorkerGroupManager workerGroupManager,
+                                                                     @Mocked StarOSAgent starOsAgent) throws StarClientException {
         ScanNode scanNode = newOlapScanNode(1, 1);
         TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
         Map<Long, ComputeNode> nodes = LongStream.range(0L, 3L).mapToObj(id -> {
@@ -613,11 +703,29 @@ public class CacheSelectBackendSelectorTest {
                 new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
                         DEFAULT_WAREHOUSE_ID);
 
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getStarOSAgent();
+                result = starOsAgent;
+            }
+        };
+        Long starOsPreferredCnId = -1L;
+        ShardInfo mockedShardInfo = ShardInfo.newBuilder().build();
         new Expectations() {
             {
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                times = 1; // Once per resource isolation group
-                result = true;
+                workerGroupManager.getWorkerGroup("unknowngroup");
+                result = 1L;
+
+                starOsAgent.getShardInfo(givenTabletId, 1L);
+                result = mockedShardInfo;
+
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, true);
+                result = starOsPreferredCnId;
 
                 systemInfoService.internalTabletMapper();
                 result = tabletComputeNodeMapper;
@@ -626,8 +734,7 @@ public class CacheSelectBackendSelectorTest {
 
         UserException exception = assertThrows(UserException.class, selector::computeScanRangeAssignment);
         Assert.assertEquals(
-                "No CN nodes available for the specified resource group." +
-                        " resourceGroup: unknowngroup, tabletId: 0",
+                "No CN nodes available for the specified resource group." + " resourceGroup: unknowngroup, tabletId: 0",
                 exception.getMessage());
 
     }
