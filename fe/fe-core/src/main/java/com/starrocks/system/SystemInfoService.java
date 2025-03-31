@@ -469,10 +469,27 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
 
+        // drop from internal tablet mapper
+        tabletComputeNodeMapper.removeComputeNode(dropComputeNode.getId(), dropComputeNode.getResourceIsolationGroup());
+
+        if (!existsSomeCnInResourceIsolationGroup(dropComputeNode.getResourceIsolationGroup())) {
+            GlobalStateMgr.getCurrentState().getWorkerGroupMgr().dropResourceIsolationGroup(
+                    dropComputeNode.getResourceIsolationGroup());
+        }
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
         LOG.info("finished to drop {}", dropComputeNode);
+    }
+
+    private boolean existsSomeCnInResourceIsolationGroup(String resourceIsolationGroup) {
+        for (ComputeNode cn : idToComputeNodeRef.values()) {
+            if (ResourceIsolationGroupUtils.resourceIsolationGroupMatches(resourceIsolationGroup,
+                    cn.getResourceIsolationGroup())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -1153,6 +1170,14 @@ public class SystemInfoService implements GsonPostProcessable {
             }
             String workerAddr = NetUtils.getHostPortInAccessibleFormat(cn.getHost(), starletPort);
             GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
+        }
+
+        // remove from internal mapping from tablet to compute node
+        tabletComputeNodeMapper.removeComputeNode(cn.getId(), cn.getResourceIsolationGroup());
+
+        if (!existsSomeCnInResourceIsolationGroup(cn.getResourceIsolationGroup())) {
+            GlobalStateMgr.getCurrentState().getWorkerGroupMgr().dropResourceIsolationGroup(
+                    cn.getResourceIsolationGroup());
         }
     }
 

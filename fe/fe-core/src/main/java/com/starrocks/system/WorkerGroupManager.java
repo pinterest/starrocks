@@ -43,6 +43,15 @@ public class WorkerGroupManager implements Writable {
     public WorkerGroupManager() {
     }
 
+    public void dropResourceIsolationGroup(String resourceIsolationGroup) {
+        writeLock.lock();
+        try {
+            resourceIsolationGroupToWorkerGroupId.remove(resourceIsolationGroup);
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
     public Optional<Long> getWorkerGroup(String resourceIsolationGroup) {
         if (ResourceIsolationGroupUtils.resourceIsolationGroupMatches(resourceIsolationGroup,
                 ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID)) {
