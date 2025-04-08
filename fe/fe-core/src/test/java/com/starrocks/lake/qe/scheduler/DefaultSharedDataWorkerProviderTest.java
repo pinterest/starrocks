@@ -483,11 +483,6 @@ public class DefaultSharedDataWorkerProviderTest {
             }
 
             @Mock
-            public boolean shouldUseInternalTabletToCnMapper() {
-                return true;
-            }
-
-            @Mock
             public TabletComputeNodeMapper internalTabletMapper() {
                 return tabletComputeNodeMapper;
             }
@@ -502,31 +497,18 @@ public class DefaultSharedDataWorkerProviderTest {
             }
         };
 
-
         long cnToBlock = 1;
-        Set<Long> tabletsToTryGetBackup = new HashSet<>();
-        for (long tabletId = 0; tabletId < 1000; tabletId++) {
-            List<Long> cnsInOrder = tabletComputeNodeMapper.computeNodesForTablet(tabletId, totalNumComputeNodes);
-            for (long cnId : cnsInOrder) {
-                Assert.assertEquals("FE in group2 should only return these cn", 1, cnId % 3);
-            }
-            if (cnsInOrder.get(0) == cnToBlock) {
-                tabletsToTryGetBackup.add(tabletId);
-            }
-        }
         // Block some CN and check that the right backup is chosen for each tablet
         SimpleScheduler.getHostBlacklist().add(cnToBlock);
-        DefaultSharedDataWorkerProvider provider = factory.captureAvailableWorkers(
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
-                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertFalse(tabletsToTryGetBackup.isEmpty()); // make sure we're testing something below
+        DefaultSharedDataWorkerProvider provider =
+                factory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, -1,
+                        ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Set<Long> chosenBackups = new HashSet<>();
-        for (long tabletId : tabletsToTryGetBackup) {
-            List<Long> cnsInOrder = tabletComputeNodeMapper.computeNodesForTablet(tabletId, 2);
-            Assert.assertEquals(cnToBlock, (long) cnsInOrder.get(0)); // check consistency
-            Assert.assertEquals((long) cnsInOrder.get(1), provider.selectBackupWorker(cnToBlock, Optional.of(tabletId)));
-            chosenBackups.add(cnsInOrder.get(1));
+        for (long tabletId = 1L; tabletId < 1000; tabletId++) {
+            List<Long> cnsInOrder = tabletComputeNodeMapper.backupComputeNodesForTablet(tabletId, cnToBlock, 2);
+            Assert.assertEquals((long) cnsInOrder.get(0), provider.selectBackupWorker(cnToBlock, Optional.of(tabletId)));
+            Assert.assertNotEquals(cnToBlock, (long) cnsInOrder.get(0));
+            chosenBackups.add(cnsInOrder.get(0));
         }
         // check that we're not using the same backup for every tablet
         Assert.assertTrue(chosenBackups.size() > 1);

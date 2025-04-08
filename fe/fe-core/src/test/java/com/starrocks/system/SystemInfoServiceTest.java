@@ -462,10 +462,7 @@ public class SystemInfoServiceTest {
                 returns(1L, 2L, 3L);
             }
         };
-        service.addComputeNodes(List.of(Pair.create("host1", 1000),
-                                        Pair.create("host2", 1000),
-                                        Pair.create("host3", 1000)));
-        Assert.assertFalse(service.shouldUseInternalTabletToCnMapper());
+        service.addComputeNodes(List.of(Pair.create("host1", 1000), Pair.create("host2", 1000), Pair.create("host3", 1000)));
         List<ComputeNode> allComputeNodes = service.getComputeNodes();
         // Set all compute nodes as alive for sake of testing
         for (ComputeNode cn : allComputeNodes) {
@@ -480,7 +477,6 @@ public class SystemInfoServiceTest {
         properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:othergroup");
         ModifyComputeNodeClause clause = new ModifyComputeNodeClause("host3:1000", properties);
         service.modifyComputeNodeProperty(clause);
-        Assert.assertTrue(service.shouldUseInternalTabletToCnMapper());
         Assert.assertEquals(List.of(1L, 2L), service.getAvailableComputeNodeIds());
 
         // Reassign this FE and ensure it knows which compute node is available
@@ -488,7 +484,6 @@ public class SystemInfoServiceTest {
         Assert.assertEquals(List.of(3L), service.getAvailableComputeNodeIds());
 
         service.dropComputeNode("host3", 1000);
-        Assert.assertFalse(service.shouldUseInternalTabletToCnMapper());
     }
 
 }

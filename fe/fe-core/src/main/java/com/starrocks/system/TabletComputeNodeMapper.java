@@ -56,11 +56,10 @@ import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_
 
 /**
  * What:
- * Maps tablet to compute node(s) which are responsible for operations there-on.
+ * Maps tablet to backup compute node(s) which are responsible for operations there-on.
  * Why:
- * Flexible replacement for StarOS/StarMgr management of the same type of mapping.
- * Useful for when the system is using resource-isolation groups, in that case each
- * ComputeNode should belong to exactly one TabletComputeNodeMapper (not necessarily on the same Frontend).
+ * Enables deterministically distributing load to living CN in the case that some CN dies.
+ * This enables smart caching of multiple replicas of each tablet to improve failover behavior in the case of some CN death.
  * Notes on use:
  * Updated whenever there's an addition or removal of a compute node to the resource-isolation-group.
  * If using multiple replicas, consider the earlier-index CN for a given tablet to be more preferred
@@ -128,8 +127,7 @@ public class TabletComputeNodeMapper {
 
     public String debugString() {
         return resourceIsolationGroupToTabletMapping.entrySet().stream()
-                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue()))
-                .collect(Collectors.joining("\n"));
+                .map(entry -> String.format("%-15s : %s", entry.getKey(), entry.getValue())).collect(Collectors.joining("\n"));
     }
 
     public void addComputeNode(Long computeNodeId, String resourceIsolationGroup) {
@@ -198,27 +196,28 @@ public class TabletComputeNodeMapper {
         }
     }
 
-    public List<Long> computeNodesForTablet(Long tabletId) {
-        return computeNodesForTablet(tabletId, DEFAULT_NUM_REPLICAS);
-    }
-
-    public List<Long> computeNodesForTablet(Long tabletId, int count) {
+    public List<Long> backupComputeNodesForTablet(Long tabletId, Long cnToExclude, int count) {
         String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
-        return computeNodesForTablet(tabletId, count, thisResourceIsolationGroup, 0);
+        return backupComputeNodesForTablet(tabletId, cnToExclude, count, thisResourceIsolationGroup);
     }
 
-    public List<Long> computeNodesForTablet(Long tabletId, int count, String resourceIsolationGroup, int skipCount) {
+    public List<Long> backupComputeNodesForTablet(Long tabletId, Long cnToExclude, int count, String resourceIsolationGroup) {
         readLock.lock();
         try {
             if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
-                LOG.warn(String.format(
-                        "Requesting node for resource isolation group %s, to which there is not a known CN assigned.",
-                        resourceIsolationGroup));
+                LOG.warn("Requesting node for resource isolation group {}, to which there is not a known CN assigned.",
+                        resourceIsolationGroup);
                 return Collections.emptyList();
             }
             TabletMap m = this.resourceIsolationGroupToTabletMapping.get(resourceIsolationGroup);
-            List<Long> computeNodes = m.tabletToComputeNodeId.get(tabletId, count + skipCount).stream().skip(skipCount)
-                    .collect(Collectors.toList());
+            List<Long> computeNodes =
+                    m.tabletToComputeNodeId.get(tabletId, count + 1).stream().filter(cnId -> !cnId.equals(cnToExclude))
+                            .limit(count).collect(Collectors.toList());
+            if (computeNodes.size() < count) {
+                LOG.warn("Requesting more CN from resource isolation group {} than are available: available={}, requesting={}",
+                        resourceIsolationGroup, computeNodes.size(), count);
+
+            }
             // Update tracking information
             tabletMappingCount.computeIfAbsent(tabletId, k -> new AtomicLong()).incrementAndGet();
             computeNodes.forEach(
@@ -229,7 +228,7 @@ public class TabletComputeNodeMapper {
         }
     }
 
-    // Number of times that this mapper has returned the given compute node as the return value for `computeNodesForTablet`.
+    // Number of times that this mapper has returned the given compute node as the return value for `backupComputeNodesForTablet`.
     public Long getComputeNodeReturnCount(Long computeNodeId) {
         return computeNodeReturnCount.getOrDefault(computeNodeId, new AtomicLong(0)).get();
     }
@@ -240,16 +239,17 @@ public class TabletComputeNodeMapper {
         return tabletMappingCount;
     }
 
-    // Key is compute node id. Value is number of distinct tablets for which this mapper instance will currently assign primary
-    // ownership to the given CN.
-    // Note, this is a kind of best-effort count -- it is possible that the given CN "owns" many more tablets, but we simply
-    // haven't scanned some of those tablets since this mapper has been instantiated (when this FE came up).
+    // Key is compute node id. Value is number of distinct tablets for which this mapper instance will currently assign
+    // primary backup responsibility to the given CN.
+    // Note, this is a kind of best-effort count -- it is possible that the given CN acts as primary backup for many more
+    // tablets, but we simply haven't use the CN as backup for some of those tablets since this mapper has been instantiated
+    // (when this FE came up).
     // Note: this function is kind of expensive (~1 ms for largish databases), don't call it often.
-    public Map<Long, Long> computeNodeToOwnedTabletCount() throws IllegalStateException {
+    public Map<Long, Long> computeNodeToActingAsBackupForTabletCount() throws IllegalStateException {
         long startTime = System.currentTimeMillis();
         HashMap<Long, Long> computeNodeToOwnedTabletCount = new HashMap<>();
         for (Long tabletId : tabletMappingCount.keySet()) {
-            List<Long> primaryCnForTablet = computeNodesForTablet(tabletId, 1);
+            List<Long> primaryCnForTablet = backupComputeNodesForTablet(tabletId, -1L, 1);
             if (primaryCnForTablet.isEmpty()) {
                 throw new IllegalStateException("No owner for tablet, seemingly no cn for resource isolation group");
             }

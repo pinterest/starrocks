@@ -132,12 +132,6 @@ public class SystemInfoService implements GsonPostProcessable {
         tabletComputeNodeMapper = new TabletComputeNodeMapper();
     }
 
-    public boolean shouldUseInternalTabletToCnMapper() {
-        // We prefer to use the TabletComputeNodeMapper rather than delegating to StarOS/StarMgr for tablet->CN mappings
-        // if and only if we're using resource isolation groups.
-        return tabletComputeNodeMapper.trackingNonDefaultResourceIsolationGroup();
-    }
-
     public TabletComputeNodeMapper internalTabletMapper() {
         return tabletComputeNodeMapper;
     }
@@ -341,14 +335,31 @@ public class SystemInfoService implements GsonPostProcessable {
                 if (!entry.getValue().isEmpty()) {
                     newResourceIsolationGroup = getResourceIsolationGroupFromProperties(properties);
                 }
-                // Step 1: update in-memory representation of compute node
+                // Step 1: Communicate with staros that we're dropping the CN from the old worker group.
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(), computeNode.getStarletPort());
+                LOG.info("Trying to modify compute node {}: cnid: {}, old rig: {}, new rig: {}, original wgid: {}, ", workerAddr,
+                        computeNode.getId(), oldResourceIsolationGroup, newResourceIsolationGroup,
+                        computeNode.getWorkerGroupId());
+                Long originalWorkerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+                if (computeNode.getStarletPort() != 0) {
+                    originalWorkerGroupId = computeNode.getWorkerGroupId();
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, originalWorkerGroupId);
+                }
+                // Step 2: update in-memory representation of compute node.
                 computeNode.setResourceIsolationGroup(newResourceIsolationGroup);
-                // Step 2: update internal table mapper to reflect the new membership of compute node
-                tabletComputeNodeMapper.modifyComputeNode(computeNode.getId(),
-                        oldResourceIsolationGroup, newResourceIsolationGroup);
-                String opMessage = String.format("%s:%d's group has been modified from %s to %s",
-                        computeNode.getHost(), computeNode.getHeartbeatPort(),
-                        oldResourceIsolationGroup, newResourceIsolationGroup);
+                // Step 3: update internal table mapper to reflect the new membership of compute node
+                tabletComputeNodeMapper.modifyComputeNode(computeNode.getId(), oldResourceIsolationGroup,
+                        newResourceIsolationGroup);
+                // Step 4: use WorkerGroupManager to get associated worker group, set it in the compute node state.
+                Long workerGroupId =
+                        GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getOrCreateWorkerGroup(newResourceIsolationGroup);
+                computeNode.setWorkerGroupId(workerGroupId);
+                // Step 5 (in background) StarOs will be updated of new worker group information in heartbeat mgr
+                String opMessage = String.format(
+                        "%s:%d's group has been modified from %s to %s, and worker group has been changed from %d to %d",
+                        computeNode.getHost(), computeNode.getHeartbeatPort(), oldResourceIsolationGroup,
+                        newResourceIsolationGroup, originalWorkerGroupId, workerGroupId);
+                LOG.info(opMessage);
                 messageResult.add(Collections.singletonList(opMessage));
             } else {
                 throw new UnsupportedOperationException("unsupported property: " + entry.getKey());
@@ -456,10 +467,25 @@ public class SystemInfoService implements GsonPostProcessable {
         // drop from internal tablet mapper
         tabletComputeNodeMapper.removeComputeNode(dropComputeNode.getId(), dropComputeNode.getResourceIsolationGroup());
 
+        if (!existsSomeCnInResourceIsolationGroup(dropComputeNode.getResourceIsolationGroup())) {
+            GlobalStateMgr.getCurrentState().getWorkerGroupMgr().dropResourceIsolationGroup(
+                    dropComputeNode.getResourceIsolationGroup());
+        }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
         LOG.info("finished to drop {}", dropComputeNode);
+    }
+
+    private boolean existsSomeCnInResourceIsolationGroup(String resourceIsolationGroup) {
+        for (ComputeNode cn : idToComputeNodeRef.values()) {
+            if (ResourceIsolationGroupUtils.resourceIsolationGroupMatches(resourceIsolationGroup,
+                    cn.getResourceIsolationGroup())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -1159,6 +1185,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // remove from internal mapping from tablet to compute node
         tabletComputeNodeMapper.removeComputeNode(cn.getId(), cn.getResourceIsolationGroup());
+
+        if (!existsSomeCnInResourceIsolationGroup(cn.getResourceIsolationGroup())) {
+            GlobalStateMgr.getCurrentState().getWorkerGroupMgr().dropResourceIsolationGroup(
+                    cn.getResourceIsolationGroup());
+        }
     }
 
     public void replayDropBackend(Backend backend) {
@@ -1237,6 +1268,7 @@ public class SystemInfoService implements GsonPostProcessable {
         updateCommonInMemoryState(persistentState, inMemoryState);
         // The difference between this function and updateInMemoryState is that we set group and not location nor disks
         inMemoryState.setResourceIsolationGroup(persistentState.getResourceIsolationGroup());
+        inMemoryState.setWorkerGroupId(persistentState.getWorkerGroupId());
     }
 
     public long getClusterAvailableCapacityB() {

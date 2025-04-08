@@ -34,7 +34,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -60,12 +59,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("WorkerId")
                 .add("WarehouseName")
                 .add("TabletNum")
-                // This field is meant to help us understand how often we're using this CN to scan any tablet. It's meant to help
-                // us detect if some tablet which this CN currently "owns" is very hot. It's about relative magnitude with a given
-                // FE. If some CN have very high values for this field and other CN have very low values, we know the
-                // TabletComputeNodeMapper is not doing a good job distributing load across CN.
-                .add("OwnedTabletScanCount")
-                .add("ResourceIsolationGroup");
+                .add("ResourceIsolationGroup")
+                .add("WorkerGroupId");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
@@ -110,14 +105,6 @@ public class ComputeNodeProcDir implements ProcDirInterface {
         if (computeNodeIds == null) {
             return computeNodesInfos;
         }
-
-        boolean usingInternalMapper = clusterInfoService.shouldUseInternalTabletToCnMapper();
-        Map<Long, Long> computeNodeToOwnedTabletCount = null;
-        if (usingInternalMapper) {
-            // Note that this will only return information about tablets which this FE has needed to scan.
-            computeNodeToOwnedTabletCount = clusterInfoService.internalTabletMapper().computeNodeToOwnedTabletCount();
-        }
-
 
         long start = System.currentTimeMillis();
         Stopwatch watch = Stopwatch.createUnstarted();
@@ -190,22 +177,12 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(computeNode.getWarehouseId());
                 computeNodeInfo.add(wh.getName());
 
-                // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr
-                if (usingInternalMapper) {
-                    Long tabletNum = computeNodeToOwnedTabletCount.getOrDefault(computeNodeId, 0L);
-                    computeNodeInfo.add(tabletNum);
-
-                    Long tabletsScannedCount = clusterInfoService.internalTabletMapper().getComputeNodeReturnCount(computeNodeId);
-                    computeNodeInfo.add(tabletsScannedCount);
-                } else {
-                    String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
-                    long tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
-                    computeNodeInfo.add(tabletNum);
-                    // We haven't tracked the "used for tablet scan count" in this case
-                    computeNodeInfo.add("unknown");
-                }
+                String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
+                long tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
+                computeNodeInfo.add(tabletNum);
 
                 computeNodeInfo.add(computeNode.getResourceIsolationGroup());
+                computeNodeInfo.add(computeNode.getWorkerGroupId());
             }
 
             comparableComputeNodeInfos.add(computeNodeInfo);

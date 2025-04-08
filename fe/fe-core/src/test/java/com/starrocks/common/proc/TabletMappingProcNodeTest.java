@@ -18,6 +18,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
 import mockit.Expectations;
@@ -41,9 +43,14 @@ public class TabletMappingProcNodeTest {
     private SystemInfoService systemInfoService;
     @Mocked
     private TabletComputeNodeMapper tabletComputeNodeMapper;
+    @Mocked
+    private WarehouseManager warehouseManager;
+
+    private Frontend thisFe;
 
     @Before
     public void setUp() {
+        thisFe = new Frontend();
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -57,6 +64,10 @@ public class TabletMappingProcNodeTest {
                 globalStateMgr.getNodeMgr();
                 minTimes = 1;
                 result = nodeMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
@@ -65,6 +76,10 @@ public class TabletMappingProcNodeTest {
                 nodeMgr.getClusterInfo();
                 minTimes = 1;
                 result = systemInfoService;
+
+                nodeMgr.getMySelf();
+                minTimes = 0;
+                result = thisFe;
             }
         };
     }
@@ -72,11 +87,6 @@ public class TabletMappingProcNodeTest {
     @Test
     public void testNoTabletMappings() throws Exception {
         new Expectations(systemInfoService) {
-            {
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                minTimes = 1;
-                result = true;
-            }
 
             {
                 systemInfoService.internalTabletMapper();
@@ -101,11 +111,6 @@ public class TabletMappingProcNodeTest {
     @Test
     public void testNoComputeNodes() throws Exception {
         new Expectations(systemInfoService) {
-            {
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                minTimes = 1;
-                result = true;
-            }
 
             {
                 systemInfoService.internalTabletMapper();
@@ -127,10 +132,11 @@ public class TabletMappingProcNodeTest {
             }
 
             {
-                tabletComputeNodeMapper.computeNodesForTablet(1L, 2);
+                tabletComputeNodeMapper.backupComputeNodesForTablet(1L, 0L, 1, thisFe.getResourceIsolationGroup());
                 times = 1;
                 result = List.of();
             }
+
         };
         TabletMappingProcNode proceNode = new TabletMappingProcNode();
         ProcResult res = proceNode.fetchResult();
@@ -139,11 +145,6 @@ public class TabletMappingProcNodeTest {
     @Test
     public void testOneComputeNodes() throws Exception {
         new Expectations(systemInfoService) {
-            {
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                minTimes = 1;
-                result = true;
-            }
 
             {
                 systemInfoService.internalTabletMapper();
@@ -165,7 +166,7 @@ public class TabletMappingProcNodeTest {
             }
 
             {
-                tabletComputeNodeMapper.computeNodesForTablet(1L, 2);
+                tabletComputeNodeMapper.backupComputeNodesForTablet(1L, 0L, 1, thisFe.getResourceIsolationGroup());
                 times = 1;
                 result = List.of(100L);
             }
@@ -177,11 +178,6 @@ public class TabletMappingProcNodeTest {
     @Test
     public void testNormal() throws Exception {
         new Expectations(systemInfoService) {
-            {
-                systemInfoService.shouldUseInternalTabletToCnMapper();
-                minTimes = 1;
-                result = true;
-            }
 
             {
                 systemInfoService.internalTabletMapper();
@@ -204,21 +200,22 @@ public class TabletMappingProcNodeTest {
             }
 
             {
-                tabletComputeNodeMapper.computeNodesForTablet(1L, 2);
+                tabletComputeNodeMapper.backupComputeNodesForTablet(1L, 0L, 1, thisFe.getResourceIsolationGroup());
                 times = 1;
-                result = List.of(100L, 200L);
+                result = List.of(100L);
             }
 
             {
-                tabletComputeNodeMapper.computeNodesForTablet(2L, 2);
+                tabletComputeNodeMapper.backupComputeNodesForTablet(2L, 0L, 1, thisFe.getResourceIsolationGroup());
                 times = 1;
-                result = List.of(200L, 300L);
+                result = List.of(200L);
             }
         };
         TabletMappingProcNode proceNode = new TabletMappingProcNode();
         ProcResult res = proceNode.fetchResult();
 
-        Assert.assertEquals(List.of("TabletId", "RequestCount", "PrimaryCnOwner", "SecondaryCnOwner"), res.getColumnNames());
-        Assert.assertEquals(List.of(List.of("1", "10", "100", "200"), List.of("2", "20", "200", "300")), res.getRows());
+        Assert.assertEquals(List.of("TabletId", "BackupRequestCount", "PrimaryCnOwner", "SecondaryCnOwner"),
+                res.getColumnNames());
+        Assert.assertEquals(List.of(List.of("1", "10", "0", "100"), List.of("2", "20", "0", "200")), res.getRows());
     }
 }

@@ -37,9 +37,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -130,18 +128,6 @@ public class WarehouseManager implements Writable {
     }
 
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
-        // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        if (systemInfoService.shouldUseInternalTabletToCnMapper()) {
-            if (warehouseId != DEFAULT_WAREHOUSE_ID || workerGroupId != StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
-                // Note that workerGroupId is not the same as resourceIsolationGroupId
-                throw new IllegalArgumentException(String.format("Cannot use resource groups with non-default" +
-                        " warehouse %d or non-default worker group id %d", warehouseId, workerGroupId));
-            }
-            return systemInfoService.getRigMatchingComputeNodeIds();
-        }
-
-
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
@@ -173,12 +159,20 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+        if (tablet == null) {
+            LOG.warn("Calling getComputeNodeId with null tablet");
+            return null;
+        }
+        return getComputeNodeId(warehouseId, tablet.getId());
+    }
+
+    public Long getComputeNodeId(Long warehouseId, Long tabletId) {
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
         }
 
-        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouseId, tablet);
+        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouseId, tabletId);
         if (ids != null && !ids.isEmpty()) {
             return ids.iterator().next();
         } else {
@@ -199,32 +193,21 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-        // If we're using resource isolation groups, we bypass the call to StarOS/StarMgr
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        if (systemInfoService.shouldUseInternalTabletToCnMapper()) {
-            if (warehouseId != DEFAULT_WAREHOUSE_ID) {
-                throw new IllegalArgumentException(String.format("Cannot use resource groups with non-default" +
-                        " warehouse %d", warehouseId));
-            }
-            List<Long> computeNodeIds = systemInfoService.internalTabletMapper().computeNodesForTablet(tablet.getId());
-            if (computeNodeIds == null || computeNodeIds.isEmpty()) {
-                LOG.warn("no compute nodes assigned to tablet {} in warehouse {}", tablet.getId(),
-                        warehouseId);
-                return Collections.emptySet();
-            }
-            return new HashSet<>(computeNodeIds);
-        }
+    private Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, Long tabletId) {
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), workerGroupId);
+                    .getShardInfo(tabletId, workerGroupId);
 
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(shardInfo, true);
         } catch (StarClientException e) {
             return null;
         }
+    }
+
+    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        return getAllComputeNodeIdsAssignToTablet(warehouseId, tablet.getShardId());
     }
 
     public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
@@ -265,7 +248,7 @@ public class WarehouseManager implements Writable {
 
     public Optional<Long> selectWorkerGroupByWarehouseId(long warehouseId) {
         Optional<Long> workerGroupId = selectWorkerGroupInternal(warehouseId);
-        if (workerGroupId.isEmpty())  {
+        if (workerGroupId.isEmpty()) {
             return workerGroupId;
         }
 
@@ -279,9 +262,20 @@ public class WarehouseManager implements Writable {
         return workerGroupId;
     }
 
+    // Warehouse id is unused in pinterest. In this version of starrocks we use resource isolation group instead of warehouse id.
     private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
+        if (warehouseId == DEFAULT_WAREHOUSE_ID) {
+            String thisRig = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
+            Optional<Long> workerGroup = GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getWorkerGroup(thisRig);
+            if (workerGroup.isPresent()) {
+                return workerGroup;
+            }
+            LOG.warn("Could not get worker group using WorkerGroupManager, falling back on earlier implementation");
+        } else {
+            LOG.warn("Violating expectations that we don't use warehouse feature: {}", warehouseId);
+        }
         Warehouse warehouse = getWarehouse(warehouseId);
-        if (warehouse == null)  {
+        if (warehouse == null) {
             LOG.warn("failed to get warehouse by id {}", warehouseId);
             return Optional.empty();
         }

@@ -141,10 +141,10 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("query_queue_v2_category_state", MetricUnit.REQUESTS,
                             "the current state of each category"));
 
-    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CN_SELECTED_FOR_TABLET_SCAN =
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CN_SELECTED_FOR_BACKUP_TABLET_SCAN =
             new MetricWithLabelGroup<>("cn_id",
-                    () -> new LongCounterMetric("cn_selected_for_tablet_scan", MetricUnit.NOUNIT,
-                            "times this FE selected the given CN for a scan of some tablet"));
+                    () -> new LongCounterMetric("cn_selected_for_backup_tablet_scan", MetricUnit.NOUNIT,
+                            "times this FE selected the given CN as a backup for a scan of some tablet"));
     public static final MetricWithLabelGroup<GaugeMetricImpl<Long>> GAUGE_CN_TO_OWNED_TABLET_COUNT =
             new MetricWithLabelGroup<>("cn_id",
                     () -> new GaugeMetricImpl<>("cn_to_owned_tablet_count", MetricUnit.NOUNIT,
