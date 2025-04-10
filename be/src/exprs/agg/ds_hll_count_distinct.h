@@ -47,9 +47,17 @@ public:
         }
     }
 
+    // update hll sketch state with uint64 value is no longer in use since we no longer
+    // take the murmur hash value as input to the hll sketch
     void update_state(FunctionContext* ctx, AggDataPtr state, uint64_t value) const {
         int64_t prev_memory = this->data(state).hll_sketch->mem_usage();
         this->data(state).hll_sketch->update(value);
+        ctx->add_mem_usage(this->data(state).hll_sketch->mem_usage() - prev_memory);
+    }
+
+    void update_state(FunctionContext* ctx, AggDataPtr state, const void* value, size_t size) const {
+        int64_t prev_memory = this->data(state).hll_sketch->mem_usage();
+        this->data(state).hll_sketch->update(value, size);
         ctx->add_mem_usage(this->data(state).hll_sketch->mem_usage() - prev_memory);
     }
 
@@ -58,17 +66,16 @@ public:
         // init state if needed
         _init_if_needed(ctx, columns, state);
 
-        uint64_t value = 0;
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
         if constexpr (lt_is_string<LT>) {
             Slice s = column->get_slice(row_num);
-            value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
+            update_state(ctx, state, s.data, s.size);
         } else {
             const auto& v = column->get_data();
-            value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
+            update_state(ctx, state, &v[row_num], sizeof(v[row_num]));
         }
-        update_state(ctx, state, value);
+        
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -78,24 +85,14 @@ public:
         _init_if_needed(ctx, columns, state);
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         if constexpr (lt_is_string<LT>) {
-            uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
                 Slice s = column->get_slice(i);
-                value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
-
-                if (value != 0) {
-                    update_state(ctx, state, value);
-                }
+                update_state(ctx, state, s.data, s.size);
             }
         } else {
-            uint64_t value = 0;
             const auto& v = column->get_data();
             for (size_t i = frame_start; i < frame_end; ++i) {
-                value = HashUtil::murmur_hash64A(&v[i], sizeof(v[i]), HashUtil::MURMUR_SEED);
-
-                if (value != 0) {
-                    update_state(ctx, state, value);
-                }
+                update_state(ctx, state, &v[i], sizeof(v[i]));
             }
         }
     }
@@ -150,7 +147,6 @@ public:
         result->get_offset().resize(chunk_size + 1);
 
         size_t old_size = bytes.size();
-        uint64_t value = 0;
         uint8_t log_k;
         datasketches::target_hll_type tgt_type;
         // convert to const Column*
@@ -165,13 +161,10 @@ public:
             DataSketchesHll hll{log_k, tgt_type, &memory_usage};
             if constexpr (lt_is_string<LT>) {
                 Slice s = column->get_slice(i);
-                value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
+                hll.update(s.data, s.size);
             } else {
                 auto v = column->get_data()[i];
-                value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
-            }
-            if (value != 0) {
-                hll.update(value);
+                hll.update(&v, sizeof(v));
             }
 
             size_t new_size = old_size + hll.serialize_size();
