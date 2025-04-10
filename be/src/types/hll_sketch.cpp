@@ -44,8 +44,14 @@ bool DataSketchesHll::is_valid(const Slice& slice) {
     }
 }
 
+// no longer used since we no longer take the murmur hash value as input to the hll sketch
 void DataSketchesHll::update(uint64_t hash_value) {
     _sketch_union->update(hash_value);
+    this->mark_changed();
+}
+
+void DataSketchesHll::update(const void* data, size_t length_bytes) {
+    _sketch_union->update(data, length_bytes);
     this->mark_changed();
 }
 

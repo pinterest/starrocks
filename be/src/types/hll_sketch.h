@@ -84,6 +84,10 @@ public:
     // NOTE: input must be a hash_value
     void update(uint64_t hash_value);
 
+    // Add a byte array to this HLL value
+    // NOTE: input must be a byte array
+    void update(const void* data, size_t length_bytes);
+
     // merge with other HLL value
     void merge(const DataSketchesHll& other);
 
