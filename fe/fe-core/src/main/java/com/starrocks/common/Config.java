@@ -1889,6 +1889,24 @@ public class Config extends ConfigBase {
     public static boolean enable_starrocks_external_table_auth_check = true;
 
     /**
+     * If set to true, the granularity of auth check extends to the column level
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_column_level_privilege = false;
+
+    /**
+     *  Implementation of CauthzAuthorizer class to be used for external access control 
+     */
+    @ConfField(mutable = false)
+    public static String cauthz_authorization_class_name = "";
+
+    /**
+     * Whether CauthzAuthorizer for access control should fail open
+     */
+    @ConfField(mutable = true)
+    public static boolean cauthz_fail_open = false;
+
+    /**
      * The authentication_chain configuration specifies the sequence of security integrations
      * that will be used to authenticate a user. Each security integration in the chain will be
      * tried in the order they are defined until one of them successfully authenticates the user.
@@ -1905,12 +1923,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
-
-    /**
-     * If set to true, the granularity of auth check extends to the column level
-     */
-    @ConfField(mutable = true)
-    public static boolean authorization_enable_column_level_privilege = false;
 
     /**
      * ldap server host for authentication_ldap_simple
