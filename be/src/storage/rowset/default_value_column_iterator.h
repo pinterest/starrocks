@@ -99,6 +99,11 @@ public:
         return std::vector<std::pair<int64_t, int64_t>>();
     }
 
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override {
+        return std::vector<std::pair<int64_t, int64_t>>();
+    }
+
 private:
     bool _has_default_value;
     std::string _default_value;
