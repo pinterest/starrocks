@@ -809,6 +809,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             confluentSchemaRegistryUrl = dataSourceProperties.getConfluentSchemaRegistryUrl();
         }
 
+        // modify broker list
+        if (dataSourceProperties.getKafkaBrokerList() != null) {
+            this.brokerList = dataSourceProperties.getKafkaBrokerList();
+        }
+
         LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",
                 this.id, dataSourceProperties);
     }
