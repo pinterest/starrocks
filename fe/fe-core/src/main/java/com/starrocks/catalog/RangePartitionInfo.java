@@ -165,68 +165,168 @@ public class RangePartitionInfo extends PartitionInfo {
     // create a new range and check it.
     private Range<PartitionKey> createAndCheckNewRange(Map<ColumnId, Column> schema, PartitionKeyDesc partKeyDesc, boolean isTemp)
             throws AnalysisException, DdlException {
+        LOG.debug("[createAndCheckNewRange] isTemp: {}", isTemp);
+
+        debugLogSchema(schema);
+        LOG.debug("[createAndCheckNewRange] partKeyDesc: {}",
+                partitionKeyDescToString(partKeyDesc));  // Assumes toString is informative
+
         Range<PartitionKey> newRange = null;
-        // generate and sort the existing ranges
+
         List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = getSortedRangeMap(isTemp);
+        debugLogSortedRanges(sortedRanges);
 
         List<Column> partitionColumns = getPartitionColumns(schema);
-        // create upper values for new range
+        debugLogPartitionColumns(partitionColumns);
+
         PartitionKey newRangeUpper = null;
         if (partKeyDesc.isMax()) {
             newRangeUpper = PartitionKey.createInfinityPartitionKey(partitionColumns, true);
         } else {
             newRangeUpper = PartitionKey.createPartitionKey(partKeyDesc.getUpperValues(), partitionColumns);
         }
+        LOG.debug("[createAndCheckNewRange] newRangeUpper: {}", partitionKeyToString(newRangeUpper));
+
         if (newRangeUpper.isMinValue()) {
-            throw new DdlException("Partition's upper value should not be MIN VALUE: " + partKeyDesc);
+            throw new DdlException("Partition's upper value should not be MIN VALUE: " + partitionKeyDescToString(partKeyDesc));
         }
 
         Range<PartitionKey> lastRange = null;
         Range<PartitionKey> currentRange = null;
+        boolean loggedFirstLoop = false;
         for (Map.Entry<Long, Range<PartitionKey>> entry : sortedRanges) {
             currentRange = entry.getValue();
-            // check if equals to upper bound
+            if (!loggedFirstLoop) {
+                LOG.debug("[createAndCheckNewRange] (first loop) currentRange: {}", rangeToString(currentRange));
+                loggedFirstLoop = true;
+            }
             PartitionKey upperKey = currentRange.upperEndpoint();
             if (upperKey.compareTo(newRangeUpper) >= 0) {
+                LOG.debug("[createAndCheckNewRange] (range boundary reached) Calling checkNewRange with lastRange: {}, " +
+                        "currentRange: {}", rangeToString(lastRange), rangeToString(currentRange));
                 newRange = checkNewRange(partitionColumns, partKeyDesc, newRangeUpper, lastRange, currentRange);
                 break;
             } else {
                 lastRange = currentRange;
             }
-        } // end for ranges
+        }
 
-        if (newRange == null) /* the new range's upper value is larger than any existing ranges */ {
+        if (newRange == null) {
+            LOG.debug("[createAndCheckNewRange] newRange was null after loop; calling checkNewRange with lastRange: {}, " +
+                    "currentRange: {}", rangeToString(lastRange), rangeToString(currentRange));
             newRange = checkNewRange(partitionColumns, partKeyDesc, newRangeUpper, lastRange, currentRange);
         }
+        LOG.debug("[createAndCheckNewRange] result newRange: {}", rangeToString(newRange));
         return newRange;
     }
 
     private Range<PartitionKey> checkNewRange(List<Column> partitionColumns, PartitionKeyDesc partKeyDesc,
                                               PartitionKey newRangeUpper, Range<PartitionKey> lastRange,
-                                              Range<PartitionKey> currentRange)
-            throws AnalysisException, DdlException {
+                                              Range<PartitionKey> currentRange) throws AnalysisException, DdlException {
+
+        debugLogPartitionColumns(partitionColumns);
+        LOG.debug("[checkNewRange] partKeyDesc: {}", partitionKeyDescToString(partKeyDesc));
+        LOG.debug("[checkNewRange] newRangeUpper: {}", partitionKeyToString(newRangeUpper));
+        LOG.debug("[checkNewRange] lastRange: {}", rangeToString(lastRange));
+        LOG.debug("[checkNewRange] currentRange: {}", rangeToString(currentRange));
+
         Range<PartitionKey> newRange;
         PartitionKey lowKey = null;
         if (partKeyDesc.hasLowerValues()) {
             lowKey = PartitionKey.createPartitionKey(partKeyDesc.getLowerValues(), partitionColumns);
+            LOG.debug("[checkNewRange] lowKey set from lowerValues: {}", partitionKeyToString(lowKey));
         } else {
             if (lastRange == null) {
                 lowKey = PartitionKey.createInfinityPartitionKey(partitionColumns, false);
+                LOG.debug("[checkNewRange] lowKey set to -infinity: {}", partitionKeyToString(lowKey));
             } else {
                 lowKey = lastRange.upperEndpoint();
+                LOG.debug("[checkNewRange] lowKey set to lastRange.upperEndpoint(): {}", partitionKeyToString(lowKey));
             }
         }
-        // check: [left, right), error if left equal right
         if (lowKey.compareTo(newRangeUpper) >= 0) {
+            LOG.debug("[checkNewRange] lowKey >= newRangeUpper -- error: lowKey={}, newRangeUpper={}",
+                    partitionKeyToString(lowKey), partitionKeyToString(newRangeUpper));
             throw new AnalysisException("The lower values must smaller than upper values");
         }
         newRange = Range.closedOpen(lowKey, newRangeUpper);
+        LOG.debug("[checkNewRange] newRange: {}", rangeToString(newRange));
 
         if (currentRange != null) {
-            // check if range intersected
             RangeUtils.checkRangeIntersect(newRange, currentRange);
         }
         return newRange;
+    }
+
+    // ----------------------------------
+    // Helper methods for detailed logging
+    // ----------------------------------
+    private void debugLogSchema(Map<ColumnId, Column> schema) {
+        if (schema == null) {
+            LOG.debug("[createAndCheckNewRange] schema: null");
+            return;
+        }
+        LOG.debug("[createAndCheckNewRange] schema (size={}):", schema.size());
+        for (Map.Entry<ColumnId, Column> entry : schema.entrySet()) {
+            LOG.debug("  ColumnId: {}, Column: {}", entry.getKey(), columnToString(entry.getValue()));
+        }
+    }
+
+    private void debugLogSortedRanges(List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges) {
+        if (sortedRanges == null) {
+            LOG.debug("[createAndCheckNewRange] sortedRanges: null");
+            return;
+        }
+        LOG.debug("[createAndCheckNewRange] sortedRanges (size={}):", sortedRanges.size());
+        int idx = 0;
+        for (Map.Entry<Long, Range<PartitionKey>> entry : sortedRanges) {
+            LOG.debug("  [{}] Key: {}, Range: {}", idx++, entry.getKey(), rangeToString(entry.getValue()));
+        }
+    }
+
+    private void debugLogPartitionColumns(List<Column> partitionColumns) {
+        if (partitionColumns == null) {
+            LOG.debug("[createAndCheckNewRange] partitionColumns: null");
+            return;
+        }
+        LOG.debug("[createAndCheckNewRange] partitionColumns (size={}):", partitionColumns.size());
+        for (int i = 0; i < partitionColumns.size(); i++) {
+            LOG.debug("  Partition Column [{}]: {}", i, columnToString(partitionColumns.get(i)));
+        }
+    }
+
+    private String columnToString(Column column) {
+        if (column == null) {
+            return "null";
+        }
+        // Expand here if you want specific fields of Column
+        return column.toString();
+    }
+
+    private String partitionKeyToString(PartitionKey key) {
+        if (key == null) {
+            return "null";
+        }
+        // Expand here for more details if needed
+        return key.toString();
+    }
+
+    private String partitionKeyDescToString(PartitionKeyDesc desc) {
+        if (desc == null) {
+            return "null";
+        }
+        // Expand for more details if needed
+        return desc.toString();
+    }
+
+    private String rangeToString(Range<PartitionKey> range) {
+        if (range == null) {
+            return "null";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("[").append(partitionKeyToString(range.lowerEndpoint())).append(", ")
+                .append(partitionKeyToString(range.upperEndpoint())).append(")");
+        return sb.toString();
     }
 
     public Range<PartitionKey> handleNewSinglePartitionDesc(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc,
