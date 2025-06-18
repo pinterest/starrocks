@@ -165,10 +165,10 @@ public class RangePartitionInfo extends PartitionInfo {
     // create a new range and check it.
     private Range<PartitionKey> createAndCheckNewRange(Map<ColumnId, Column> schema, PartitionKeyDesc partKeyDesc, boolean isTemp)
             throws AnalysisException, DdlException {
-        LOG.debug("[createAndCheckNewRange] isTemp: {}", isTemp);
+        LOG.info("[createAndCheckNewRange] isTemp: {}", isTemp);
 
         debugLogSchema(schema);
-        LOG.debug("[createAndCheckNewRange] partKeyDesc: {}",
+        LOG.info("[createAndCheckNewRange] partKeyDesc: {}",
                 partitionKeyDescToString(partKeyDesc));  // Assumes toString is informative
 
         Range<PartitionKey> newRange = null;
@@ -185,7 +185,7 @@ public class RangePartitionInfo extends PartitionInfo {
         } else {
             newRangeUpper = PartitionKey.createPartitionKey(partKeyDesc.getUpperValues(), partitionColumns);
         }
-        LOG.debug("[createAndCheckNewRange] newRangeUpper: {}", partitionKeyToString(newRangeUpper));
+        LOG.info("[createAndCheckNewRange] newRangeUpper: {}", partitionKeyToString(newRangeUpper));
 
         if (newRangeUpper.isMinValue()) {
             throw new DdlException("Partition's upper value should not be MIN VALUE: " + partitionKeyDescToString(partKeyDesc));
@@ -197,12 +197,12 @@ public class RangePartitionInfo extends PartitionInfo {
         for (Map.Entry<Long, Range<PartitionKey>> entry : sortedRanges) {
             currentRange = entry.getValue();
             if (!loggedFirstLoop) {
-                LOG.debug("[createAndCheckNewRange] (first loop) currentRange: {}", rangeToString(currentRange));
+                LOG.info("[createAndCheckNewRange] (first loop) currentRange: {}", rangeToString(currentRange));
                 loggedFirstLoop = true;
             }
             PartitionKey upperKey = currentRange.upperEndpoint();
             if (upperKey.compareTo(newRangeUpper) >= 0) {
-                LOG.debug("[createAndCheckNewRange] (range boundary reached) Calling checkNewRange with lastRange: {}, " +
+                LOG.info("[createAndCheckNewRange] (range boundary reached) Calling checkNewRange with lastRange: {}, " +
                         "currentRange: {}", rangeToString(lastRange), rangeToString(currentRange));
                 newRange = checkNewRange(partitionColumns, partKeyDesc, newRangeUpper, lastRange, currentRange);
                 break;
@@ -212,11 +212,11 @@ public class RangePartitionInfo extends PartitionInfo {
         }
 
         if (newRange == null) {
-            LOG.debug("[createAndCheckNewRange] newRange was null after loop; calling checkNewRange with lastRange: {}, " +
+            LOG.info("[createAndCheckNewRange] newRange was null after loop; calling checkNewRange with lastRange: {}, " +
                     "currentRange: {}", rangeToString(lastRange), rangeToString(currentRange));
             newRange = checkNewRange(partitionColumns, partKeyDesc, newRangeUpper, lastRange, currentRange);
         }
-        LOG.debug("[createAndCheckNewRange] result newRange: {}", rangeToString(newRange));
+        LOG.info("[createAndCheckNewRange] result newRange: {}", rangeToString(newRange));
         return newRange;
     }
 
@@ -225,32 +225,32 @@ public class RangePartitionInfo extends PartitionInfo {
                                               Range<PartitionKey> currentRange) throws AnalysisException, DdlException {
 
         debugLogPartitionColumns(partitionColumns);
-        LOG.debug("[checkNewRange] partKeyDesc: {}", partitionKeyDescToString(partKeyDesc));
-        LOG.debug("[checkNewRange] newRangeUpper: {}", partitionKeyToString(newRangeUpper));
-        LOG.debug("[checkNewRange] lastRange: {}", rangeToString(lastRange));
-        LOG.debug("[checkNewRange] currentRange: {}", rangeToString(currentRange));
+        LOG.info("[checkNewRange] partKeyDesc: {}", partitionKeyDescToString(partKeyDesc));
+        LOG.info("[checkNewRange] newRangeUpper: {}", partitionKeyToString(newRangeUpper));
+        LOG.info("[checkNewRange] lastRange: {}", rangeToString(lastRange));
+        LOG.info("[checkNewRange] currentRange: {}", rangeToString(currentRange));
 
         Range<PartitionKey> newRange;
         PartitionKey lowKey = null;
         if (partKeyDesc.hasLowerValues()) {
             lowKey = PartitionKey.createPartitionKey(partKeyDesc.getLowerValues(), partitionColumns);
-            LOG.debug("[checkNewRange] lowKey set from lowerValues: {}", partitionKeyToString(lowKey));
+            LOG.info("[checkNewRange] lowKey set from lowerValues: {}", partitionKeyToString(lowKey));
         } else {
             if (lastRange == null) {
                 lowKey = PartitionKey.createInfinityPartitionKey(partitionColumns, false);
-                LOG.debug("[checkNewRange] lowKey set to -infinity: {}", partitionKeyToString(lowKey));
+                LOG.info("[checkNewRange] lowKey set to -infinity: {}", partitionKeyToString(lowKey));
             } else {
                 lowKey = lastRange.upperEndpoint();
-                LOG.debug("[checkNewRange] lowKey set to lastRange.upperEndpoint(): {}", partitionKeyToString(lowKey));
+                LOG.info("[checkNewRange] lowKey set to lastRange.upperEndpoint(): {}", partitionKeyToString(lowKey));
             }
         }
         if (lowKey.compareTo(newRangeUpper) >= 0) {
-            LOG.debug("[checkNewRange] lowKey >= newRangeUpper -- error: lowKey={}, newRangeUpper={}",
+            LOG.info("[checkNewRange] lowKey >= newRangeUpper -- error: lowKey={}, newRangeUpper={}",
                     partitionKeyToString(lowKey), partitionKeyToString(newRangeUpper));
             throw new AnalysisException("The lower values must smaller than upper values");
         }
         newRange = Range.closedOpen(lowKey, newRangeUpper);
-        LOG.debug("[checkNewRange] newRange: {}", rangeToString(newRange));
+        LOG.info("[checkNewRange] newRange: {}", rangeToString(newRange));
 
         if (currentRange != null) {
             RangeUtils.checkRangeIntersect(newRange, currentRange);
@@ -263,35 +263,35 @@ public class RangePartitionInfo extends PartitionInfo {
     // ----------------------------------
     private void debugLogSchema(Map<ColumnId, Column> schema) {
         if (schema == null) {
-            LOG.debug("[createAndCheckNewRange] schema: null");
+            LOG.info("[createAndCheckNewRange] schema: null");
             return;
         }
-        LOG.debug("[createAndCheckNewRange] schema (size={}):", schema.size());
+        LOG.info("[createAndCheckNewRange] schema (size={}):", schema.size());
         for (Map.Entry<ColumnId, Column> entry : schema.entrySet()) {
-            LOG.debug("  ColumnId: {}, Column: {}", entry.getKey(), columnToString(entry.getValue()));
+            LOG.info("  ColumnId: {}, Column: {}", entry.getKey(), columnToString(entry.getValue()));
         }
     }
 
     private void debugLogSortedRanges(List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges) {
         if (sortedRanges == null) {
-            LOG.debug("[createAndCheckNewRange] sortedRanges: null");
+            LOG.info("[createAndCheckNewRange] sortedRanges: null");
             return;
         }
-        LOG.debug("[createAndCheckNewRange] sortedRanges (size={}):", sortedRanges.size());
+        LOG.info("[createAndCheckNewRange] sortedRanges (size={}):", sortedRanges.size());
         int idx = 0;
         for (Map.Entry<Long, Range<PartitionKey>> entry : sortedRanges) {
-            LOG.debug("  [{}] Key: {}, Range: {}", idx++, entry.getKey(), rangeToString(entry.getValue()));
+            LOG.info("  [{}] Key: {}, Range: {}", idx++, entry.getKey(), rangeToString(entry.getValue()));
         }
     }
 
     private void debugLogPartitionColumns(List<Column> partitionColumns) {
         if (partitionColumns == null) {
-            LOG.debug("[createAndCheckNewRange] partitionColumns: null");
+            LOG.info("[createAndCheckNewRange] partitionColumns: null");
             return;
         }
-        LOG.debug("[createAndCheckNewRange] partitionColumns (size={}):", partitionColumns.size());
+        LOG.info("[createAndCheckNewRange] partitionColumns (size={}):", partitionColumns.size());
         for (int i = 0; i < partitionColumns.size(); i++) {
-            LOG.debug("  Partition Column [{}]: {}", i, columnToString(partitionColumns.get(i)));
+            LOG.info("  Partition Column [{}]: {}", i, columnToString(partitionColumns.get(i)));
         }
     }
 

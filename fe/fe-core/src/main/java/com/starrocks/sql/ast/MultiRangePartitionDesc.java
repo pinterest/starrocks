@@ -30,6 +30,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -43,6 +45,7 @@ import java.util.Map;
 import java.util.TimeZone;
 
 public class MultiRangePartitionDesc extends PartitionDesc {
+    private static final Logger LOG = LogManager.getLogger(MultiRangePartitionDesc.class);
 
     private final String defaultPrefix = "p";
     private final String defaultTempPartitionPrefix = "tp";
@@ -102,6 +105,9 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     private List<SingleRangePartitionDesc> buildDateTypePartition(PartitionConvertContext context)
             throws AnalysisException {
         // int type does not support datekey int type
+        LOG.info("buildDateTypePartition: partition column type: {}", context.getFirstPartitionColumnType());
+        LOG.info("buildDateTypePartition: using formatter: {}",
+                context.getFirstPartitionColumnType() == Type.DATETIME ? "DATETIME" : "DATE");
 
         LocalDateTime beginTime;
         LocalDateTime endTime;

@@ -469,6 +469,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -496,6 +498,8 @@ import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
+    private static final Logger LOG = LogManager.getLogger(AstBuilder.class);
+
     private final long sqlMode;
 
     private final IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap;
@@ -4345,6 +4349,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
+        LOG.info("Parsing ADD PARTITION clause: temporary={}, partitionDescType={}",
+                temporary,
+                partitionDesc == null ? "null" : partitionDesc.getClass().getSimpleName());
+
+        if (partitionDesc != null) {
+            LOG.info("PartitionDesc details: {}", partitionDesc.toString());
+        }
+
         return new AddPartitionClause(partitionDesc, distributionDesc, properties, temporary, createPos(context));
     }
 

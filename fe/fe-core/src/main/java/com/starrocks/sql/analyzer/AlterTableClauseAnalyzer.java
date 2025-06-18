@@ -98,6 +98,8 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
@@ -110,6 +112,7 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext> {
     private final Table table;
+    private static final Logger LOG = LogManager.getLogger(AlterTableClauseAnalyzer.class);
 
     public AlterTableClauseAnalyzer(Table table) {
         this.table = table;
@@ -1056,7 +1059,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
             OlapTable olapTable = (OlapTable) table;
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-
+            for (Column col : partitionInfo.getPartitionColumns(table.getIdToColumn())) {
+                LOG.info("Partition column for [{}] temp={} : name={}, type={}",
+                        table.getName(), clause.isTempPartition(), col.getName(), col.getType());
+            }
             List<SingleRangePartitionDesc> singleRangePartitionDescs =
                     convertMultiRangePartitionDescToSingleRangePartitionDescs(
                             partitionInfo.isAutomaticPartition(),
@@ -1144,6 +1150,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             List<Column> partitionColumns,
             Map<String, String> properties) {
         Column firstPartitionColumn = partitionColumns.get(0);
+        LOG.info("[{}] isTempPartition: {}, firstPartitionColumn: name={}, type={}",
+                table.getName(), isTempPartition, firstPartitionColumn.getName(), firstPartitionColumn.getType());
 
         if (properties == null) {
             properties = Maps.newHashMap();
