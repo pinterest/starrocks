@@ -2537,7 +2537,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
 
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .addPartitions(Util.getOrCreateInnerContext(), db, "site_access_hourly", addPartitionClause);
+                .addPartitions(Util.getOrCreateConnectContext(), db, "site_access_hourly", addPartitionClause);
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
