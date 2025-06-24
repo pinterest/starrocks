@@ -199,6 +199,8 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_VACUUM_FILES_NUMBER;
     public static LongCounterMetric COUNTER_VACUUM_FILES_BYTES;
 
+    public static LongCounterMetric COUNTER_FAIL_OPEN_POLICY_USED;
+
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
@@ -556,6 +558,9 @@ public final class MetricRepo {
         COUNTER_BRPC_EXEC_PLAN_FRAGMENT_ERROR = new LongCounterMetric(
                 "brpc_exec_plan_fragment_error", MetricUnit.REQUESTS, "total brpc exec plan fragment error");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_BRPC_EXEC_PLAN_FRAGMENT_ERROR);
+        COUNTER_FAIL_OPEN_POLICY_USED = new LongCounterMetric("failopen_policy_used", MetricUnit.REQUESTS,
+                "times fail-open policy used for cauthz");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_FAIL_OPEN_POLICY_USED);
 
         COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
                                                            "total analysis error query");
