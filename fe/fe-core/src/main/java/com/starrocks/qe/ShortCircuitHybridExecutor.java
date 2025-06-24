@@ -287,4 +287,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         });
     }
 
+    public void incFailOpenPolicyUsed(Long count) {
+        MetricRepo.COUNTER_FAIl_OPEN_POLICY_USED.increase(count);
+    }
+
 }

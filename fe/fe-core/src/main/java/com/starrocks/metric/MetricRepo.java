@@ -171,6 +171,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_PAUSED;
     public static LongCounterMetric COUNTER_SHORTCIRCUIT_QUERY;
     public static LongCounterMetric COUNTER_SHORTCIRCUIT_RPC;
+    public static LongCounterMetric COUNTER_FAIl_OPEN_POLICY_USED;
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
@@ -460,11 +461,13 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
         COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
+        COUNTER_FAIl_OPEN_POLICY_USED = new LongCounterMetric("failopen_policy_used", MetricUnit.REQUESTS, "times fail-open policy used for cauthz");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_FAIl_OPEN_POLICY_USED);
 
         COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
                                                            "total analysis error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
-        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, 
+        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS,
                                                            "total internal error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_INTERNAL_ERR);
 
