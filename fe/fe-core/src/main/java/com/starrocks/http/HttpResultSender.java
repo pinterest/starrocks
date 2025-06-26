@@ -70,24 +70,15 @@ public class HttpResultSender {
     public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan, String sql) throws Exception {
         RowBatch batch;
         ChannelHandlerContext nettyChannel = context.getNettyChannel();
-        // if some data already sent to client, when exception occurs,we just close the channel
-        context.setSendDate(true);
-        sendHeader(nettyChannel);
-        // write connectId
-        if (!context.isOnlyOutputResultRaw()) {
-            nettyChannel.write(JsonSerializer.getConnectId(context.getConnectionId()));
-        }
-        // write column meta data
-        ByteBuf metaData = JsonSerializer.getMetaData(execPlan.getColNames(), execPlan.getOutputExprs());
-        nettyChannel.writeAndFlush(metaData);
-
         while (true) {
             batch = coord.getNext();
             if (batch.getBatch() != null) {
+                sendHeaderAndMetaData(nettyChannel, execPlan);
                 writeResultBatch(batch.getBatch(), nettyChannel, coord, sql);
                 context.updateReturnRows(batch.getBatch().getRows().size());
             }
             if (batch.isEos()) {
+                sendHeaderAndMetaData(nettyChannel, execPlan);
                 if (!context.isOnlyOutputResultRaw()) {
                     ByteBuf statisticData = JsonSerializer.getStatistic(batch.getQueryStatistics());
                     nettyChannel.writeAndFlush(statisticData);
@@ -173,4 +164,18 @@ public class HttpResultSender {
         }
     }
 
+    private void sendHeaderAndMetaData(ChannelHandlerContext nettyChannel, ExecPlan execPlan) throws IOException {
+        // if some data already sent to client, when exception occurs,we just close the channel
+        if (!context.getSendDate()) {
+            context.setSendDate(true);
+            sendHeader(nettyChannel);
+            // write connectId
+            if (!context.isOnlyOutputResultRaw()) {
+                nettyChannel.write(JsonSerializer.getConnectId(context.getConnectionId()));
+            }
+            // write column meta data
+            ByteBuf metaData = JsonSerializer.getMetaData(execPlan.getColNames(), execPlan.getOutputExprs());
+            nettyChannel.writeAndFlush(metaData);
+        }
+    }
 }
