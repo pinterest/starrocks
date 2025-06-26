@@ -461,7 +461,8 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
         COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
-        COUNTER_FAIL_OPEN_POLICY_USED = new LongCounterMetric("failopen_policy_used", MetricUnit.REQUESTS, "times fail-open policy used for cauthz");
+        COUNTER_FAIL_OPEN_POLICY_USED =
+                new LongCounterMetric("failopen_policy_used", MetricUnit.REQUESTS, "times fail-open policy used for cauthz");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_FAIL_OPEN_POLICY_USED);
 
         COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
