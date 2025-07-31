@@ -90,3 +90,6 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
+
+.m2/
+StarRocks-*/

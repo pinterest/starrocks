@@ -68,6 +68,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -837,5 +838,52 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             }
         }
         updateSubstate(JobSubstate.STABLE, null);
+    }
+
+    @Override
+    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+        super.afterVisible(txnState, txnOperated);
+        // Update lag time metrics when Kafka transaction becomes visible
+        if (Config.enable_routine_load_lag_time_metrics
+                && txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+            updateLagTimeMetricsFromProgress();
+        }
+    }
+
+    /**
+     * Update lag time metrics using current Kafka progress
+     */
+    private void updateLagTimeMetricsFromProgress() {
+        try {
+            if (getTimestampProgress() == null) {
+                return;
+            }
+            KafkaProgress progress = (KafkaProgress) getTimestampProgress();
+            Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
+            Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+            
+            if (partitionTimestamps == null || partitionTimestamps.isEmpty()) {
+                return;
+            }
+
+            long now = System.currentTimeMillis();
+            for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
+                int partition = entry.getKey();
+                Long timestampValue = entry.getValue();
+                
+                if (timestampValue == null || timestampValue > now) {
+                    continue;
+                }
+                
+                long lag = (now - timestampValue) / 1000; // convert to seconds
+                partitionLagTimes.put(partition, lag);
+            }
+            
+            if (!partitionLagTimes.isEmpty()) {
+                RoutineLoadLagTimeMetricMgr.getInstance().updateRoutineLoadLagTimeMetric(this, partitionLagTimes);
+            }
+        } catch (Exception e) {
+            LOG.debug("Failed to update lag time metrics for Kafka job {}: {}", id, e.getMessage());
+        }
     }
 }
