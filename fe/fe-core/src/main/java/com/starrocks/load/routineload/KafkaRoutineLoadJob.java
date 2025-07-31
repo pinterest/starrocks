@@ -455,6 +455,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 Long.valueOf((totalRows - errorRows - unselectedRows) / totalTaskExcutionTimeMs * 1000));
         summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
         summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
+        if (Config.enable_routine_load_lag_time_metrics) {
+            summary.put("routineLoadLagTime", getRoutineLoadLagTime());
+        }
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(summary);
     }
@@ -883,6 +886,23 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             }
         } catch (Exception e) {
             LOG.warn("Failed to update lag time metrics for Kafka job {} ({}): {}", id, name, e.getMessage(), e);
+        }
+    }
+
+    private Map<Integer, Long> getRoutineLoadLagTime() {
+        try {
+            RoutineLoadLagTimeMetricMgr metricMgr = RoutineLoadLagTimeMetricMgr.getInstance();
+            Map<Integer, Long> lagTimes = metricMgr.getPartitionLagTimes(this);
+            if (lagTimes != null && !lagTimes.isEmpty()) {
+                LOG.info("Retrieved lag times from metrics manager for job {} ({}): {} partitions", 
+                            id, name, lagTimes.size());
+                return lagTimes;
+            }
+            return Maps.newHashMap();
+        } catch (Exception e) {
+            LOG.warn("Failed to get routine load lag time for job {} ({}): {}", id, name, e.getMessage());
+            // Return empty map as fallback
+            return Maps.newHashMap();
         }
     }
 }
