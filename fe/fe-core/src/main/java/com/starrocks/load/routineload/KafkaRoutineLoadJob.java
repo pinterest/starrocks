@@ -844,8 +844,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     public void afterVisible(TransactionState txnState, boolean txnOperated) {
         super.afterVisible(txnState, txnOperated);
         // Update lag time metrics when Kafka transaction becomes visible
-        if (Config.enable_routine_load_lag_time_metrics
-                && txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+        if (Config.enable_routine_load_lag_time_metrics) {
             updateLagTimeMetricsFromProgress();
         }
     }
@@ -883,7 +882,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 RoutineLoadLagTimeMetricMgr.getInstance().updateRoutineLoadLagTimeMetric(this, partitionLagTimes);
             }
         } catch (Exception e) {
-            LOG.debug("Failed to update lag time metrics for Kafka job {}: {}", id, e.getMessage());
+            LOG.warn("Failed to update lag time metrics for Kafka job {} ({}): {}", id, name, e.getMessage(), e);
         }
     }
 }

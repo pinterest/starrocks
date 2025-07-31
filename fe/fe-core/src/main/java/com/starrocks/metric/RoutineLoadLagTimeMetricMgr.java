@@ -17,6 +17,7 @@
 
 package com.starrocks.metric;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
@@ -25,6 +26,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -60,15 +62,13 @@ public class RoutineLoadLagTimeMetricMgr {
         private long updateTimestamp;
         private final String jobName;
         
-        private final Map<Integer, GaugeMetricImpl<Long>> partitionMetrics;
+        private final List<GaugeMetricImpl<Long>> partitionMetrics;
         private final GaugeMetricImpl<Long> maxLagTimeMetric;
         
         public RoutineLoadLagTimeMetric(String jobName) {
             this.updateTimestamp = -1;
             this.jobName = jobName;
-            
-            this.partitionMetrics = Maps.newHashMap();
-            
+            this.partitionMetrics = Lists.newArrayList();
             this.maxLagTimeMetric = new GaugeMetricImpl<>(
                     "routine_load_max_lag_time_seconds",
                     MetricUnit.SECONDS,
@@ -102,7 +102,7 @@ public class RoutineLoadLagTimeMetricMgr {
                 partitionMetric.addLabel(new MetricLabel("partition", String.valueOf(partition)));
                 partitionMetric.setValue(lagTime);
                 
-                this.partitionMetrics.put(partition, partitionMetric);
+                this.partitionMetrics.add(partitionMetric);
             }
 
             this.maxLagTimeMetric.setValue(newMaxLagTime);
@@ -111,7 +111,7 @@ public class RoutineLoadLagTimeMetricMgr {
                      jobName, newMaxLagTime, newPartitionLagTimes.size());
         }
 
-        public Map<Integer, GaugeMetricImpl<Long>> getPartitionMetrics() { 
+        public List<GaugeMetricImpl<Long>> getPartitionMetrics() { 
             return partitionMetrics; 
         }
 
@@ -194,19 +194,14 @@ public class RoutineLoadLagTimeMetricMgr {
     }
     
     private void emitJobMetrics(String jobKey, RoutineLoadLagTimeMetric lagTimeMetric, MetricVisitor visitor) {
-        try {
-            
-            if (!lagTimeMetric.hasData()) {
-                Map<Integer, GaugeMetricImpl<Long>> partitionMetrics = lagTimeMetric.getPartitionMetrics();
-                for (GaugeMetricImpl<Long> partitionMetric : partitionMetrics.values()) {
+        try {            
+            if (lagTimeMetric.hasData()) {
+                List<GaugeMetricImpl<Long>> partitionMetrics = lagTimeMetric.getPartitionMetrics();
+                for (GaugeMetricImpl<Long> partitionMetric : partitionMetrics) {
                     visitor.visit(partitionMetric);
                 }
-            }            
-            // Only emit max lag time metric if it has been updated
-            if (lagTimeMetric.hasData()) {
                 visitor.visit(lagTimeMetric.getMaxLagTimeMetric());
-            }
-            
+            }            
         } catch (Exception e) {
             LOG.warn("Failed to emit metrics for job {}: {}", jobKey, e.getMessage());
         }
