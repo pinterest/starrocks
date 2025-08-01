@@ -857,27 +857,24 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
      */
     private void updateLagTimeMetricsFromProgress() {
         try {
-            if (getTimestampProgress() == null) {
-                return;
-            }
             KafkaProgress progress = (KafkaProgress) getTimestampProgress();
             Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
             Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
             
-            if (partitionTimestamps == null || partitionTimestamps.isEmpty()) {
-                return;
-            }
-
             long now = System.currentTimeMillis();
             for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
                 int partition = entry.getKey();
                 Long timestampValue = entry.getValue();
-                
-                if (timestampValue == null || timestampValue > now) {
-                    continue;
-                }
-                
-                long lag = (now - timestampValue) / 1000; // convert to seconds
+                long lag = 0L;
+                //   Check for clock drift (future timestamps)
+                if (timestampValue > now) {
+                    long clockDrift = timestampValue - now;
+                    LOG.warn("Clock drift detected for job {} ({}) partition {}: " +
+                            "timestamp {}ms is {}ms ahead of current time {}ms. ",
+                            id, name, partition, timestampValue, clockDrift, now);
+                } else {
+                    lag = (now - timestampValue) / 1000; // convert to seconds
+                } 
                 partitionLagTimes.put(partition, lag);
             }
             
@@ -900,7 +897,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             }
             return Maps.newHashMap();
         } catch (Exception e) {
-            LOG.warn("Failed to get routine load lag time for job {} ({}): {}", id, name, e.getMessage());
+            LOG.warn("Failed to get routine load lag time for job {} ({}): {}", id, name, e.getMessage(), e);
             // Return empty map as fallback
             return Maps.newHashMap();
         }

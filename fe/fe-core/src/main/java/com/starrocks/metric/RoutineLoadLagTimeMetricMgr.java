@@ -111,7 +111,7 @@ public class RoutineLoadLagTimeMetricMgr {
         }
 
         public Map<Integer, GaugeMetricImpl<Long>> getPartitionMetrics() { 
-            return partitionMetrics; 
+            return Collections.unmodifiableMap(partitionMetrics);
         }
 
         public Map<Integer, Long> getPartitionLagTimes() {
