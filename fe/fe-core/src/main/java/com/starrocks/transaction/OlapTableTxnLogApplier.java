@@ -167,7 +167,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                     } // end for replicas
                     if (!skipUpdateReplicas.isEmpty()) {
-                        LOG.warn("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
+                        LOG.debug("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
                     }
 
                     if (hasFailedVersion && replicationNum == 1) {
