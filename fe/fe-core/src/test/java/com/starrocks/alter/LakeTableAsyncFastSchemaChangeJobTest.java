@@ -75,7 +75,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     private AlterJobV2 getAlterJob(Table table) {
         AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
         List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertEquals(1, jobs.size());
+        Assert.assertEquals(1, jobs.size());
         return jobs.get(0);
     }
 
@@ -87,8 +87,8 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             alterJob.run();
             Thread.sleep(100);
         }
-        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
-        Assertions.assertEquals(expectFastSchemaEvolution, (alterJob instanceof LakeTableAsyncFastSchemaChangeJob));
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
+        Assert.assertEquals(expectFastSchemaEvolution, (alterJob instanceof LakeTableAsyncFastSchemaChangeJob));
         return alterJob;
     }
 
@@ -352,7 +352,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
     private List<Column> getShortKeyColumns(Database db, OlapTable table) {
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         try {
             long baseIndexId = table.getBaseIndexId();
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
@@ -371,7 +371,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             }
             return shortKeyCols;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -390,7 +390,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
     private boolean isSchemaMatch(Database db, OlapTable table, List<String> columNames) {
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         try {
             long baseIndexId = table.getBaseIndexId();
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
@@ -406,46 +406,46 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             }
             return true;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
     private void createDupTableForAddKeyColumnTest(String tableName) throws Exception {
-        String createStmt = String.format("""
-                CREATE TABLE IF NOT EXISTS %s.%s (
-                k0 DATETIME,
-                k1 INT,
-                k2 BIGINT,\
-                v0 VARCHAR(1024)
-                ) DUPLICATE  KEY(k0, k1, k2)
-                DISTRIBUTED BY HASH(k0) BUCKETS 1
-                PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');""", DB_NAME, tableName);
+        String createStmt = String.format(
+                "CREATE TABLE IF NOT EXISTS %s.%s (" +
+                "k0 DATETIME," +
+                "k1 INT," +
+                "k2 BIGINT," +
+                "v0 VARCHAR(1024)" +
+                ") DUPLICATE  KEY(k0, k1, k2) " +
+                "DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');", DB_NAME, tableName);
         createTable(connectContext, createStmt);
     }
 
     private void createUniqueTableForAddKeyColumnTest(String tableName) throws Exception {
-        String createStmt = String.format("""
-                CREATE TABLE IF NOT EXISTS  %s.%s (
-                k0 DATETIME,
-                k1 INT,
-                k2 BIGINT,\
-                v0 VARCHAR(1024)
-                ) UNIQUE KEY(k0, k1, k2)
-                DISTRIBUTED BY HASH(k0) BUCKETS 1
-                PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');""", DB_NAME, tableName);
+        String createStmt = String.format(
+                "CREATE TABLE IF NOT EXISTS %s.%s (" +
+                "k0 DATETIME," +
+                "k1 INT," +
+                "k2 BIGINT," +
+                "v0 VARCHAR(1024)" +
+                ") UNIQUE KEY(k0, k1, k2) " +
+                "DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');", DB_NAME, tableName);
         createTable(connectContext, createStmt);
     }
 
     private void createAggTableForAddKeyColumnTest(String tableName) throws Exception {
-        String createStmt = String.format("""
-                CREATE TABLE IF NOT EXISTS %s.%s (
-                k0 DATETIME,
-                k1 INT,
-                k2 BIGINT,\
-                v0 INT SUM DEFAULT '0'
-                ) AGGREGATE KEY(k0, k1, k2)
-                DISTRIBUTED BY HASH(k0) BUCKETS 1
-                PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');""", DB_NAME, tableName);
+        String createStmt = String.format(
+                "CREATE TABLE IF NOT EXISTS %s.%s (" +
+                "k0 DATETIME," +
+                "k1 INT," +
+                "k2 BIGINT," +
+                "v0 INT SUM DEFAULT '0'" +
+                ") AGGREGATE KEY(k0, k1, k2) " +
+                "DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');", DB_NAME, tableName);
         createTable(connectContext, createStmt);
     }
 
@@ -453,33 +453,33 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         LakeTable tbl = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), tableName);
-        Assertions.assertNotNull(tbl);
+        Assert.assertNotNull(tbl);
         List<Column> oldShortKeys = getShortKeyColumns(db, tbl);
 
         executeAlterAndWaitFinish(tbl,
                 String.format("ALTER TABLE %s.%s ADD COLUMN new_k1 INT KEY DEFAULT '0'", DB_NAME, tableName), true);
-        Assertions.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
+        Assert.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
+        Assert.assertTrue(isSchemaMatch(db, tbl,
                 Lists.newArrayList("k0", "k1", "k2", "new_k1", "v0")));
 
         executeAlterAndWaitFinish(tbl,
                 String.format("ALTER TABLE %s.%s ADD COLUMN new_k2 INT KEY DEFAULT NULL", DB_NAME, tableName), true);
-        Assertions.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
+        Assert.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
+        Assert.assertTrue(isSchemaMatch(db, tbl,
                 Lists.newArrayList("k0", "k1", "k2", "new_k1", "new_k2", "v0")));
 
         executeAlterAndWaitFinish(tbl,
                 String.format(
                         "ALTER TABLE %s.%s ADD COLUMN new_k3 DATETIME KEY DEFAULT CURRENT_TIMESTAMP", DB_NAME, tableName), true);
-        Assertions.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
+        Assert.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
+        Assert.assertTrue(isSchemaMatch(db, tbl,
                 Lists.newArrayList("k0", "k1", "k2", "new_k1", "new_k2", "new_k3", "v0")));
 
         executeAlterAndWaitFinish(tbl,
                 String.format(
                         "ALTER TABLE %s.%s ADD COLUMN new_k4 VARCHAR(100) KEY AFTER k2", DB_NAME, tableName), true);
-        Assertions.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
+        Assert.assertFalse(isShortKeyChanged(db, tbl, oldShortKeys));
+        Assert.assertTrue(isSchemaMatch(db, tbl,
                 Lists.newArrayList("k0", "k1", "k2", "new_k4", "new_k1", "new_k2", "new_k3", "v0")));
     }
 
@@ -487,27 +487,27 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         LakeTable tbl = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), tableName);
-        Assertions.assertNotNull(tbl);
+        Assert.assertNotNull(tbl);
         List<Column> oldShortKeys = getShortKeyColumns(db, tbl);
 
         executeAlterAndWaitFinish(tbl,
                 String.format("ALTER TABLE %s.%s ADD COLUMN new_k1 INT KEY FIRST", DB_NAME, tableName), false);
-        Assertions.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
+        Assert.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
+        Assert.assertTrue(isSchemaMatch(db, tbl,
                 Lists.newArrayList("new_k1", "k0", "k1", "k2", "v0")));
 
         oldShortKeys = getShortKeyColumns(db, tbl);
         executeAlterAndWaitFinish(tbl,
                 String.format("ALTER TABLE %s.%s ADD COLUMN new_k2 VARCHAR(100) KEY AFTER k0", DB_NAME, tableName), false);
-        Assertions.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
+        Assert.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
+        Assert.assertTrue(isSchemaMatch(db, tbl,
                 Lists.newArrayList("new_k1", "k0", "new_k2", "k1", "k2", "v0")));
 
         oldShortKeys = getShortKeyColumns(db, tbl);
         executeAlterAndWaitFinish(tbl,
                 String.format("ALTER TABLE %s.%s MODIFY COLUMN new_k1 BIGINT KEY", DB_NAME, tableName), false);
-        Assertions.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
-        Assertions.assertTrue(isSchemaMatch(db, tbl,
+        Assert.assertTrue(isShortKeyChanged(db, tbl, oldShortKeys));
+        Assert.assertTrue(isSchemaMatch(db, tbl,
                 Lists.newArrayList("new_k1", "k0", "new_k2", "k1", "k2", "v0")));
     }
 
