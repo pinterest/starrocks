@@ -198,6 +198,10 @@ public class CacheSelectBackendSelectorTest {
 
                 globalStateMgr.getStarOSAgent();
                 result = starOsAgent;
+                
+                globalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
         new Expectations() {
@@ -415,6 +419,10 @@ public class CacheSelectBackendSelectorTest {
 
                 globalStateMgr.getStarOSAgent();
                 result = starOsAgent;
+                
+                globalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
         new Expectations() {
@@ -493,6 +501,10 @@ public class CacheSelectBackendSelectorTest {
 
                 globalStateMgr.getStarOSAgent();
                 result = starOsAgent;
+                
+                globalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -712,6 +724,10 @@ public class CacheSelectBackendSelectorTest {
 
                 globalStateMgr.getStarOSAgent();
                 result = starOsAgent;
+                
+                globalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
         Long starOsPreferredCnId = -1L;
