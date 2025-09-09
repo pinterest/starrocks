@@ -279,6 +279,10 @@ public class HeartbeatMgrTest {
                 minTimes = 0;
                 result = systemInfoService;
                 
+                systemInfoService.getBackend(1001L);
+                minTimes = 0;
+                result = null; // No backend found, should look for compute node
+                
                 systemInfoService.getComputeNode(1001L);
                 minTimes = 0;
                 result = computeNode;
@@ -382,6 +386,10 @@ public class HeartbeatMgrTest {
                 nodeMgr.getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
+                
+                systemInfoService.getBackend(1003L);
+                minTimes = 0;
+                result = null; // No backend found, should look for compute node
                 
                 systemInfoService.getComputeNode(1003L);
                 minTimes = 0;
