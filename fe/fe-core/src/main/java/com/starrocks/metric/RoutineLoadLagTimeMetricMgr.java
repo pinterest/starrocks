@@ -1,25 +1,21 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-
-//   http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.   
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License. 
 
 package com.starrocks.metric;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.metric.Metric.MetricUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -34,8 +30,9 @@ import java.util.Map;
  */
 public class RoutineLoadLagTimeMetricMgr {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadLagTimeMetricMgr.class);
+    private static final long STALE_THRESHOLD_MS = 5L * 60 * 1000; // 5 minutes; to prevent memory leaks
     
-    private static volatile RoutineLoadLagTimeMetricMgr instance;
+    private static final RoutineLoadLagTimeMetricMgr INSTANCE = new RoutineLoadLagTimeMetricMgr();
     
     // Use composite key (dbId_jobName) to uniquely identify jobs
     private final Map<String, RoutineLoadLagTimeMetric> jobLagTimeMap = Maps.newConcurrentMap();
@@ -43,33 +40,26 @@ public class RoutineLoadLagTimeMetricMgr {
     private RoutineLoadLagTimeMetricMgr() {}
     
     public static RoutineLoadLagTimeMetricMgr getInstance() {
-        if (instance == null) {
-            synchronized (RoutineLoadLagTimeMetricMgr.class) {
-                if (instance == null) {
-                    instance = new RoutineLoadLagTimeMetricMgr();
-                }
-            }
-        }
-        return instance;
+        return INSTANCE;
     }
 
-    private String getJobKey(KafkaRoutineLoadJob job) {
-        return job.getDbId() + "." + job.getName();
+    private String getJobKey(long dbId, String jobName) {
+        return dbId + "." + jobName;
     }
 
     private static class RoutineLoadLagTimeMetric {
         private long updateTimestamp;
         private final String jobName;
         
-        private final Map<Integer, GaugeMetricImpl<Long>> partitionMetrics;
+        private final Map<Integer, Long> partitionLagTimes;
         private final GaugeMetricImpl<Long> maxLagTimeMetric;
         
         public RoutineLoadLagTimeMetric(String jobName) {
             this.updateTimestamp = -1;
             this.jobName = jobName;
-            this.partitionMetrics = Maps.newHashMap();
+            this.partitionLagTimes = Maps.newHashMap();
             this.maxLagTimeMetric = new GaugeMetricImpl<>(
-                    "routine_load_lag_time_seconds_max",
+                    "routine_load_max_lag_time_of_partition",
                     MetricUnit.SECONDS,
                     "Maximum lag time across all partitions for routine load job"
             );
@@ -80,46 +70,21 @@ public class RoutineLoadLagTimeMetricMgr {
         
         public void updateMetrics(Map<Integer, Long> newPartitionLagTimes, long newUpdateTimestamp) {
             this.updateTimestamp = newUpdateTimestamp;
-            this.partitionMetrics.clear();
-
+            this.partitionLagTimes.clear();
+            this.partitionLagTimes.putAll(newPartitionLagTimes);
             // Calculate max lag time from partition lag times
             long newMaxLagTime = newPartitionLagTimes.values().stream()
                     .mapToLong(Long::longValue)
                     .max()
                     .orElse(0L);
-
-            for (Map.Entry<Integer, Long> entry : newPartitionLagTimes.entrySet()) {
-                int partition = entry.getKey();
-                long lagTime = entry.getValue();
-                
-                GaugeMetricImpl<Long> partitionMetric = new GaugeMetricImpl<>(
-                        "routine_load_lag_time_seconds_partition",
-                        MetricUnit.SECONDS,
-                        "Kafka partition lag time in seconds"
-                );
-                partitionMetric.addLabel(new MetricLabel("job_name", jobName));
-                partitionMetric.addLabel(new MetricLabel("partition", String.valueOf(partition)));
-                partitionMetric.setValue(lagTime);
-                
-                this.partitionMetrics.put(partition, partitionMetric);
-            }
-
-            this.maxLagTimeMetric.setValue(newMaxLagTime);
             
-            LOG.debug("Updated metrics for job {}: max_lag_time={}s, partitions={}", 
-                     jobName, newMaxLagTime, newPartitionLagTimes.size());
-        }
-
-        public Map<Integer, GaugeMetricImpl<Long>> getPartitionMetrics() { 
-            return Collections.unmodifiableMap(partitionMetrics);
+            this.maxLagTimeMetric.setValue(newMaxLagTime);
+            LOG.debug("Updated metrics for job {}: partitions={}", 
+                     jobName, newPartitionLagTimes.size());
         }
 
         public Map<Integer, Long> getPartitionLagTimes() {
-            Map<Integer, Long> lagTimes = Maps.newHashMap();
-            partitionMetrics.forEach((partition, metric) -> 
-                    lagTimes.put(partition, metric.getValue())
-            );
-            return lagTimes;
+            return Maps.newHashMap(partitionLagTimes);
         }
 
         public GaugeMetricImpl<Long> getMaxLagTimeMetric() {
@@ -131,19 +96,19 @@ public class RoutineLoadLagTimeMetricMgr {
         }
         
         public boolean hasData() {
-            return !partitionMetrics.isEmpty() && updateTimestamp > 0;
+            return !partitionLagTimes.isEmpty() && updateTimestamp > 0;
         }
     }
 
-    public void updateRoutineLoadLagTimeMetric(KafkaRoutineLoadJob job, Map<Integer, Long> partitionLagTimes) {
+    public void updateRoutineLoadLagTimeMetric(long dbId, String jobName, Map<Integer, Long> partitionLagTimes) {
         try {
             if (partitionLagTimes.isEmpty()) {
-                LOG.debug("No partition lag times available for job {}", job.getName());
+                LOG.debug("No partition lag times available for job {}", jobName);
                 return;
             }
             
             // Get or create the metric structure using composite key
-            String jobKey = getJobKey(job);
+            String jobKey = getJobKey(dbId, jobName);
             RoutineLoadLagTimeMetric lagTimeMetric =
                     jobLagTimeMap.computeIfAbsent(jobKey, RoutineLoadLagTimeMetric::new);
             
@@ -155,10 +120,41 @@ public class RoutineLoadLagTimeMetricMgr {
                      jobKey, partitionLagTimes.size());
             
         } catch (Exception e) {
-            LOG.warn("Failed to update lag time data for Kafka job {}: {}", getJobKey(job), e.getMessage());
+            LOG.warn("Failed to update lag time data for Kafka job {}: {}", getJobKey(dbId, jobName), e.getMessage());
         }
     }
     
+    /**
+     * Clean up stale lag time metrics to prevent memory leaks
+     */
+    public void cleanupStaleMetrics() {
+        if (!Config.enable_routine_load_lag_time_metrics) {
+            return;
+        }
+        
+        try {
+            long now = System.currentTimeMillis();
+            long staleThresholdMs = STALE_THRESHOLD_MS;
+            
+            // Clean up stale data
+            Iterator<Map.Entry<String, RoutineLoadLagTimeMetric>> jobLagTimeIterator = jobLagTimeMap.entrySet().iterator();
+            while (jobLagTimeIterator.hasNext()) {
+                Map.Entry<String, RoutineLoadLagTimeMetric> entry = jobLagTimeIterator.next();
+                String jobKey = entry.getKey();
+                RoutineLoadLagTimeMetric lagTimeMetric = entry.getValue();
+                
+                // Remove stale data
+                if (lagTimeMetric.isStale(now, staleThresholdMs)) {
+                    LOG.debug("Removing stale lag time data for job {}", jobKey);
+                    jobLagTimeIterator.remove();
+                }
+            }
+            
+        } catch (Exception e) {
+            LOG.warn("Failed to cleanup stale routine load lag time metrics", e);
+        }
+    }
+
     /**
      * Collect routine load lag time metrics - now uses stored data instead of calculating on-demand
      */
@@ -168,26 +164,14 @@ public class RoutineLoadLagTimeMetricMgr {
         }
         
         try {
-            long now = System.currentTimeMillis();
-            long staleThresholdMs = 5 * 60 * 1000; // 5 minutes; to prevent memory leaks
-            
-            // Clean up stale data and emit metrics
-            Iterator<Map.Entry<String, RoutineLoadLagTimeMetric>> jobLagTimeIterator = jobLagTimeMap.entrySet().iterator();
-            while (jobLagTimeIterator.hasNext()) {
-                Map.Entry<String, RoutineLoadLagTimeMetric> entry = jobLagTimeIterator.next();
+            // Emit metrics for all jobs with data
+            for (Map.Entry<String, RoutineLoadLagTimeMetric> entry : jobLagTimeMap.entrySet()) {
                 String jobKey = entry.getKey();
                 RoutineLoadLagTimeMetric lagTimeMetric = entry.getValue();
                 
                 // Skip metrics that don't have data yet
                 if (!lagTimeMetric.hasData()) {
                     LOG.debug("Skipping job {} - no data available yet", jobKey);
-                    continue;
-                }
-                
-                // Remove stale data
-                if (lagTimeMetric.isStale(now, staleThresholdMs)) {
-                    LOG.debug("Removing stale lag time data for job {}", jobKey);
-                    jobLagTimeIterator.remove();
                     continue;
                 }
                 
@@ -203,10 +187,7 @@ public class RoutineLoadLagTimeMetricMgr {
     private void emitJobMetrics(String jobKey, RoutineLoadLagTimeMetric lagTimeMetric, MetricVisitor visitor) {
         try {            
             if (lagTimeMetric.hasData()) {
-                Map<Integer, GaugeMetricImpl<Long>> partitionMetrics = lagTimeMetric.getPartitionMetrics();
-                for (GaugeMetricImpl<Long> partitionMetric : partitionMetrics.values()) {
-                    visitor.visit(partitionMetric);
-                }
+                // only max lag is emitted; partition-level lag is only available through `SHOW ROUTINE LOAD`
                 visitor.visit(lagTimeMetric.getMaxLagTimeMetric());
             }            
         } catch (Exception e) {
@@ -214,24 +195,24 @@ public class RoutineLoadLagTimeMetricMgr {
         }
     }
 
-    public Map<Integer, Long> getPartitionLagTimes(KafkaRoutineLoadJob job) {
+    public Map<Integer, Long> getPartitionLagTimes(long dbId, String jobName) {
         try {
-            String jobKey = getJobKey(job);
+            String jobKey = getJobKey(dbId, jobName);
             RoutineLoadLagTimeMetric lagTimeMetric = jobLagTimeMap.get(jobKey);
             
             if (lagTimeMetric == null || !lagTimeMetric.hasData()) {
-                LOG.info("No lag time metric found for job {} ({})", jobKey, job.getName());
+                LOG.debug("No lag time metric found for job {} ({})", jobKey, jobName);
                 return Collections.emptyMap();
             }
             
             Map<Integer, Long> lagTimes = lagTimeMetric.getPartitionLagTimes();
-            LOG.info("Retrieved {} partition lag times for job {} ({})", 
-                     lagTimes.size(), jobKey, job.getName());
+            LOG.debug("Retrieved {} partition lag times for job {} ({})", 
+                     lagTimes.size(), jobKey, jobName);
             return lagTimes;
             
         } catch (Exception e) {
             LOG.warn("Failed to get partition lag times for job {} ({}): {}", 
-                     getJobKey(job), job.getName(), e.getMessage());
+                     getJobKey(dbId, jobName), jobName, e.getMessage());
             return Collections.emptyMap();
         }
     }
