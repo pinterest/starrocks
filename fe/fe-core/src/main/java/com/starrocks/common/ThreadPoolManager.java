@@ -251,5 +251,15 @@ public class ThreadPoolManager {
             executor.setMaximumPoolSize(poolSize);
         }
     }
+
+    /**
+     * Calculate the number of CPU cores available on the machine.
+     * Manually copied from StarRocks upstream - 88adf101a0
+     *
+     * @return The number of CPU cores available.
+     */
+    public static int cpuCores() {
+        return Runtime.getRuntime().availableProcessors();
+    }
 }
 
