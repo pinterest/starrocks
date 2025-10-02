@@ -191,6 +191,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("starlet_use_star_cache", [&]() { update_staros_starcache(); });
         _config_callback.emplace("starlet_star_cache_mem_size_percent", [&]() { update_staros_starcache(); });
         _config_callback.emplace("starlet_star_cache_mem_size_bytes", [&]() { update_staros_starcache(); });
+        _config_callback.emplace("starlet_dir_listing_cache_ttl_sec", [&]() { update_staros_starcache(); });
 #endif
         _config_callback.emplace("transaction_apply_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();

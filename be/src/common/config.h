@@ -977,6 +977,8 @@ CONF_mInt32(starlet_cache_thread_num, "16");
 CONF_String(starlet_cache_dir, "");
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
 CONF_Int32(starlet_cache_check_interval, "900");
+// Directory listing cache TTL (time to live) in seconds for Starlet filesystem
+CONF_mInt32(starlet_dir_listing_cache_ttl_sec, "3599");
 // Cache backend cache evictor interval (in seconds)
 CONF_mInt32(starlet_cache_evict_interval, "60");
 // Cache will start evict cache files if free space belows this value(percentage)
