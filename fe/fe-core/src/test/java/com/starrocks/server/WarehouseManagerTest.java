@@ -283,10 +283,13 @@ public class WarehouseManagerTest {
     }
 
     @Test
+<<<<<<< Updated upstream
 <<<<<<< HEAD
 >>>>>>> 733b7282580 (manage worker groups for RIG, use StarOs for primary tablet->CN assignment)
 =======
 >>>>>>> 687120fc64c (node selection by resource group id)
+=======
+>>>>>>> Stashed changes
     public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws UserException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);

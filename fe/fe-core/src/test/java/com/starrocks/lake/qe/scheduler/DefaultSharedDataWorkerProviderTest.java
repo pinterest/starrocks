@@ -518,7 +518,6 @@ public class DefaultSharedDataWorkerProviderTest {
         }
         // check that we're not using the same backup for every tablet
         Assert.assertTrue(chosenBackups.size() > 1);
->>>>>>> 733b7282580 (manage worker groups for RIG, use StarOs for primary tablet->CN assignment)
     }
 
     private OlapScanNode newOlapScanNode(int id, int numBuckets) {

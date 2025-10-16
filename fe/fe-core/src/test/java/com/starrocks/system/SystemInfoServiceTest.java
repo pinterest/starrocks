@@ -514,11 +514,14 @@ public class SystemInfoServiceTest {
         Assert.assertEquals(List.of(3L), service.getAvailableComputeNodeIds());
 
         service.dropComputeNode("host3", 1000);
+<<<<<<< Updated upstream
 <<<<<<< HEAD
 >>>>>>> 733b7282580 (manage worker groups for RIG, use StarOs for primary tablet->CN assignment)
 =======
         Assert.assertFalse(service.usingResourceIsolationGroups());
 >>>>>>> 687120fc64c (node selection by resource group id)
+=======
+>>>>>>> Stashed changes
     }
 
 }
