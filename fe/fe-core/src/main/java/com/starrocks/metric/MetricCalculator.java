@@ -39,16 +39,11 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
-import com.starrocks.system.TabletComputeNodeMapper;
-=======
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
->>>>>>> d040c2db555 (metrics for tracking cn to tablet mappings)
 
 import java.util.ArrayList;
 import java.util.Comparator;
