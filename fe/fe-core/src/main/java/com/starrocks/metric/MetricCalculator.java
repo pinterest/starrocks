@@ -214,14 +214,15 @@ public class MetricCalculator extends TimerTask {
                 TabletComputeNodeMapper mapper = clusterInfoService.internalTabletMapper();
                 if (mapper != null) {
                     // Update backup selection counts
-                    Map<Long, Long> computeNodeToActingAsBackupForTabletCount = mapper.computeNodeToActingAsBackupForTabletCount();
+                    Map<Long, Long> computeNodeToActingAsBackupForTabletCount =
+                            mapper.computeNodeToActingAsBackupForTabletCount();
                     for (Map.Entry<Long, Long> pair : computeNodeToActingAsBackupForTabletCount.entrySet()) {
                         String cnId = String.valueOf(pair.getKey());
                         long actingAsBackupCount = pair.getValue();
                         if (actingAsBackupCount <= 0) {
-                        // For CN in different resource isolation groups from this FE, this FE won't have information about owned
-                        // tablet counts. Rather than report useless information, we skip this.
-                        continue;
+                            // For CN in different resource isolation groups from this FE, this FE won't have information about owned
+                            // tablet counts. Rather than report useless information, we skip this.
+                            continue;
                         }
 
                         LongCounterMetric m = MetricRepo.COUNTER_CN_SELECTED_FOR_BACKUP_TABLET_SCAN.getMetric(cnId);
