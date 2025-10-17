@@ -68,9 +68,6 @@ public class BackendSelectorFactory {
             return new NoopBackendSelector();
         }
 
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
-
         int desiredDatacacheReplicas = sessionVariable.getNumDesiredDatacacheReplicas();
         List<String> datacacheSelectResourceGroups = sessionVariable.getDatacacheSelectResourceGroups();
         if (scanNode instanceof SchemaScanNode) {
