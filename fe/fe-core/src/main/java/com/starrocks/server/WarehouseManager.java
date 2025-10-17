@@ -347,33 +347,4 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
-        throw new DdlException("Multi-Warehouse is not implemented");
-    }
-
-    public void dropWarehouse(DropWarehouseStmt stmt) throws DdlException {
-        throw new DdlException("Multi-Warehouse is not implemented");
-    }
-
-    public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
-        throw new DdlException("Multi-Warehouse is not implemented");
-    }
-
-    public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
-        throw new DdlException("Multi-Warehouse is not implemented");
-    }
-
-    public Set<String> getAllWarehouseNames() {
-        return Sets.newHashSet(DEFAULT_WAREHOUSE_NAME);
-    }
-
-    public List<Long> getAllWarehouseIds() {
-        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            return new ArrayList<>(idToWh.keySet());
-        }
-    }
-
-    public void replayCreateWarehouse(Warehouse warehouse) {
-
-    }
 }
