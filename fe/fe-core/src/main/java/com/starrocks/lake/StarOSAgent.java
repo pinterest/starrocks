@@ -338,7 +338,7 @@ public class StarOSAgent {
     }
 
     // Returns new worker group id
-    private long createWorkerGroup(String ownerId) {
+    private long createWorkerGroupForOwner(String ownerId) {
         WorkerGroupSpec workerGroupSpec = WorkerGroupSpec.getDefaultInstance();
         try {
             WorkerGroupDetailInfo workerGroupDetailInfo =
@@ -382,7 +382,7 @@ public class StarOSAgent {
     // Gets worker group for owner. Creates a new worker group if one doesn't already exist for owner.
     public long getOrCreateWorkerGroupForOwner(String ownerId) {
         Optional<Long> existingWorkerGroupId = tryGetWorkerGroupForOwner(ownerId);
-        return existingWorkerGroupId.orElseGet(() -> createWorkerGroup(ownerId));
+        return existingWorkerGroupId.orElseGet(() -> createWorkerGroupForOwner(ownerId));
     }
 
     /**
