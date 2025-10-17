@@ -72,7 +72,6 @@ import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyComputeNodeClause;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
