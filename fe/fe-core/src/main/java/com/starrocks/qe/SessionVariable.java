@@ -4413,7 +4413,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.likePredicateConsolidateMin = value;
     }
 
-<<<<<<< HEAD
     public String getCustomQueryId() {
         return customQueryId;
     }

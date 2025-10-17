@@ -40,7 +40,6 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import static com.starrocks.system.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
 /**
  * Select nodes when creating table or loading data.
  */

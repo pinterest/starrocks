@@ -252,7 +252,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
         List<Long> cnIdsOrderedByPreference =
-                mapper.backupComputeNodesForTablet(tabletId, workerId, availableID2ComputeNode.size()-1);
+                mapper.backupComputeNodesForTablet(tabletId, workerId, availableID2ComputeNode.size() - 1);
         if (cnIdsOrderedByPreference == null) {
             LOG.warn(String.format("The internal tablet mapper doesn't seem to know about the resource" +
                             " isolation group %s. Its state is %s.",
