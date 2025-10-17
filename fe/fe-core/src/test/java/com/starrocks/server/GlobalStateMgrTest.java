@@ -43,13 +43,11 @@ import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.bdbje.BDBEnvironment;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
@@ -85,7 +83,7 @@ public class GlobalStateMgrTest {
 
     @After
     public void tearDown() {
-        MetaContext.remove();
+        // Cleanup after tests
     }
 
     @Test
@@ -97,7 +95,6 @@ public class GlobalStateMgrTest {
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
         imageWriter.setOutputStream(image2.getDataOutputStream());
         globalStateMgr.saveHeader(imageWriter.getDataOutputStream());
-        MetaContext.get().setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_4);
         globalStateMgr.loadHeader(image2.getDataInputStream());
     }
 

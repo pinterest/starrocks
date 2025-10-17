@@ -21,7 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.parser.AstBuilder;
@@ -82,7 +82,7 @@ public class AstBuilderTest {
         StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
-        ModifyFrontendAddressClause clause = (ModifyFrontendAddressClause) field.get(statement);
+        ModifyFrontendClause clause = (ModifyFrontendClause) field.get(statement);
         Assert.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
     }
 
