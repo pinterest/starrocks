@@ -18,6 +18,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.system.TabletComputeNodeMapper;
@@ -32,7 +33,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.qe.scheduler.Utils.getOptionalTabletId;
+import static com.starrocks.qe.scheduler.Utils.maybeGetTabletId;
 
 
 // This class should only be used in shared data mode.
@@ -44,17 +45,19 @@ public class CacheSelectBackendSelector implements BackendSelector {
     private final List<TScanRangeLocations> locations;
     private final CacheSelectComputeNodeSelectionProperties props;
     private final long warehouseId;
+    private final WorkerProvider callerWorkerProvider;
 
     // Outputs
     private final FragmentScanRangeAssignment assignment;
     private final Set<Long> allSelectedWorkerIds;
 
     public CacheSelectBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                      FragmentScanRangeAssignment assignment,
+                                      FragmentScanRangeAssignment assignment, WorkerProvider callerWorkerProvider,
                                       CacheSelectComputeNodeSelectionProperties props, long warehouseId) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
+        this.callerWorkerProvider = callerWorkerProvider;
         this.props = props;
         this.warehouseId = warehouseId;
         this.allSelectedWorkerIds = new HashSet<>();
@@ -119,7 +122,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
                         scanRangeLocations);
             }
             TScanRangeParams scanRangeParams = new TScanRangeParams(scanRangeLocations.scan_range);
-            Optional<Long> tabletId = getOptionalTabletId(scanRangeLocations.scan_range);
+            Optional<Long> tabletId = maybeGetTabletId(scanRangeLocations.scan_range);
             for (String resourceIsolationGroupId : props.resourceIsolationGroups) {
                 Set<Long> selectedCn;
                 // If we've been provided the relevant tablet id, and we're using resource isolation groups, which

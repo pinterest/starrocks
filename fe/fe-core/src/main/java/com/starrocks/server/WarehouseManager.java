@@ -376,12 +376,4 @@ public class WarehouseManager implements Writable {
     public void replayCreateWarehouse(Warehouse warehouse) {
 
     }
-
-    public void replayDropWarehouse(DropWarehouseLog log) {
-
-    }
-
-    public void replayAlterWarehouse(Warehouse warehouse) {
-
-    }
 }
