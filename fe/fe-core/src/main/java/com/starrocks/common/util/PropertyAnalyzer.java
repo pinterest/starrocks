@@ -1705,4 +1705,12 @@ public class PropertyAnalyzer {
         sb.append(")");
         return sb.toString();
     }
+
+    public static String getResourceIsolationGroupFromProperties(Map<String, String> properties) {
+        String groupProperty = properties.get(PROPERTIES_LABELS_GROUP);
+        if (groupProperty != null && groupProperty.startsWith(PROPERTIES_GROUP + COLON_DELIMITER)) {
+            return groupProperty.substring((PROPERTIES_GROUP + COLON_DELIMITER).length());
+        }
+        return "";
+    }
 }
