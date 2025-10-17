@@ -50,6 +50,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+
 /**
  * This class extends the primary identifier of a compute node with computing capabilities
  * and no storage capacity。
@@ -119,6 +121,10 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
     @SerializedName("warehouseId")
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    
+    @SerializedName("resourceIsolationGroup")
+    private String resourceIsolationGroup = null;
+    
     // Indicate there is whether storage_path or not with CN node
     // It must be true for Backend
     @SerializedName("isSetStoragePath")
@@ -295,6 +301,13 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    public String getResourceIsolationGroup() {
+        return java.util.Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+    }
+    public void setResourceIsolationGroup(String group) {
+        this.resourceIsolationGroup = group;
     }
 
     // For TEST ONLY

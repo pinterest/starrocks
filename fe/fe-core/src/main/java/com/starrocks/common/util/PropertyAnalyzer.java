@@ -148,6 +148,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
+    public static final String PROPERTIES_LABELS_GROUP = "labels.resource_isolation_group";
+    private static final String COLON_DELIMITER = ":";
+    private static final String PROPERTIES_GROUP = "group";
 
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
 
@@ -988,6 +991,7 @@ public class PropertyAnalyzer {
                 .collect(Collectors.joining(","));
     }
 
+
     public static String analyzeLocation(Map<String, String> properties, boolean removeAnalyzedProp) {
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
@@ -1701,5 +1705,13 @@ public class PropertyAnalyzer {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    public static String getResourceIsolationGroupFromProperties(Map<String, String> properties) {
+        String groupProperty = properties.get(PROPERTIES_LABELS_GROUP);
+        if (groupProperty != null && groupProperty.startsWith(PROPERTIES_GROUP + COLON_DELIMITER)) {
+            return groupProperty.substring((PROPERTIES_GROUP + COLON_DELIMITER).length());
+        }
+        return "";
     }
 }

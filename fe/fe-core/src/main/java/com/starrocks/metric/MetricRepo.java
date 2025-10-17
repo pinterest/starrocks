@@ -142,6 +142,20 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("query_queue_v2_category_state", MetricUnit.REQUESTS,
                             "the current state of each category"));
 
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CN_SELECTED_FOR_BACKUP_TABLET_SCAN =
+            new MetricWithLabelGroup<>("cn_id",
+                    () -> new LongCounterMetric("cn_selected_for_backup_tablet_scan", MetricUnit.NOUNIT,
+                            "times this FE selected the given CN as a backup for a scan of some tablet"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CN_SELECTED_FOR_TABLET_SCAN =
+            new MetricWithLabelGroup<>("cn_id",
+                    () -> new LongCounterMetric("cn_selected_for_tablet_scan", MetricUnit.NOUNIT,
+                            "times this FE selected the given CN for a scan of some tablet"));
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Long>> GAUGE_CN_TO_OWNED_TABLET_COUNT =
+            new MetricWithLabelGroup<>("cn_id",
+                    () -> new GaugeMetricImpl<>("cn_to_owned_tablet_count", MetricUnit.NOUNIT,
+                            "Number of tablets for which the cn is primarily responsible " +
+                                    "(only populated appropriately for CN in the same Resource isolation group as this FE)"));
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
 
@@ -162,6 +176,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_PAUSED;
     public static LongCounterMetric COUNTER_SHORTCIRCUIT_QUERY;
     public static LongCounterMetric COUNTER_SHORTCIRCUIT_RPC;
+    public static LongCounterMetric COUNTER_FAIL_OPEN_POLICY_USED;
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
@@ -470,12 +485,14 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
         COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
+        COUNTER_FAIL_OPEN_POLICY_USED =
+                new LongCounterMetric("failopen_policy_used", MetricUnit.REQUESTS, "times fail-open policy used for cauthz");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_FAIL_OPEN_POLICY_USED);
 
         COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
                                                            "total analysis error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
-
-        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, 
+        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS,
                                                            "total internal error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_INTERNAL_ERR);
 

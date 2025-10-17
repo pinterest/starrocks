@@ -58,6 +58,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -145,6 +146,7 @@ public class StarOSAgent {
     }
 
     public String addFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
         try {
             return client.addFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
@@ -153,6 +155,7 @@ public class StarOSAgent {
     }
 
     public void removeFileStoreByName(String fsName) throws DdlException {
+        prepare();
         try {
             client.removeFileStoreByName(fsName, serviceId);
         } catch (StarClientException e) {
@@ -161,6 +164,7 @@ public class StarOSAgent {
     }
 
     public void updateFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
         try {
             client.updateFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
@@ -169,6 +173,7 @@ public class StarOSAgent {
     }
 
     public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
+        prepare();
         try {
             return client.getFileStoreByName(fsName, serviceId);
         } catch (StarClientException e) {
@@ -180,6 +185,7 @@ public class StarOSAgent {
     }
 
     public FileStoreInfo getFileStore(String fsKey) throws DdlException {
+        prepare();
         try {
             return client.getFileStore(fsKey, serviceId);
         } catch (StarClientException e) {
@@ -191,6 +197,7 @@ public class StarOSAgent {
     }
 
     public List<FileStoreInfo> listFileStore() throws DdlException {
+        prepare();
         try {
             return client.listFileStore(serviceId);
         } catch (StarClientException e) {
@@ -215,6 +222,7 @@ public class StarOSAgent {
     }
 
     public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
+        prepare();
         try {
             FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
             if (fsType == null || fsType == FileStoreType.INVALID) {
@@ -230,6 +238,7 @@ public class StarOSAgent {
     }
 
     public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
+        prepare();
         try {
             String suffix = constructTablePath(dbId, tableId);
             FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix);
@@ -280,6 +289,7 @@ public class StarOSAgent {
                 workerId = workerToId.get(workerIpPort);
 
             } else {
+                prepare();
                 // When FE && staros restart, workerToId is Empty, but staros already persisted
                 // worker infos, so we need to get workerId from starMgr
                 try {
@@ -300,6 +310,7 @@ public class StarOSAgent {
     }
 
     public long getWorkerTabletNum(String workerIpPort) {
+        prepare();
         try {
             WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
             return workerInfo.getTabletNum();
@@ -307,6 +318,71 @@ public class StarOSAgent {
             LOG.info("Failed to get worker tablet num from starMgr, Error: {}.", e.getMessage());
         }
         return 0;
+    }
+
+    private long getWorkerGroupOfWorker(long workerId) {
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.listWorkerGroup(serviceId, Collections.emptyList(), true);
+            for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
+                for (WorkerInfo workerInfo : detailInfo.getWorkersInfoList()) {
+                    if (workerInfo.getWorkerId() == workerId) {
+                        return workerInfo.getGroupId();
+                    }
+                }
+            }
+            LOG.warn("Could not find worker {} in any worker group", workerId);
+            return -1;
+        } catch (StarClientException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Returns new worker group id
+    private long createWorkerGroupForOwner(String ownerId) {
+        WorkerGroupSpec workerGroupSpec = WorkerGroupSpec.getDefaultInstance();
+        try {
+            WorkerGroupDetailInfo workerGroupDetailInfo =
+                    client.createWorkerGroup(serviceId, ownerId, workerGroupSpec, new HashMap<>(), new HashMap<>());
+            LOG.info("For owner {}, created worker group: {}", ownerId, workerGroupDetailInfo);
+            return workerGroupDetailInfo.getGroupId();
+        } catch (StarClientException e) {
+            LOG.error("For owner {}, failed to create worker group", ownerId);
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Tries to find worker group for owner.
+    public Optional<Long> tryGetWorkerGroupForOwner(String ownerId) {
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.listWorkerGroup(serviceId, new HashMap<>());
+            LOG.info("All existing worker groups: {}", workerGroupDetailInfos);
+            long workerGroupId = -1;
+            for (WorkerGroupDetailInfo info : workerGroupDetailInfos) {
+                if (!info.getOwner().equals(ownerId)) {
+                    continue;
+                }
+                if (workerGroupId != -1) {
+                    LOG.error("Found multiple worker groups for same owner {}, skipping latter group: {}", ownerId,
+                            info.getGroupId());
+                    continue;
+                }
+                workerGroupId = info.getGroupId();
+                LOG.info("Found worker group for owner {}: {}", ownerId, info.getGroupId());
+            }
+            if (workerGroupId != -1) {
+                return Optional.of(workerGroupId);
+            }
+            return Optional.empty();
+        } catch (StarClientException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Gets worker group for owner. Creates a new worker group if one doesn't already exist for owner.
+    public long getOrCreateWorkerGroupForOwner(String ownerId) {
+        Optional<Long> existingWorkerGroupId = tryGetWorkerGroupForOwner(ownerId);
+        return existingWorkerGroupId.orElseGet(() -> createWorkerGroupForOwner(ownerId));
     }
 
     /**
@@ -350,7 +426,7 @@ public class StarOSAgent {
             tryRemovePreviousWorker(nodeId);
             workerToId.put(workerIpPort, workerId);
             workerToNode.put(workerId, nodeId);
-            LOG.info("add worker {} success, nodeId is {}", workerId, nodeId);
+            LOG.info("add worker {} success, nodeId is {}, workerGroupId is {}", workerId, nodeId, workerGroupId);
         }
     }
 
@@ -360,6 +436,7 @@ public class StarOSAgent {
         if (prevWorkerId < 0) {
             return;
         }
+        prepare();
         try {
             client.removeWorker(serviceId, prevWorkerId);
         } catch (StarClientException e) {
@@ -378,10 +455,25 @@ public class StarOSAgent {
         try {
             client.removeWorker(serviceId, workerId, workerGroupId);
         } catch (StarClientException e) {
-            // when multi threads remove this worker, maybe we would get "NOT_EXIST"
-            // but it is right, so only need to throw exception
-            // if code is not StarClientException.ExceptionCode.NOT_EXIST
-            if (e.getCode() != StatusCode.NOT_EXIST) {
+            LOG.error("Failed to remove worker {} from group {}", workerId, workerGroupId);
+            if (e.getCode() == StatusCode.INVALID_ARGUMENT) {
+                long actualGroupId = getWorkerGroupOfWorker(workerId);
+                if (actualGroupId != workerGroupId) {
+                    LOG.error(
+                            "Failed to remove worker {} from group {} because the worker actually belongs to {}, trying again " +
+                                    "with correct group",
+                            workerId, workerGroupId, actualGroupId);
+                    try {
+                        client.removeWorker(serviceId, workerId, actualGroupId);
+                    } catch (StarClientException e2) {
+                        LOG.error("Removing from actual group also didn't work");
+                        throw new DdlException("Failed to remove worker. error: " + e2.getMessage());
+                    }
+                }
+            } else if (e.getCode() != StatusCode.NOT_EXIST) {
+                // when multi threads remove this worker, maybe we would get "NOT_EXIST"
+                // but it is right, so only need to throw exception
+                // if code is not StarClientException.ExceptionCode.NOT_EXIST
                 throw new DdlException("Failed to remove worker. error: " + e.getMessage());
             }
         }

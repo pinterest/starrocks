@@ -39,6 +39,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -290,7 +291,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public long selectBackupWorker(long workerId) {
+    public long selectBackupWorker(long workerId, Optional<Long> tabletId) {
         // not allowed to have backup node
         return -1;
     }

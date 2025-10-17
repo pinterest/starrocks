@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
@@ -31,6 +32,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,11 +42,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
 
-import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
+import static com.starrocks.system.ResourceIsolationGroupUtils.resourceIsolationGroupMatches;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -72,7 +76,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                                int numUsedComputeNodes,
                                                ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
                                                long warehouseId) {
-
+            String thisFeResourceIsolationGroup = GlobalStateMgr.getCurrentState().
+                    getNodeMgr().getMySelf().getResourceIsolationGroup();
+            return captureAvailableWorkers(warehouseId, thisFeResourceIsolationGroup);
+        }
+        public DefaultSharedDataWorkerProvider captureAvailableWorkers(long warehouseId, String resourceIsolationGroup) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
             List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseId);
@@ -83,12 +91,14 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
 
-            ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode);
+            ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode,
+                    resourceIsolationGroup);
             if (availableComputeNodes.isEmpty()) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                LOG.warn("Could not find CN in group: resourceIsolationGroup={}, computeNodeIds={}", resourceIsolationGroup,
+                        computeNodeIds);
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
-
             return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);
         }
     }
@@ -110,10 +120,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
+    private boolean allowGetAnyWorker = false;
+
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
-                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode
-    ) {
+                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
@@ -155,9 +166,33 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return availableID2ComputeNode.values();
     }
 
+    // Functionality: If allowGetAnyWorker is set, then getWorkerById will use global state to get a ComputeNode
+    // reference instead of its available node map.
+    // Where it's used: As of writing this, this is only used for CACHE SELECT statements,
+    // Why: This is necessary because FragmentAssignmentStrategy classes, Coordinator, and CoordinatorPreprocessors use
+    // the WorkerProvider interface to get ComputeNode references. During a CACHE SELECT execution (which is the only
+    // type of statement that should be selecting workers from an un-matching resource isolation group), they will need
+    // to get the ComputeNode addresses for nodes outside the leader group.
+    // Alternative considered: Another way of achieving this would be to allow any caller to get a ComputeNode reference
+    // for any compute node, but that would leave space for bugs during the execution of other types of statements which
+    // really shouldn't be getting ComputeNode references for un-matching resource isolation groups or unhealthy
+    // ComputeNodes. Instead of changing a bunch of code which uses the WorkerProvider in a specific way, this way
+    // limits scope to only change behavior when the user of the WorkerProvider sets this very specific option.
+    public void setAllowGetAnyWorker(boolean allowGetAnyWorker) {
+        this.allowGetAnyWorker = allowGetAnyWorker;
+    }
+
     @Override
     public ComputeNode getWorkerById(long workerId) {
-        return availableID2ComputeNode.get(workerId);
+        ComputeNode cn = availableID2ComputeNode.get(workerId);
+        if (cn == null && allowGetAnyWorker) {
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            cn = systemInfoService.getBackendOrComputeNode(workerId);
+            if (cn == null) {
+                LOG.warn(String.format("could not get worker by id: %s", workerId));
+            }
+        }
+        return cn;
     }
 
     @Override
@@ -202,8 +237,9 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     private void reportWorkerNotFoundException(long workerId) throws NonRecoverableException {
+        LOG.error("Worker not found {}", LogUtil.getCurrentStackTrace());
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + computeNodesToString(false));
+                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + this);
     }
 
     @Override
@@ -211,13 +247,58 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return true;
     }
 
+    // Makes best effort attempt to use the internal tablet mapper to select a backup based on tabletId
+    private Optional<Long> useInternalTabletMapperToSelectBackup(long workerId, Long tabletId) {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
+        List<Long> cnIdsOrderedByPreference =
+                mapper.backupComputeNodesForTablet(tabletId, workerId, availableID2ComputeNode.size() - 1);
+        if (cnIdsOrderedByPreference == null) {
+            LOG.warn(String.format("The internal tablet mapper doesn't seem to know about the resource" +
+                            " isolation group %s. Its state is %s.",
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup(), mapper.debugString()));
+            return Optional.empty();
+        }
+        for (Long possibleBackup : cnIdsOrderedByPreference) {
+            if (possibleBackup != workerId && availableID2ComputeNode.containsKey(possibleBackup)) {
+                return Optional.of(possibleBackup);
+            }
+        }
+        LOG.warn("Tried to use internal tablet to CN mapper but it failed to find an available cn for the given" +
+                        " tablet {}. Num compute nodes returned by mapper: {}. Size of availableID2ComputeNode: {} ", tabletId,
+                cnIdsOrderedByPreference.size(), availableID2ComputeNode.size());
+        return Optional.empty();
+    }
+
     /**
      * Try to select the next workerId in the sorted list just after the workerId, if the next one is not available,
      * e.g. also in BlockList, then try the next one in the list, until all nodes have benn tried.
      */
     @Override
-    public long selectBackupWorker(long workerId) {
-        if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
+    public long selectBackupWorker(long workerId, Optional<Long> tabletId) {
+        if (availableID2ComputeNode.isEmpty()) {
+            LOG.info("availableID2ComputeNode is empty when looking for backup for worker: {}", workerId);
+            return -1;
+        }
+
+        if (tabletId.isPresent()) {
+            // If we've been provided the relevant tablet id, we try to select a backup that's based on the "next best"
+            // compute node for the tablet. This way, when we need a backup for some dead compute node, we don't send
+            // all its traffic to a single backup CN, and instead we spread out its traffic somewhat evenly.
+            // Currently, this is only enabled in the case that we're using resource isolation groups, which is when we
+            // prefer to use the internal mapping, in the TabletComputeNodeMapper, rather than delegating to StarOS for
+            // the tablet to compute node mapping.
+            Optional<Long> possibleBackup = useInternalTabletMapperToSelectBackup(workerId, tabletId.get());
+            if (possibleBackup.isPresent()) {
+                return possibleBackup.get();
+            }
+            LOG.warn(
+                    "Tablet id was present but TabletComputeNodeMapper failed to return backup, trying backup selection by node" +
+                            " id.");
+        }
+
+        if (!id2ComputeNode.containsKey(workerId)) {
+            LOG.error("cannot select backup because list of all cn does not contain worker id {}: {}", workerId, id2ComputeNode);
             return -1;
         }
         if (allComputeNodeIds == null) {
@@ -243,21 +324,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     @Override
     public String toString() {
-        return computeNodesToString(true);
-    }
-
-    private String computeNodesToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("compute node: ");
-
-        id2ComputeNode.forEach((backendID, backend) -> {
-            if (allowNormalNodes || !backend.isAlive() || !availableID2ComputeNode.containsKey(backendID) ||
-                    SimpleScheduler.isInBlocklist(backendID)) {
-                out.append(
-                        String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
-                                backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
-                                SimpleScheduler.isInBlocklist(backendID)));
-            }
-        });
+        id2ComputeNode.forEach((backendID, backend) -> out.append(
+                String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
+                        backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
+                        SimpleScheduler.isInBlocklist(backendID))));
         return out.toString();
     }
 
@@ -272,15 +343,22 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
-    @VisibleForTesting
-    static AtomicInteger getNextComputeNodeIndexer() {
-        return NEXT_COMPUTE_NODE_INDEX;
+    private static ComputeNode getNextWorker(ImmutableMap<Long, ComputeNode> workers,
+                                             IntSupplier getNextWorkerNodeIndex) {
+        if (workers.isEmpty()) {
+            return null;
+        }
+        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
+        return workers.values().asList().get(index);
     }
 
-    private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
+    private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers,
+                                                                          String resourceIsolationGroup) {
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
-            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
+            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey()) &&
+                    resourceIsolationGroupMatches(resourceIsolationGroup,
+                            entry.getValue().getResourceIsolationGroup())) {
                 builder.put(entry);
             }
         }

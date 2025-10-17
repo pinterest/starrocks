@@ -26,6 +26,8 @@ import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.BackendSelector;
+import com.starrocks.qe.CacheSelectBackendSelector;
+import com.starrocks.qe.CacheSelectComputeNodeSelectionProperties;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.FragmentScanRangeAssignment;
@@ -66,6 +68,8 @@ public class BackendSelectorFactory {
             return new NoopBackendSelector();
         }
 
+        int desiredDatacacheReplicas = sessionVariable.getNumDesiredDatacacheReplicas();
+        List<String> datacacheSelectResourceGroups = sessionVariable.getDatacacheSelectResourceGroups();
         if (scanNode instanceof SchemaScanNode) {
             return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false);
         } else if (scanNode instanceof HdfsScanNode || scanNode instanceof IcebergScanNode ||
@@ -75,6 +79,16 @@ public class BackendSelectorFactory {
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),
                     sessionVariable.getHDFSBackendSelectorScanRangeShuffle(), useIncrementalScanRanges);
+        } else if (desiredDatacacheReplicas > 1 || datacacheSelectResourceGroups != null) {
+            // Note that a cacheSelect should never be hasReplicated (because currently shared-data mode otherwise
+            // doesn't support multiple replicas in cache), and it should never be hasColocate (because a cache select
+            // statement is for a single table).
+            CacheSelectBackendSelector selector = new CacheSelectBackendSelector(
+                    scanNode, locations, assignment, workerProvider, new CacheSelectComputeNodeSelectionProperties(
+                    datacacheSelectResourceGroups, desiredDatacacheReplicas), connectContext.getCurrentWarehouseId());
+            // The CacheSelectBackendSelector will handle noting the selected backend IDs for things like
+            // checking if the worker has died and cancelling queries.
+            return selector;
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();

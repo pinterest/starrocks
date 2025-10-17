@@ -25,10 +25,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -41,8 +43,11 @@ import org.junit.Test;
 
 import java.net.InetAddress;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.utframe.UtFrameUtils.addMockComputeNode;
+import static com.starrocks.utframe.UtFrameUtils.createMinStarRocksCluster;
 
 public class AlterSystemStmtAnalyzerTest {
     private static StarRocksAssert starRocksAssert;
@@ -51,7 +56,7 @@ public class AlterSystemStmtAnalyzerTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
+        createMinStarRocksCluster();
         connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         starRocksAssert = new StarRocksAssert(connectContext);
         AnalyzeTestUtil.init();
@@ -80,11 +85,47 @@ public class AlterSystemStmtAnalyzerTest {
     }
 
     @Test
-    public void testVisitModifyFrontendHostClause() {
+    public void testVisitModifyComputeNodeClause() {
         mockNet();
         AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
-        Void result = visitor.visitModifyFrontendHostClause(clause, null);
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("test:1",
+                Map.of("labels.group", "group:1"));
+        Void result = visitor.visitModifyComputeNodeClause(clause, null);
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testVisitModifyComputeNodeClauseException() {
+        mockNet();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("test",
+                Map.of("labels.location", "rack:1"));
+        Void result = visitor.visitModifyComputeNodeClause(clause, null);
+    }
+
+    @Test
+    public void testVisitModifyFrontendPropertiesClause() {
+        mockNet();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+        ModifyFrontendClause clause = new ModifyFrontendClause("test:1",
+                Map.of("labels.group", "group:1"), null);
+        Void result = visitor.visitModifyFrontendClause(clause, null);
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testVisitModifyFrontendPropertiesClauseException() {
+        mockNet();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+        ModifyFrontendClause clause = new ModifyFrontendClause("test:1",
+                Map.of("labels.location", "rack:1"), null);
+        Void result = visitor.visitModifyFrontendClause(clause, null);
+    }
+
+    @Test
+    public void testVisitModifyFrontendClause() {
+        mockNet();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+        ModifyFrontendClause clause = new ModifyFrontendClause("test", "fqdn");
+        Void result = visitor.visitModifyFrontendClause(clause, null);
     }
 
     @Test(expected = SemanticException.class)
@@ -95,10 +136,10 @@ public class AlterSystemStmtAnalyzerTest {
     }
 
     @Test(expected = SemanticException.class)
-    public void testVisitModifyFrontendHostClauseException() {
+    public void testVisitModifyFrontendClauseException() {
         AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
-        visitor.visitModifyFrontendHostClause(clause, null);
+        ModifyFrontendClause clause = new ModifyFrontendClause("127.0.0.2", "127.0.0.1");
+        visitor.visitModifyFrontendClause(clause, null);
     }
 
     @Test
@@ -153,6 +194,18 @@ public class AlterSystemStmtAnalyzerTest {
                 connectContext);
     }
 
+    private void modifyComputeNodeGroup(String group) throws Exception {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        System.out.println(systemInfoService.getComputeNodes());
+        List<Long> computeNodeIds = systemInfoService.getComputeNodeIds(false);
+        ComputeNode computeNode = systemInfoService.getComputeNode(computeNodeIds.get(0));
+        String modifyBackendPropSqlStr = "alter system modify compute node '" + computeNode.getHost() +
+                ":" + computeNode.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_GROUP + "' = '" + group + "')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
+    }
+
     @Test
     public void testShowBackendLocation() throws Exception {
         modifyBackendLocation("a:b");
@@ -190,5 +243,35 @@ public class AlterSystemStmtAnalyzerTest {
         nodeMgrLeader.load(finalImage.getMetaBlockReader());
         Assert.assertEquals("{c=d}",
                 nodeMgrLeader.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
+    }
+
+    @Test
+    public void testModifyComputeNodeGroupPersistence() throws Exception {
+        int someCnId = 10002;
+        addMockComputeNode(someCnId);
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(initialImage.getImageWriter());
+
+        modifyComputeNodeGroup("group:somegroup");
+
+        // make final image
+        UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(finalImage.getImageWriter());
+
+        // test replay
+        NodeMgr nodeMgrFollower = new NodeMgr();
+        nodeMgrFollower.load(initialImage.getMetaBlockReader());
+        ComputeNode persistentState = (ComputeNode)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_COMPUTE_NODE_STATE_CHANGE);
+        nodeMgrFollower.getClusterInfo().updateInMemoryStateComputeNode(persistentState);
+        Assert.assertEquals("somegroup",
+                nodeMgrFollower.getClusterInfo().getComputeNode(persistentState.getId()).getResourceIsolationGroup());
+
+        // test restart
+        NodeMgr nodeMgrLeader = new NodeMgr();
+        nodeMgrLeader.load(finalImage.getMetaBlockReader());
+        Assert.assertEquals("somegroup",
+                nodeMgrLeader.getClusterInfo().getComputeNode(persistentState.getId()).getResourceIsolationGroup());
     }
 }

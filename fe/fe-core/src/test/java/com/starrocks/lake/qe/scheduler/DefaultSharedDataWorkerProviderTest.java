@@ -37,10 +37,13 @@ import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
@@ -48,6 +51,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.Before;
@@ -67,13 +71,12 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 public class DefaultSharedDataWorkerProviderTest {
     private Map<Long, ComputeNode> id2Backend;
     private Map<Long, ComputeNode> id2ComputeNode;
     private Map<Long, ComputeNode> id2AllNodes;
     private DefaultSharedDataWorkerProvider.Factory factory;
+    private Frontend thisFe;
 
     private static <C extends ComputeNode> Map<Long, C> genWorkers(long startId, long endId,
                                                                    Supplier<C> factory) {
@@ -97,7 +100,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Before
     public void setUp() {
         // clear the block list
-        SimpleScheduler.getHostBlacklist().clear();
+        SimpleScheduler.getHostBlacklist().hostBlacklist.clear();
         factory = new DefaultSharedDataWorkerProvider.Factory();
 
         // Generate mock Workers
@@ -115,6 +118,16 @@ public class DefaultSharedDataWorkerProviderTest {
             {
                 warehouseManager.getAllComputeNodeIds(anyLong);
                 result = Lists.newArrayList(id2AllNodes.keySet());
+                minTimes = 0;
+            }
+        };
+
+        thisFe = new Frontend();
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
                 minTimes = 0;
             }
         };
@@ -255,7 +268,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testSelectNextWorker() throws UserException {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.clear();
+        blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
@@ -301,26 +314,7 @@ public class DefaultSharedDataWorkerProviderTest {
         { // test no available worker to select
             WorkerProvider workerProvider =
                     new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of());
-
-            Exception e = Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
-            Assert.assertEquals(
-                    "Compute node not found. Check if any compute node is down. nodeId: -1 " +
-                            "compute node: [host#1 alive: true, available: false, inBlacklist: false] " +
-                            "[host#2 alive: false, available: false, inBlacklist: false] " +
-                            "[host#3 alive: true, available: false, inBlacklist: false] " +
-                            "[host#4 alive: true, available: false, inBlacklist: true] " +
-                            "[host#5 alive: true, available: false, inBlacklist: false] " +
-                            "[host#6 alive: false, available: false, inBlacklist: false] " +
-                            "[host#7 alive: true, available: false, inBlacklist: false] " +
-                            "[host#8 alive: true, available: false, inBlacklist: true] " +
-                            "[host#9 alive: true, available: false, inBlacklist: false] " +
-                            "[host#10 alive: false, available: false, inBlacklist: false] " +
-                            "[host#11 alive: true, available: false, inBlacklist: false] " +
-                            "[host#12 alive: true, available: false, inBlacklist: true] " +
-                            "[host#13 alive: true, available: false, inBlacklist: false] " +
-                            "[host#14 alive: false, available: false, inBlacklist: false] " +
-                            "[host#15 alive: true, available: false, inBlacklist: false] ",
-                    e.getMessage());
+            Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
         }
     }
 
@@ -350,7 +344,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testIsDataNodeAvailable() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.clear();
+        blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
@@ -382,7 +376,7 @@ public class DefaultSharedDataWorkerProviderTest {
         for (long id : id2AllNodes.keySet()) {
             long backupId = -1;
             for (int j = 0; j < 100; ++j) {
-                long selectedId = workerProvider.selectBackupWorker(id);
+                long selectedId = workerProvider.selectBackupWorker(id, Optional.empty());
                 Assert.assertTrue(selectedId > 0);
                 // cannot choose itself
                 Assert.assertNotEquals(id, selectedId);
@@ -424,7 +418,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         while (selectCount < availList.size() * 2 + 1) { // make sure the while loop will stop
             Assert.assertFalse(provider.isDataNodeAvailable(unavailWorkerId));
-            long alterNodeId = provider.selectBackupWorker(unavailWorkerId);
+            long alterNodeId = provider.selectBackupWorker(unavailWorkerId, Optional.empty());
             if (alterNodeId == -1) {
                 break;
             }
@@ -434,7 +428,7 @@ public class DefaultSharedDataWorkerProviderTest {
             Assert.assertFalse(selectedNodeId.contains(alterNodeId));
 
             for (int j = 0; j < 10; ++j) {
-                long selectAgainId = provider.selectBackupWorker(unavailWorkerId);
+                long selectAgainId = provider.selectBackupWorker(unavailWorkerId, Optional.empty());
                 Assert.assertEquals(alterNodeId, selectAgainId);
             }
             ++selectCount;
@@ -443,12 +437,81 @@ public class DefaultSharedDataWorkerProviderTest {
             selectedNodeId.add(alterNodeId);
         }
         // all nodes are in block list, no nodes can be selected anymore
-        Assert.assertEquals(-1, provider.selectBackupWorker(unavailWorkerId));
+        Assert.assertEquals(-1, provider.selectBackupWorker(unavailWorkerId, Optional.empty()));
         // all the nodes are selected ever
         Assert.assertEquals(selectedNodeId.size(), availList.size());
 
         // a random workerId that doesn't exist in workerProvider
-        Assert.assertEquals(-1, provider.selectBackupWorker(15678));
+        Assert.assertEquals(-1, provider.selectBackupWorker(15678, Optional.empty()));
+    }
+
+    @Test
+    public void testSelectBackupWorkerStableGivenTabletAndResourceIsolationGroups() {
+        id2ComputeNode.clear();
+        id2AllNodes.clear();
+        TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
+        int totalNumComputeNodes = 100;
+        for (long computeNodeId = 0; computeNodeId < totalNumComputeNodes; computeNodeId++) {
+            ComputeNode cn = new ComputeNode(computeNodeId, "whatever", 100);
+            cn.setAlive(true);
+            if (computeNodeId % 3 == 0) {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group1");
+                cn.setResourceIsolationGroup("group1");
+            } else if (computeNodeId % 3 == 1) {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group2");
+                cn.setResourceIsolationGroup("group2");
+            } else {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group3");
+                cn.setResourceIsolationGroup("group3");
+            }
+            id2ComputeNode.put(computeNodeId, cn);
+            id2AllNodes.put(computeNodeId, cn);
+        }
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        new Expectations(warehouseManager) {
+            {
+                warehouseManager.getAllComputeNodeIds(anyLong);
+                result = Lists.newArrayList(id2AllNodes.keySet());
+                minTimes = 0;
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                ComputeNode node = id2ComputeNode.get(nodeId);
+                return node;
+            }
+
+            @Mock
+            public TabletComputeNodeMapper internalTabletMapper() {
+                return tabletComputeNodeMapper;
+            }
+        };
+
+        Frontend thisFe = new Frontend();
+        thisFe.setResourceIsolationGroup("group2");
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return thisFe;
+            }
+        };
+
+        long cnToBlock = 1;
+        // Block some CN and check that the right backup is chosen for each tablet
+        SimpleScheduler.getHostBlacklist().add(cnToBlock);
+        DefaultSharedDataWorkerProvider provider =
+                factory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, -1,
+                        ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Set<Long> chosenBackups = new HashSet<>();
+        for (long tabletId = 1L; tabletId < 1000; tabletId++) {
+            List<Long> cnsInOrder = tabletComputeNodeMapper.backupComputeNodesForTablet(tabletId, cnToBlock, 2);
+            Assert.assertEquals((long) cnsInOrder.get(0), provider.selectBackupWorker(cnToBlock, Optional.of(tabletId)));
+            Assert.assertNotEquals(cnToBlock, (long) cnsInOrder.get(0));
+            chosenBackups.add(cnsInOrder.get(0));
+        }
+        // check that we're not using the same backup for every tablet
+        Assert.assertTrue(chosenBackups.size() > 1);
     }
 
     private OlapScanNode newOlapScanNode(int id, int numBuckets) {
@@ -523,7 +586,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testNormalBackendSelectorWithSharedDataWorkerProvider() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.clear();
+        blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
 
@@ -588,7 +651,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testCollocationBackendSelectorWithSharedDataWorkerProvider() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.clear();
+        blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
 
@@ -662,17 +725,28 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     @Test
-    public void testNextWorkerOverflow() throws NonRecoverableException {
-        WorkerProvider provider =
-                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes));
-        for (int i = 0; i < 100; i++) {
-            Long workerId = provider.selectNextWorker();
-            assertThat(workerId).isNotNegative();
-        }
-        DefaultSharedDataWorkerProvider.getNextComputeNodeIndexer().set(Integer.MAX_VALUE);
-        for (int i = 0; i < 100; i++) {
-            Long workerId = provider.selectNextWorker();
-            assertThat(workerId).isNotNegative();
-        }
+    public void testGetAnyWorker(@Mocked SystemInfoService systemInfoService) {
+        long nodeId1 = 1L;
+        long nodeId2 = 2L;
+        ComputeNode availNode = id2AllNodes.get(nodeId1);
+        WorkerProvider provider = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
+                ImmutableMap.of(availNode.getId(), availNode));
+
+        Assert.assertNotNull(provider.getWorkerById(nodeId1));
+        Assert.assertNull(provider.getWorkerById(nodeId2));
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(nodeId2);
+                times = 1;
+                result = new ComputeNode(nodeId2, "whatever", 100);
+            }
+        };
+
+        provider.setAllowGetAnyWorker(true);
+        Assert.assertNotNull(provider.getWorkerById(nodeId2));
+
+        provider.setAllowGetAnyWorker(false);
+        Assert.assertNull(provider.getWorkerById(nodeId2));
     }
 }

@@ -346,4 +346,5 @@ public class WarehouseManager implements Writable {
             idToWh.put(warehouse.getId(), warehouse);
         }
     }
+
 }

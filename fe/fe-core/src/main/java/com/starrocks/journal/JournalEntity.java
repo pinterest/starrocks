@@ -368,6 +368,7 @@ public class JournalEntity implements Writable {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), Backend.class);
                 break;
             }
+            case OperationType.OP_COMPUTE_NODE_STATE_CHANGE:
             case OperationType.OP_ADD_COMPUTE_NODE: {
                 data = ComputeNode.read(in);
                 break;

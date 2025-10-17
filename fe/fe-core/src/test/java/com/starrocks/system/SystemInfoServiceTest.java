@@ -21,11 +21,11 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -121,7 +121,7 @@ public class SystemInfoServiceTest {
      * Test method for {@link SystemInfoService#modifyBackendProperty(ModifyBackendClause)}.
      */
     @Test
-    public void testModifyBackendProperty() throws DdlException {
+    public void testModifyBackendLocationProperty() throws DdlException {
         Backend be = new Backend(100, "originalHost", 1000);
         service.addBackend(be);
         Map<String, String> properties = Maps.newHashMap();
@@ -132,6 +132,30 @@ public class SystemInfoServiceTest {
         Backend backend = service.getBackendWithHeartbeatPort("originalHost", 1000);
         Assert.assertNotNull(backend);
         Assert.assertEquals("{rack=rack1}", backend.getLocation().toString());
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void testModifyBackendGroupPropertyThrowsException() throws DdlException {
+        Backend be = new Backend(100, "originalHost", 1000);
+        service.addBackend(be);
+        Map<String, String> properties = Maps.newHashMap();
+        String location = "rack:rack1";
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
+        ModifyBackendClause clause = new ModifyBackendClause("originalHost:1000", properties);
+        service.modifyBackendProperty(clause);
+    }
+
+    @Test
+    public void testModifyComputeNodeGroupProperty() throws DdlException {
+        ComputeNode cn = new ComputeNode(100, "originalHost", 1000);
+        service.addComputeNode(cn);
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("originalHost:1000", properties);
+        service.modifyComputeNodeProperty(clause);
+        ComputeNode computeNode = service.getComputeNodeWithHeartbeatPort("originalHost", 1000);
+        Assert.assertNotNull(computeNode);
+        Assert.assertEquals("writegroup", computeNode.getResourceIsolationGroup());
     }
 
     @Test
@@ -181,9 +205,6 @@ public class SystemInfoServiceTest {
 
         LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
 
-        WarehouseManager warehouseManager = new WarehouseManager();
-        warehouseManager.initDefaultWarehouse();
-
         new Expectations() {
             {
                 service.getBackendWithHeartbeatPort("newHost", 1000);
@@ -193,16 +214,12 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
-
-                globalStateMgr.getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
             }
         };
 
         service.addBackend(be);
         be.setStarletPort(1001);
-        service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+        service.dropBackend("newHost", 1000, false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
     }
@@ -323,7 +340,7 @@ public class SystemInfoServiceTest {
 
         Assert.assertEquals(10L, version.get());
     }
-
+    
     @Test
     public void testGetHostAndPort() {
         String ipv4 = "192.168.1.2:9050";
@@ -378,21 +395,6 @@ public class SystemInfoServiceTest {
         service.addComputeNode(be3);
         ComputeNode beIP3 = service.getComputeNodeWithBePort("127.0.0.2", 1001);
         Assert.assertTrue(beIP3 == null);
-    }
-
-    @Test(expected = DdlException.class)
-    public void testUpdateBackendAddressInSharedDataMode() throws Exception {
-        new MockUp<RunMode>() {
-            @Mock
-            public boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        Backend be = new Backend(100, "originalHost", 1000);
-        service.addBackend(be);
-        ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
-        // throw not support exception
-        service.modifyBackendHost(clause);
     }
 
 }

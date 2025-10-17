@@ -14,20 +14,17 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
-import com.starrocks.encryption.KeyMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.proto.EncryptionAlgorithmPB;
-import com.starrocks.proto.EncryptionKeyPB;
-import com.starrocks.proto.EncryptionKeyTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
@@ -36,8 +33,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -166,39 +161,49 @@ public class EditLogTest {
     }
 
     @Test
-    public void testOpAddKeyJournalEntity() throws Exception {
-        EncryptionKeyPB pb = new EncryptionKeyPB();
-        pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);
-        pb.algorithm = EncryptionAlgorithmPB.AES_128;
-        pb.plainKey = new byte[16];
-        pb.type = EncryptionKeyTypePB.NORMAL_KEY;
-        pb.createTime = 3L;
-        DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        JournalEntity entity = new JournalEntity();
-        entity.setOpCode(OperationType.OP_ADD_KEY);
-        entity.setData(new Text(GsonUtils.GSON.toJson(pb)));
-        entity.write(buffer);
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        JournalEntity replayEntry = new JournalEntity();
-        replayEntry.readFields(in);
-        Assert.assertEquals(OperationType.OP_ADD_KEY, replayEntry.getOpCode());
+    public void testOpUpdateFrontend() throws Exception {
+        GlobalStateMgr mgr = mockGlobalStateMgr();
+        List<Frontend> frontends = mgr.getNodeMgr().getFrontends(null);
+        Frontend feInMemory = frontends.get(0);
+        Frontend feToWrite = new Frontend(feInMemory.getRole(), feInMemory.getNodeName(), feInMemory.getHost(),
+                feInMemory.getEditLogPort());
+        feToWrite.updateHostAndEditLogPort("testHost", 1000);
+        feToWrite.setResourceIsolationGroup("somegroup2");
+        JournalEntity journal = new JournalEntity();
+        journal.setData(feToWrite);
+        journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
+        EditLog editLog = new EditLog(null);
+        editLog.loadJournal(mgr, journal);
+        List<Frontend> updatedFrontends = mgr.getNodeMgr().getFrontends(null);
+        Frontend updatedfFe = updatedFrontends.get(0);
+        Assert.assertEquals("testHost", updatedfFe.getHost());
+        Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
+        Assert.assertEquals("somegroup2", updatedfFe.getResourceIsolationGroup());
     }
 
     @Test
-    public void testOpAddKey() throws Exception {
+    public void testOpComputeNodeStateChange() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
-        EncryptionKeyPB pb = new EncryptionKeyPB();
-        pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);
-        pb.algorithm = EncryptionAlgorithmPB.AES_128;
-        pb.plainKey = new byte[16];
-        pb.type = EncryptionKeyTypePB.NORMAL_KEY;
-        pb.createTime = 3L;
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        ComputeNode cnInMemory =  systemInfoService.getComputeNodes().get(0);
+        ComputeNode cnToWrite = new ComputeNode(cnInMemory.getId(), cnInMemory.getHost(), cnInMemory.getHeartbeatPort());
+        cnToWrite.setResourceIsolationGroup("somegroup");
         JournalEntity journal = new JournalEntity();
-        journal.setOpCode(OperationType.OP_ADD_KEY);
-        journal.setData(new Text(GsonUtils.GSON.toJson(pb)));
+        journal.setData(cnToWrite);
+        journal.setOpCode(OperationType.OP_COMPUTE_NODE_STATE_CHANGE);
         EditLog editLog = new EditLog(null);
+
+        TabletComputeNodeMapper tabletComputeNodeMapper = systemInfoService.internalTabletMapper();
+        new Expectations(tabletComputeNodeMapper) {
+            {
+                tabletComputeNodeMapper.modifyComputeNode(cnToWrite.getId(), null, "somegroup");
+                minTimes = 1;
+            }
+        };
         editLog.loadJournal(mgr, journal);
-        Assert.assertEquals(1, mgr.getKeyMgr().numKeys());
+        List<ComputeNode> updatedComputeNodes = systemInfoService.getComputeNodes();
+        ComputeNode updatedCn = updatedComputeNodes.get(0);
+        Assert.assertEquals("somegroup", updatedCn.getResourceIsolationGroup());
     }
 
     @Test
