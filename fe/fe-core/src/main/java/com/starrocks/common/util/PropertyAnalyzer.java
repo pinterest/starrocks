@@ -991,15 +991,6 @@ public class PropertyAnalyzer {
                 .collect(Collectors.joining(","));
     }
 
-    public static String getResourceIsolationGroupFromProperties(Map<String, String> properties)
-            throws UnsupportedOperationException {
-        String entry = properties.get(PROPERTIES_LABELS_GROUP);
-        String[] groupKV = entry.split(":");
-        if (groupKV.length != 2 || !groupKV[0].trim().equals("group")) {
-            throw new UnsupportedOperationException("the group property must be formatted 'group:<GROUP_ID>'");
-        }
-        return groupKV[1].trim();
-    }
 
     public static String analyzeLocation(Map<String, String> properties, boolean removeAnalyzedProp) {
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
