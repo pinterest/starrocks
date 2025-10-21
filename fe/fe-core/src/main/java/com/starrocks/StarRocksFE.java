@@ -34,6 +34,20 @@
 
 package com.starrocks;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.lang.management.ManagementFactory;
+import java.nio.channels.FileLock;
+
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
 import com.starrocks.common.CommandLineOptions;
@@ -57,19 +71,6 @@ import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.FrontendThriftServer;
 import com.starrocks.staros.StarMgrServer;
-import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.lang.management.ManagementFactory;
-import java.nio.channels.FileLock;
 
 public class StarRocksFE {
     private static final Logger LOG = LogManager.getLogger(StarRocksFE.class);
@@ -78,6 +79,7 @@ public class StarRocksFE {
     public static final String PID_DIR = System.getenv("PID_DIR");
 
     public static volatile boolean stopped = false;
+    private static HttpServer httpServer = null;
 
     public static void main(String[] args) {
         start(STARROCKS_HOME_DIR, PID_DIR, args);
@@ -164,7 +166,7 @@ public class StarRocksFE {
             QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
                     ExecuteEnv.getInstance().getScheduler());
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
-            HttpServer httpServer = new HttpServer(Config.http_port);
+            httpServer = new HttpServer(Config.http_port);
             httpServer.setup();
 
             frontendThriftServer.start();
@@ -371,6 +373,12 @@ public class StarRocksFE {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("start to execute shutdown hook");
             try {
+                // Gracefully shutdown HTTP server to drain in-flight requests
+                if (httpServer != null) {
+                    LOG.info("shutting down HTTP server gracefully");
+                    httpServer.shutDown();
+                }
+
                 Thread t = new Thread(() -> {
                     try {
                         Journal journal = GlobalStateMgr.getCurrentState().getJournal();

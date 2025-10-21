@@ -34,6 +34,18 @@
 
 package com.starrocks.http;
 
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
+
+import java.io.File;
+import java.util.List;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.http.action.BackendAction;
@@ -95,6 +107,7 @@ import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -111,17 +124,6 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutor;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import java.io.File;
-import java.util.List;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
-import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
 
 public class HttpServer {
     private static final Logger LOG = LogManager.getLogger(HttpServer.class);
@@ -322,17 +324,29 @@ public class HttpServer {
         httpMetricRegistry.registerGauge(pendingTasks);
     }
 
-    // used for test, release bound port
+    // Gracefully shutdown HTTP server, allowing in-flight requests to complete
     public void shutDown() {
         if (serverBootstrap != null) {
-            Future future =
-                    serverBootstrap.config().group().shutdownGracefully(0, 1, TimeUnit.SECONDS).syncUninterruptibly();
+            LOG.info("Starting graceful shutdown of HttpServer, waiting up to 10 minutes for in-flight requests");
+            
+            // Get both boss group (accepts connections) and worker group (processes requests)
+            EventLoopGroup bossGroup = serverBootstrap.config().group();
+            EventLoopGroup workerGroup = serverBootstrap.config().childGroup();
+            
+            // Gracefully shutdown both groups:
+            // - 5 second quiet period to catch final keep-alive requests
+            // - 10 minute timeout for long-running queries
+            Future<?> bossFuture = bossGroup.shutdownGracefully(5, 10 * 60, TimeUnit.SECONDS);
+            Future<?> workerFuture = workerGroup.shutdownGracefully(5, 10 * 60, TimeUnit.SECONDS);
+            
             try {
-                future.get();
+                // Wait for both groups to complete shutdown
+                bossFuture.get();
+                workerFuture.get();
                 isStarted.set(false);
-                LOG.info("HttpServer was closed completely");
+                LOG.info("HttpServer shutdown completed - all connections drained gracefully");
             } catch (Throwable e) {
-                LOG.warn("Exception happened when close HttpServer", e);
+                LOG.warn("Exception during HttpServer graceful shutdown", e);
             }
             serverBootstrap = null;
         }
