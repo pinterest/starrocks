@@ -34,6 +34,18 @@
 
 package com.starrocks.http;
 
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
+
+import java.io.File;
+import java.util.List;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
@@ -102,6 +114,7 @@ import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -369,7 +382,7 @@ public class HttpServer {
         httpMetricRegistry.registerGauge(pendingTasks);
     }
 
-    // used for test, release bound port
+    // Gracefully shutdown HTTP server, allowing in-flight requests to complete
     public void shutDown() {
         if (serverChannel != null && serverBootstrap != null) {
             long shutdownStartMs = System.currentTimeMillis();
@@ -451,7 +464,7 @@ public class HttpServer {
                 LOG.warn("Interrupted during HttpServer graceful shutdown", e);
                 Thread.currentThread().interrupt();
             } catch (Throwable e) {
-                LOG.warn("Exception happened when close HttpServer", e);
+                LOG.warn("Exception during HttpServer graceful shutdown", e);
             }
             serverBootstrap = null;
             serverChannel = null;
