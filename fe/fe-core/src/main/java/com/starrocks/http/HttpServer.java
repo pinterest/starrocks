@@ -34,18 +34,6 @@
 
 package com.starrocks.http;
 
-import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
-import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
-
-import java.io.File;
-import java.util.List;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
@@ -113,7 +101,6 @@ import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
-import com.starrocks.server.GlobalStateMgr;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -134,11 +121,12 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutor;
-import io.netty.util.concurrent.GlobalEventExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.util.List;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -384,85 +372,25 @@ public class HttpServer {
 
     // Gracefully shutdown HTTP server, allowing in-flight requests to complete
     public void shutDown() {
-        if (serverChannel != null && serverBootstrap != null) {
-            long shutdownStartMs = System.currentTimeMillis();
-            int activeConnectionsAtStart = allChannels.size();
-            LOG.info("Starting graceful shutdown of HttpServer with {} active connections, " +
-                    "waiting up to 30 seconds for in-flight requests", activeConnectionsAtStart);
+        if (serverBootstrap != null) {
+            LOG.info("Starting graceful shutdown of HttpServer, waiting up to 10 minutes for in-flight requests");
+            
+            // Get both boss group (accepts connections) and worker group (processes requests)
+            EventLoopGroup bossGroup = serverBootstrap.config().group();
+            EventLoopGroup workerGroup = serverBootstrap.config().childGroup();
+            
+            // Gracefully shutdown both groups:
+            // - No quiet period since there's no guarantee that the upstream stopped sending requests
+            // - 10 minute timeout for long-running queries
+            Future<?> bossFuture = bossGroup.shutdownGracefully(0, 10 * 60, TimeUnit.SECONDS);
+            Future<?> workerFuture = workerGroup.shutdownGracefully(0, 10 * 60, TimeUnit.SECONDS);
             
             try {
-                EventLoopGroup bossGroup = serverBootstrap.config().group();
-                EventLoopGroup workerGroup = serverBootstrap.config().childGroup();
-                
-                // Step 1: Wait for active connections to drain for up to 30 seconds
-                // We do NOT close the server channel because that triggers HttpServerThread's
-                // finally block which immediately kills all child channels via shutdownGracefully().
-                // The 20s grace period in StarRocksFE already prevents most new traffic routing here.
-                // Any new connections during this window will be minimal and complete quickly.
-                long timeoutMs = 30 * 1000;  // 30 seconds
-                long deadline = System.currentTimeMillis() + timeoutMs;
-                int lastReportedCount = activeConnectionsAtStart;
-                long lastReportTimeMs = shutdownStartMs;
-                
-                LOG.info("Waiting for {} active connections to complete (max 30s, " +
-                                "server still accepting to avoid cascade shutdown)",
-                        activeConnectionsAtStart);
-                while (!allChannels.isEmpty() && System.currentTimeMillis() < deadline) {
-                    int currentCount = allChannels.size();
-                    long now = System.currentTimeMillis();
-                    
-                    // Log progress every 5 seconds or when count changes significantly
-                    if (currentCount != lastReportedCount &&
-                            (lastReportedCount - currentCount >= 5 ||
-                                    now - lastReportTimeMs >= 5000)) {
-                        long elapsedSec = (now - shutdownStartMs) / 1000;
-                        LOG.info("Graceful shutdown: {} connections remaining after {}s " +
-                                        "(started with {}, {} completed)", 
-                                currentCount, elapsedSec, activeConnectionsAtStart, 
-                                activeConnectionsAtStart - currentCount);
-                        lastReportedCount = currentCount;
-                        lastReportTimeMs = now;
-                    }
-                    Thread.sleep(100);  // Check every 100ms
-                }
-                
-                // Step 2: After timeout or drain complete, force close everything
-                int remainingConnections = allChannels.size();
-                long drainDurationMs = System.currentTimeMillis() - shutdownStartMs;
-                
-                if (remainingConnections > 0) {
-                    LOG.warn("Forcing closure of {} remaining connections after {}ms timeout", 
-                            remainingConnections, drainDurationMs);
-                } else {
-                    LOG.info("All {} connections drained gracefully after {}ms", 
-                            activeConnectionsAtStart, drainDurationMs);
-                }
-                
-                // Remove server channel from allChannels to avoid closing it with client channels
-                allChannels.remove(serverChannel);
-                
-                // Force close any remaining client connections
-                if (remainingConnections > 0) {
-                    allChannels.close().awaitUninterruptibly();
-                }
-                
-                // Step 3: Now close server channel - this triggers HttpServerThread finally block
-                LOG.info("Closing server channel to trigger shutdown sequence");
-                if (serverChannel != null) {
-                    serverChannel.close().sync();
-                }
-                
-                // Finally block in HttpServerThread will call shutdownGracefully() on both groups
-                // Wait for them to complete
-                bossGroup.awaitTermination(5, TimeUnit.SECONDS);
-                workerGroup.awaitTermination(5, TimeUnit.SECONDS);
-                
+                // Wait for both groups to complete shutdown
+                bossFuture.get();
+                workerFuture.get();
                 isStarted.set(false);
-                long totalDurationMs = System.currentTimeMillis() - shutdownStartMs;
-                LOG.info("HttpServer shutdown completed in {}ms", totalDurationMs);
-            } catch (InterruptedException e) {
-                LOG.warn("Interrupted during HttpServer graceful shutdown", e);
-                Thread.currentThread().interrupt();
+                LOG.info("HttpServer shutdown completed - all connections drained gracefully");
             } catch (Throwable e) {
                 LOG.warn("Exception during HttpServer graceful shutdown", e);
             }
