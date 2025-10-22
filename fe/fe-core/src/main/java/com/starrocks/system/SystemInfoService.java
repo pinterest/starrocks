@@ -335,9 +335,21 @@ public class SystemInfoService implements GsonPostProcessable {
                 if (!entry.getValue().isEmpty()) {
                     newResourceIsolationGroup = getResourceIsolationGroupFromProperties(properties);
                 }
+                
+                // Skip modification if resource isolation group is unchanged to avoid unnecessary
+                // WorkerId regeneration in StarMgr, which would cause nodeid/workerid cache staleness issues
+                if (oldResourceIsolationGroup.equals(newResourceIsolationGroup)) {
+                    String opMessage = String.format(
+                            "%s:%d's group is already %s, skipping modification",
+                            computeNode.getHost(), computeNode.getHeartbeatPort(), oldResourceIsolationGroup);
+                    LOG.info(opMessage);
+                    messageResult.add(Collections.singletonList(opMessage));
+                    continue;
+                }
+                
                 // Step 1: Communicate with staros that we're dropping the CN from the old worker group.
                 String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(), computeNode.getStarletPort());
-                LOG.info("Trying to modify compute node {}: cnid: {}, old rig: {}, new rig: {}, original wgid: {}, ", workerAddr,
+                LOG.info("Modifying compute node {}: cnid: {}, old rig: {}, new rig: {}, original wgid: {}", workerAddr,
                         computeNode.getId(), oldResourceIsolationGroup, newResourceIsolationGroup,
                         computeNode.getWorkerGroupId());
                 Long originalWorkerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
