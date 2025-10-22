@@ -34,18 +34,6 @@
 
 package com.starrocks.http;
 
-import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
-import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
-
-import java.io.File;
-import java.util.List;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.http.action.BackendAction;
@@ -107,7 +95,6 @@ import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -124,6 +111,17 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.File;
+import java.util.List;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
 
 public class HttpServer {
     private static final Logger LOG = LogManager.getLogger(HttpServer.class);
@@ -334,10 +332,10 @@ public class HttpServer {
             EventLoopGroup workerGroup = serverBootstrap.config().childGroup();
             
             // Gracefully shutdown both groups:
-            // - 5 second quiet period to catch final keep-alive requests
+            // - No quiet period since there's no guarantee that the upstream stopped sending requests
             // - 10 minute timeout for long-running queries
-            Future<?> bossFuture = bossGroup.shutdownGracefully(5, 10 * 60, TimeUnit.SECONDS);
-            Future<?> workerFuture = workerGroup.shutdownGracefully(5, 10 * 60, TimeUnit.SECONDS);
+            Future<?> bossFuture = bossGroup.shutdownGracefully(0, 10 * 60, TimeUnit.SECONDS);
+            Future<?> workerFuture = workerGroup.shutdownGracefully(0, 10 * 60, TimeUnit.SECONDS);
             
             try {
                 // Wait for both groups to complete shutdown
