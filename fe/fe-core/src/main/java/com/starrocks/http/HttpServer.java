@@ -98,9 +98,12 @@ import com.starrocks.metric.Metric;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioEventLoop;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -111,12 +114,12 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.GlobalEventExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.util.List;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -135,6 +138,8 @@ public class HttpServer {
     public HttpServer(int port) {
         this.port = port;
         controller = new ActionController();
+        // Initialize channel group for tracking active connections during graceful shutdown
+        this.allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
     }
 
     public void setup() throws IllegalArgException {
@@ -226,7 +231,10 @@ public class HttpServer {
     protected class StarrocksHttpServerInitializer extends ChannelInitializer<SocketChannel> {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
-            ch.pipeline().addLast(new HttpServerCodec(
+            ch.pipeline()
+                    // Add lifecycle tracker FIRST to ensure all channels are tracked for graceful shutdown
+                    .addLast(new ChannelLifecycleTracker())
+                    .addLast(new HttpServerCodec(
                             Config.http_max_initial_line_length,
                             Config.http_max_header_size,
                             Config.http_max_chunk_size,
@@ -261,6 +269,26 @@ public class HttpServer {
     }
 
     ServerBootstrap serverBootstrap;
+    private volatile Channel serverChannel;  // Store server channel for graceful shutdown
+    private final ChannelGroup allChannels;  // Track all active connections for graceful shutdown
+
+    /**
+     * Lightweight handler to track channel lifecycle for graceful shutdown.
+     * This handler is added first in the pipeline to ensure all channels are tracked.
+     */
+    private class ChannelLifecycleTracker extends ChannelInboundHandlerAdapter {
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            allChannels.add(ctx.channel());
+            super.channelActive(ctx);
+        }
+
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+            // Channel is automatically removed from ChannelGroup when closed
+            super.channelInactive(ctx);
+        }
+    }
 
     private class HttpServerThread implements Runnable {
         @Override
@@ -278,13 +306,13 @@ public class HttpServer {
                 serverBootstrap.group(bossGroup, workerGroup)
                         .channel(NioServerSocketChannel.class)
                         .childHandler(new StarrocksHttpServerInitializer());
-                Channel ch = serverBootstrap.bind(port).sync().channel();
+                serverChannel = serverBootstrap.bind(port).sync().channel();
 
                 isStarted.set(true);
                 registerMetrics(workerGroup);
                 LOG.info("HttpServer started with port {}", port);
                 // block until server is closed
-                ch.closeFuture().sync();
+                serverChannel.closeFuture().sync();
             } catch (Exception e) {
                 LOG.error("Fail to start FE query http server[port: " + port + "] ", e);
                 System.exit(-1);
@@ -322,19 +350,92 @@ public class HttpServer {
         httpMetricRegistry.registerGauge(pendingTasks);
     }
 
-    // used for test, release bound port
+    // Gracefully shutdown HTTP server, allowing in-flight requests to complete
     public void shutDown() {
-        if (serverBootstrap != null) {
-            Future future =
-                    serverBootstrap.config().group().shutdownGracefully(0, 1, TimeUnit.SECONDS).syncUninterruptibly();
+        if (serverChannel != null && serverBootstrap != null) {
+            long shutdownStartMs = System.currentTimeMillis();
+            int activeConnectionsAtStart = allChannels.size();
+            LOG.info("Starting graceful shutdown of HttpServer with {} active connections, " +
+                    "waiting up to 30 seconds for in-flight requests", activeConnectionsAtStart);
+            
             try {
-                future.get();
+                EventLoopGroup bossGroup = serverBootstrap.config().group();
+                EventLoopGroup workerGroup = serverBootstrap.config().childGroup();
+                
+                // Step 1: Wait for active connections to drain for up to 30 seconds
+                // We do NOT close the server channel because that triggers HttpServerThread's
+                // finally block which immediately kills all child channels via shutdownGracefully().
+                // The 20s grace period in StarRocksFE already prevents most new traffic routing here.
+                // Any new connections during this window will be minimal and complete quickly.
+                long timeoutMs = 30 * 1000;  // 30 seconds
+                long deadline = System.currentTimeMillis() + timeoutMs;
+                int lastReportedCount = activeConnectionsAtStart;
+                long lastReportTimeMs = shutdownStartMs;
+                
+                LOG.info("Waiting for {} active connections to complete (max 30s, " +
+                                "server still accepting to avoid cascade shutdown)",
+                        activeConnectionsAtStart);
+                while (!allChannels.isEmpty() && System.currentTimeMillis() < deadline) {
+                    int currentCount = allChannels.size();
+                    long now = System.currentTimeMillis();
+                    
+                    // Log progress every 5 seconds or when count changes significantly
+                    if (currentCount != lastReportedCount &&
+                            (lastReportedCount - currentCount >= 5 ||
+                                    now - lastReportTimeMs >= 5000)) {
+                        long elapsedSec = (now - shutdownStartMs) / 1000;
+                        LOG.info("Graceful shutdown: {} connections remaining after {}s " +
+                                        "(started with {}, {} completed)", 
+                                currentCount, elapsedSec, activeConnectionsAtStart, 
+                                activeConnectionsAtStart - currentCount);
+                        lastReportedCount = currentCount;
+                        lastReportTimeMs = now;
+                    }
+                    Thread.sleep(100);  // Check every 100ms
+                }
+                
+                // Step 2: After timeout or drain complete, force close everything
+                int remainingConnections = allChannels.size();
+                long drainDurationMs = System.currentTimeMillis() - shutdownStartMs;
+                
+                if (remainingConnections > 0) {
+                    LOG.warn("Forcing closure of {} remaining connections after {}ms timeout", 
+                            remainingConnections, drainDurationMs);
+                } else {
+                    LOG.info("All {} connections drained gracefully after {}ms", 
+                            activeConnectionsAtStart, drainDurationMs);
+                }
+                
+                // Remove server channel from allChannels to avoid closing it with client channels
+                allChannels.remove(serverChannel);
+                
+                // Force close any remaining client connections
+                if (remainingConnections > 0) {
+                    allChannels.close().awaitUninterruptibly();
+                }
+                
+                // Step 3: Now close server channel - this triggers HttpServerThread finally block
+                LOG.info("Closing server channel to trigger shutdown sequence");
+                if (serverChannel != null) {
+                    serverChannel.close().sync();
+                }
+                
+                // Finally block in HttpServerThread will call shutdownGracefully() on both groups
+                // Wait for them to complete
+                bossGroup.awaitTermination(5, TimeUnit.SECONDS);
+                workerGroup.awaitTermination(5, TimeUnit.SECONDS);
+                
                 isStarted.set(false);
-                LOG.info("HttpServer was closed completely");
+                long totalDurationMs = System.currentTimeMillis() - shutdownStartMs;
+                LOG.info("HttpServer shutdown completed in {}ms", totalDurationMs);
+            } catch (InterruptedException e) {
+                LOG.warn("Interrupted during HttpServer graceful shutdown", e);
+                Thread.currentThread().interrupt();
             } catch (Throwable e) {
-                LOG.warn("Exception happened when close HttpServer", e);
+                LOG.warn("Exception during HttpServer graceful shutdown", e);
             }
             serverBootstrap = null;
+            serverChannel = null;
         }
     }
 

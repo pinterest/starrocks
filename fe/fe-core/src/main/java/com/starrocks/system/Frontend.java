@@ -48,6 +48,8 @@ import java.util.Objects;
 import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
 
 public class Frontend extends JsonWriter {
+    public static final String HEARTBEAT_MSG_SHUTTING_DOWN = "shutting down";
+    
     @SerializedName(value = "r")
     private FrontendNodeType role;
     @SerializedName(value = "n")
@@ -181,13 +183,21 @@ public class Frontend extends JsonWriter {
             isChanged = true;
             this.heartbeatRetryTimes = 0;
         } else {
-            if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
-                this.heartbeatRetryTimes++;
-            } else {
+            String errMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
+            // "shutting down" is a state change that indicates the FE is shutting down, not a transient failure - mark dead immediately
+            boolean isShuttingDown = HEARTBEAT_MSG_SHUTTING_DOWN.equals(errMsg);
+            
+            if (isShuttingDown || this.heartbeatRetryTimes >= Config.heartbeat_retry_times) {
                 if (isAlive) {
                     isAlive = false;
                 }
-                heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
+                heartbeatErrMsg = errMsg;
+                if (!isShuttingDown) {
+                    // Only count retries for transient failures, not for shutdown
+                    this.heartbeatRetryTimes++;
+                }
+            } else {
+                this.heartbeatRetryTimes++;
             }
             // When the master receives an error heartbeat info which status not ok, 
             // this heartbeat info also need to be synced to follower.
