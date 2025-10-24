@@ -36,6 +36,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Version;
@@ -76,6 +77,15 @@ public class BootstrapFinishAction extends RestBaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+        // Check if FE is shutting down - return failure immediately so leader detects it via heartbeat
+        if (StarRocksFE.isShuttingDown) {
+            BootstrapResult result = new BootstrapResult(com.starrocks.system.Frontend.HEARTBEAT_MSG_SHUTTING_DOWN);
+            response.setContentType("application/json");
+            response.getContent().append(result.toJson());
+            sendResult(request, response);
+            return;
+        }
+
         boolean isReady = GlobalStateMgr.getCurrentState().isReady();
 
         // to json response

@@ -36,6 +36,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
@@ -132,7 +133,9 @@ public class FrontendsProcNode implements ProcNodeInterface {
             info.add(String.valueOf(isJoin(allFe, fe)));
 
             if (NetUtils.isSameIP(fe.getHost(), globalStateMgr.getNodeMgr().getSelfNode().first)) {
-                info.add("true");
+                // For local FE, check if shutting down; otherwise report as alive
+                boolean isAlive = !StarRocksFE.isShuttingDown;
+                info.add(String.valueOf(isAlive));
                 info.add(Long.toString(globalStateMgr.getMaxJournalId()));
             } else {
                 info.add(String.valueOf(fe.isAlive()));

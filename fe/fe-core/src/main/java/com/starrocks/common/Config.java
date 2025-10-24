@@ -2457,6 +2457,15 @@ public class Config extends ConfigBase {
     public static int heartbeat_retry_times = 3;
 
     /**
+     * Grace period in seconds to wait before shutting down HTTP server during FE shutdown.
+     * This allows load balancers and service discovery to detect the FE is shutting down
+     * and stop routing new traffic before closing existing connections.
+     * Default is no grace period.
+     */
+    @ConfField(mutable = true, comment = "Grace period before HTTP shutdown (seconds)")
+    public static int graceful_shutdown_grace_period_seconds = 0;
+
+    /**
      * set this to enable Transparent Data Encryption(TDE)
      * once set, should not be changed, or the data depending on this key cannot be read anymore
      */

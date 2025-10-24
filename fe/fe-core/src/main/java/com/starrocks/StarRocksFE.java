@@ -78,6 +78,7 @@ public class StarRocksFE {
     public static final String PID_DIR = System.getenv("PID_DIR");
 
     public static volatile boolean stopped = false;
+    public static volatile boolean isShuttingDown = false;
     private static HttpServer httpServer = null;
 
     public static void main(String[] args) {
@@ -371,8 +372,25 @@ public class StarRocksFE {
     private static void addShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("start to execute shutdown hook");
+            
+            // Immediately signal shutdown state so health checks and SHOW FRONTENDS reflect it
+            isShuttingDown = true;
+            LOG.info("Set isShuttingDown=true - FE will now report as not alive in health checks");
+            
             try {
-                // Gracefully shutdown HTTP server to drain in-flight requests
+                // Step 1: Wait for load balancers/service discovery to detect shutdown via heartbeats
+                // Leader FE will detect this via failed /api/bootstrap calls within 15-20 seconds
+                // This grace period allows time for detection + existing requests to complete
+                int gracePeriodSeconds = Config.graceful_shutdown_grace_period_seconds;
+                LOG.info("Waiting {}s for load balancers to detect shutdown and stop routing traffic", 
+                         gracePeriodSeconds);
+                try {
+                    Thread.sleep(gracePeriodSeconds * 1000L);
+                } catch (InterruptedException e) {
+                    LOG.warn("Grace period interrupted", e);
+                }
+                
+                // Step 2: Now gracefully shutdown HTTP server to drain any remaining in-flight requests
                 if (httpServer != null) {
                     LOG.info("shutting down HTTP server gracefully");
                     httpServer.shutDown();
