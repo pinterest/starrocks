@@ -354,7 +354,9 @@ public class HeartbeatMgr extends FrontendDaemon {
         public HeartbeatResponse call() {
             if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
                 // heartbeat to self
-                if (GlobalStateMgr.getCurrentState().isReady()) {
+                if (com.starrocks.StarRocksFE.isShuttingDown) {
+                    return new FrontendHbResponse(fe.getNodeName(), Frontend.HEARTBEAT_MSG_SHUTTING_DOWN);
+                } else if (GlobalStateMgr.getCurrentState().isReady()) {
                     return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,
                             GlobalStateMgr.getCurrentState().getMaxJournalId(), System.currentTimeMillis(),
                             GlobalStateMgr.getCurrentState().getFeStartTime(),
