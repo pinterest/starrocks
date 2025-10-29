@@ -781,6 +781,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int http_max_chunk_size = 8192;
 
+    // Maximum size of HTTP POST request body in bytes (default: 16 MB)
+    // This limit only applies to POST requests (not PUT for stream loading)
+    // Requests exceeding this limit will receive a 413 (Request Entity Too Large) error
+    @ConfField
+    public static int http_max_post_body_size = 16 * 1024 * 1024;
+
     // Because the new version of netty has a stricter headers validation,
     // so the validation is turned off here to be compatible with old users
     // https://github.com/netty/netty/pull/12760
