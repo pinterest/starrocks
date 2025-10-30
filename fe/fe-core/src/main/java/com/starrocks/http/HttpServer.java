@@ -34,17 +34,6 @@
 
 package com.starrocks.http;
 
-import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
-import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
-
-import java.io.File;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.http.action.BackendAction;
@@ -106,7 +95,6 @@ import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -127,6 +115,16 @@ import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.GlobalEventExecutor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.File;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
 
 public class HttpServer {
     private static final Logger LOG = LogManager.getLogger(HttpServer.class);
