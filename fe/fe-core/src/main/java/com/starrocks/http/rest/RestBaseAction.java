@@ -51,7 +51,9 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -65,6 +67,8 @@ import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+
+import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
 public class RestBaseAction extends BaseAction {
 
@@ -126,7 +130,7 @@ public class RestBaseAction extends BaseAction {
                 List<String> activatedRoles = authorizationMgr.getRoleNamesByRoleIds(context.getCurrentRoleIds());
                 List<String> inactivatedRoles =
                         authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
-                return "Access denied for user " + userIdentity  + ". " +
+                return "Access denied for user " + userIdentity + ". " +
                         String.format(ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT, activatedRoles, inactivatedRoles);
             }
             return "Access denied.";
@@ -138,13 +142,23 @@ public class RestBaseAction extends BaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
-        // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        // ctx lifetime is the same as the channel
+
         HttpConnectContext ctx = request.getConnectContext();
+
+        String prevUserName = ctx.getQualifiedUser();
+        ctx.setQualifiedUser(authInfo.fullUserName);
+        if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
+            ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+            Pair<Boolean, String> userChangeRes = connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
+            if (!userChangeRes.first) {
+                ctx.setQualifiedUser(prevUserName);
+                throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
+            }
+        }
+
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
-        ctx.setQualifiedUser(authInfo.fullUserName);
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
         ctx.setCurrentUserIdentity(currentUser);
@@ -191,7 +205,6 @@ public class RestBaseAction extends BaseAction {
             //  do nothing
         }
 
-        // send result
         response.setContentType(JSON_CONTENT_TYPE);
         response.getContent().append(result);
         sendResult(request, response);
@@ -291,5 +304,4 @@ public class RestBaseAction extends BaseAction {
             return ps <= 0 ? DEFAULT_PAGE_SIZE : ps;
         });
     }
-
 }
