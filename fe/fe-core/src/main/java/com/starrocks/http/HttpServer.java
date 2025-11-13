@@ -101,7 +101,7 @@ import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
-
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -121,10 +121,10 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.GlobalEventExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;

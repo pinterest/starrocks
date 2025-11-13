@@ -2683,7 +2683,7 @@ public class Config extends ConfigBase {
      * and stop routing new traffic before closing existing connections.
      * Default is no grace period.
      */
-    @ConfField(mutable = true, comment = "Grace period before HTTP shutdown (seconds)")
+    @ConfField(mutable = true)
     public static int graceful_shutdown_grace_period_seconds = 0;
 
     /**

@@ -69,6 +69,7 @@ import com.starrocks.service.FrontendThriftServer;
 import com.starrocks.service.GroovyUDSServer;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlService;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.system.Frontend;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -76,12 +77,16 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import sun.misc.Signal;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.management.ManagementFactory;
+import java.net.InetSocketAddress;
 import java.nio.channels.FileLock;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class StarRocksFE {
     private static final Logger LOG = LogManager.getLogger(StarRocksFE.class);
