@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -352,7 +353,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
     private List<Column> getShortKeyColumns(Database db, OlapTable table) {
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             long baseIndexId = table.getBaseIndexId();
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
@@ -371,7 +372,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             }
             return shortKeyCols;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -390,7 +391,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
     private boolean isSchemaMatch(Database db, OlapTable table, List<String> columNames) {
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             long baseIndexId = table.getBaseIndexId();
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
@@ -406,7 +407,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             }
             return true;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
