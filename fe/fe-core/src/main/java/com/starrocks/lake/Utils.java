@@ -126,7 +126,6 @@ public class Utils {
         for (Tablet tablet : tablets) {
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
->>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
             if (computeNode == null) {
                 LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
                 computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),

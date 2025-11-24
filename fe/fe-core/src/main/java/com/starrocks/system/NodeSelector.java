@@ -21,8 +21,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.clone.TabletChecker;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections.CollectionUtils;
@@ -65,19 +65,19 @@ public class NodeSelector {
                 v -> !v.checkDiskExceedLimitForCreate(storageMedium));
     }
 
-    public Long seqChooseBackendOrComputeId() throws UserException {
+    public Long seqChooseBackendOrComputeId() throws DdlException {
         List<Long> backendIds = seqChooseBackendIds(1, true, false, null);
         if (CollectionUtils.isNotEmpty(backendIds)) {
             return backendIds.get(0);
         }
         if (RunMode.isSharedNothingMode()) {
-            throw new UserException("No backend alive.");
+            throw new DdlException("No backend alive.");
         }
         List<Long> computeNodes = seqChooseComputeNodes(1, true, false);
         if (CollectionUtils.isNotEmpty(computeNodes)) {
             return computeNodes.get(0);
         }
-        throw new UserException("No backend or compute node alive.");
+        throw new DdlException("No backend or compute node alive.");
     }
 
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,

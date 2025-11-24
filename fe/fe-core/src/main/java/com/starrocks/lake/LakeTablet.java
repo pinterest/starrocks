@@ -29,7 +29,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -123,12 +122,12 @@ public class LakeTablet extends Tablet {
             return Collections.emptySet();
         }
         try {
-            List<Long> ids = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+            Set<Long> ids = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
             if (ids == null) {
                 return Sets.newHashSet();
             } else {
-                return new HashSet<Long>(ids);
+                return ids;
             }
         } catch (Exception e) {
             LOG.warn("Failed to get backends by shard id: {}", getId(), e);
@@ -155,7 +154,7 @@ public class LakeTablet extends Tablet {
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
-        List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+        Set<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
         if (computeNodeIds == null) {
             return;

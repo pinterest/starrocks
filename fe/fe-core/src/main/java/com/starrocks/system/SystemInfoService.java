@@ -82,6 +82,7 @@ import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.sql.ast.ModifyComputeNodeClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.TabletComputeNodeMapper;
@@ -138,10 +139,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
         nodeSelector = new NodeSelector(this);
         tabletComputeNodeMapper = new TabletComputeNodeMapper();
-    }
-
-    public TabletComputeNodeMapper internalTabletMapper() {
-        return tabletComputeNodeMapper;
     }
 
     public TabletComputeNodeMapper internalTabletMapper() {

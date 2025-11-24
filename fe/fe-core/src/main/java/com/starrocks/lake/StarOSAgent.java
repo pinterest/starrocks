@@ -18,6 +18,7 @@ package com.starrocks.lake;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.manager.StarManagerServer;
@@ -34,6 +35,7 @@ import com.staros.proto.PlacementPreference;
 import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
@@ -352,7 +354,7 @@ public class StarOSAgent {
     }
 
     // Returns new worker group id
-    private long createWorkerGroup(String ownerId) {
+    private long createWorkerGroupForOwner(String ownerId) {
         WorkerGroupSpec workerGroupSpec = WorkerGroupSpec.getDefaultInstance();
         try {
             WorkerGroupDetailInfo workerGroupDetailInfo =
@@ -396,7 +398,7 @@ public class StarOSAgent {
     // Gets worker group for owner. Creates a new worker group if one doesn't already exist for owner.
     public long getOrCreateWorkerGroupForOwner(String ownerId) {
         Optional<Long> existingWorkerGroupId = tryGetWorkerGroupForOwner(ownerId);
-        return existingWorkerGroupId.orElseGet(() -> createWorkerGroup(ownerId));
+        return existingWorkerGroupId.orElseGet(() -> createWorkerGroupForOwner(ownerId));
     }
 
     /**
@@ -725,7 +727,8 @@ public class StarOSAgent {
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
-        Set<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId, true);
+        ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
+        Set<Long> backendIds = getAllNodeIdsByShard(shardInfo, true);
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
@@ -754,7 +757,7 @@ public class StarOSAgent {
             throws StarRocksException {
         try {
             ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
-            return getAllNodeIdsByShard(shardInfo);
+            return Lists.newArrayList(getAllNodeIdsByShard(shardInfo, false));
         } catch (StarClientException e) {
             throw new StarRocksException(e);
         }

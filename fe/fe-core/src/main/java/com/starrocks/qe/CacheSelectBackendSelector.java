@@ -19,7 +19,6 @@ import com.staros.proto.ShardInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.UserException;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -27,17 +26,21 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.Utils.getOptionalTabletId;
 
 // This class should only be used in shared data mode.
 public class CacheSelectBackendSelector implements BackendSelector {
+    private static final Logger LOG = LogManager.getLogger(CacheSelectBackendSelector.class);
     // Inputs
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
@@ -61,7 +64,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
     }
 
     private Set<Long> assignedCnByTabletId(SystemInfoService systemInfoService, Long tabletId, String resourceIsolationGroupId)
-            throws UserException {
+            throws DdlException {
         Optional<Long> workerGroupId =
                 GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getWorkerGroup(resourceIsolationGroupId);
         if (workerGroupId.isEmpty()) {
@@ -81,7 +84,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
         int skipCount = props.numBackupReplicasDesired > 0 ? 1 : 0;
         Set<Long> primaryCn = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
         if (primaryCn.isEmpty()) {
-            throw new UserException(String.format("Could not get primary cn for tablet %d, shard info: %s", tabletId, shardInfo));
+            throw new DdlException(String.format("Could not get primary cn for tablet %d, shard info: %s", tabletId, shardInfo));
         }
         if (count == 1 && skipCount == 0) {
             return primaryCn;
@@ -108,7 +111,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
         return new HashSet<>(cnIdsOrderedByPreference);
     }
 
-    private Set<Long> assignedCnByBackupWorker(Long mainTargetCnId, String resourceIsolationGroupId) throws UserException {
+    private Set<Long> assignedCnByBackupWorker(Long mainTargetCnId, String resourceIsolationGroupId) throws DdlException {
         DefaultSharedDataWorkerProvider workerProvider;
         try {
             workerProvider =
@@ -152,13 +155,13 @@ public class CacheSelectBackendSelector implements BackendSelector {
     }
 
     @Override
-    public void computeScanRangeAssignment() throws UserException {
+    public void computeScanRangeAssignment() throws DdlException {
         if (props.resourceIsolationGroups.isEmpty()) {
-            throw new UserException(
+            throw new DdlException(
                     "Should not have constructed CacheSelectBackendSelector with no" + " resourceIsolationGroups specified.");
         }
         if (props.numReplicasDesired < 1 && props.numBackupReplicasDesired < 1) {
-            throw new UserException(String.format(
+            throw new DdlException(String.format(
                     "Num replicas or backup replicas desired in cache must be at least 1: replicas [%d] backup replicas [%d]",
                     props.numReplicasDesired, props.numBackupReplicasDesired));
         }
@@ -178,7 +181,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
                     selectedCn = assignedCnByTabletId(systemInfoService, tabletId.get(), resourceIsolationGroupId);
                 } else {
                     if (scanRangeLocations.getLocationsSize() != 1) {
-                        throw new UserException(
+                        throw new DdlException(
                                 "CacheSelectBackendSelector expected to be used in situations where there is exactly" +
                                         " one CN to which any given tablet is officially assigned: " + scanRangeLocations);
                     }
@@ -204,6 +207,5 @@ public class CacheSelectBackendSelector implements BackendSelector {
         // Also, caller upstream will use the workerProvider to get ComputeNode references corresponding to the compute
         // nodes chosen in this function, so we must enable getting any worker regardless of availability.
         callerWorkerProvider.setAllowGetAnyWorker(true);
->>>>>>> e5385518dfc (initial commit)
     }
 }

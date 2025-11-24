@@ -5068,7 +5068,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableDropTableCheckMvDependency(boolean enableDropTableCheckMvDependency) {
         this.enableDropTableCheckMvDependency = enableDropTableCheckMvDependency;
-=======
+    }
+
     public List<String> getDatacacheSelectResourceGroups() {
         return datacacheSelectResourceGroups;
     }
@@ -5087,7 +5088,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setNumDesiredDatacacheReplicas(int numDesiredDatacacheReplicas) {
         this.numDesiredDatacacheReplicas = numDesiredDatacacheReplicas;
->>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
     }
 
     public void setNumDesiredDatacacheBackupReplicas(int numDesiredDatacacheBackupReplicas) {

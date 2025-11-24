@@ -27,7 +27,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
->>>>>>> 55795e439b7 (cache select logic and remove obsolete TODOs)
 
 import java.util.Collections;
 import java.util.List;
@@ -206,6 +205,5 @@ public class DataCacheStmtAnalyzerTest {
         Assert.assertEquals(0, stmt.getNumReplicasDesired());
         Assert.assertEquals(1, stmt.getNumBackupReplicasDesired());
         Assert.assertEquals(Collections.emptyList(), stmt.getResourceIsolationGroups());
->>>>>>> 3e414ba0aac (Added unit tests, revert linter unnecessary changes)
     }
 }

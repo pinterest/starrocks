@@ -859,7 +859,7 @@ public class OlapTableSink extends DataSink {
                     List<Long> nodeIds = location.getNode_ids();
                     for (long id : nodeIds) {
                         if (!workerProvider.isDataNodeAvailable(id)) {
-                            long backupId = workerProvider.selectBackupWorker(id);
+                            long backupId = workerProvider.selectBackupWorker(id, Optional.empty());
                             if (backupId == -1) {
                                 // error out
                                 workerProvider.reportWorkerNotFoundException();
