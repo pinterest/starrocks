@@ -111,7 +111,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
         return new HashSet<>(cnIdsOrderedByPreference);
     }
 
-    private Set<Long> assignedCnByBackupWorker(Long mainTargetCnId, String resourceIsolationGroupId) throws DdlException {
+    private Set<Long> assignedCnByBackupWorker(Long mainTargetCnId, String resourceIsolationGroupId) throws DdlException, com.starrocks.qe.scheduler.NonRecoverableException {
         DefaultSharedDataWorkerProvider workerProvider;
         try {
             workerProvider =
