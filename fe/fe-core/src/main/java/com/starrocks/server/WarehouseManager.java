@@ -326,6 +326,11 @@ public class WarehouseManager implements Writable {
         throw new DdlException("Multi-Warehouse is not implemented");
     }
 
+    public long getWarehouseResumeTime(long warehouseId) {
+        Warehouse warehouse = getWarehouse(warehouseId);
+        return warehouse.getResumeTime();
+    }
+
     public Set<String> getAllWarehouseNames() {
         return Sets.newHashSet(DEFAULT_WAREHOUSE_NAME);
     }
