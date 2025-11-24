@@ -64,7 +64,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
     }
 
     private Set<Long> assignedCnByTabletId(SystemInfoService systemInfoService, Long tabletId, String resourceIsolationGroupId)
-            throws DdlException {
+            throws DdlException, com.starrocks.qe.scheduler.NonRecoverableException {
         Optional<Long> workerGroupId =
                 GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getWorkerGroup(resourceIsolationGroupId);
         if (workerGroupId.isEmpty()) {
@@ -174,19 +174,23 @@ public class CacheSelectBackendSelector implements BackendSelector {
             // Try to create assignments for each of the resourceIsolationGroups specified.
             for (String resourceIsolationGroupId : props.resourceIsolationGroups) {
                 Set<Long> selectedCn;
-                // If we've been provided the relevant tablet id, and we're using resource isolation groups, which
-                // is when we prefer to use the internal mapping, then we populate the datacaches of the CN which
-                // are most preferred for the tablet.
-                if (tabletId.isPresent()) {
-                    selectedCn = assignedCnByTabletId(systemInfoService, tabletId.get(), resourceIsolationGroupId);
-                } else {
-                    if (scanRangeLocations.getLocationsSize() != 1) {
-                        throw new DdlException(
-                                "CacheSelectBackendSelector expected to be used in situations where there is exactly" +
-                                        " one CN to which any given tablet is officially assigned: " + scanRangeLocations);
+                try {
+                    // If we've been provided the relevant tablet id, and we're using resource isolation groups, which
+                    // is when we prefer to use the internal mapping, then we populate the datacaches of the CN which
+                    // are most preferred for the tablet.
+                    if (tabletId.isPresent()) {
+                        selectedCn = assignedCnByTabletId(systemInfoService, tabletId.get(), resourceIsolationGroupId);
+                    } else {
+                        if (scanRangeLocations.getLocationsSize() != 1) {
+                            throw new DdlException(
+                                    "CacheSelectBackendSelector expected to be used in situations where there is exactly" +
+                                            " one CN to which any given tablet is officially assigned: " + scanRangeLocations);
+                        }
+                        selectedCn = assignedCnByBackupWorker(scanRangeLocations.getLocations().get(0).getBackend_id(),
+                                resourceIsolationGroupId);
                     }
-                    selectedCn = assignedCnByBackupWorker(scanRangeLocations.getLocations().get(0).getBackend_id(),
-                            resourceIsolationGroupId);
+                } catch (com.starrocks.qe.scheduler.NonRecoverableException e) {
+                    throw new DdlException("Failed to assign compute nodes: " + e.getMessage(), e);
                 }
                 LOG.debug(String.format(
                         "done doing assignment for resource isolation group %s, tablet %d, location %s: CN chosen are %s",
