@@ -141,7 +141,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
-            } catch (StarRocksException ignored1) {
+            } catch (StarRocksException | com.staros.client.StarClientException ignored1) {
                 // ignore error
             }
         }
