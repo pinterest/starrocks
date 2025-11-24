@@ -224,7 +224,7 @@ public class WarehouseManager implements Writable {
 
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(shardInfo, true);
-        } catch (StarRocksException e) {
+        } catch (Exception e) {
             return null;
         }
     }

@@ -1,0 +1,8 @@
+/root/starrocks/fe/fe-common/src/main/java/com/starrocks/common/jmockit/AutoType.java
+/root/starrocks/fe/fe-common/src/main/java/com/starrocks/common/jmockit/Deencapsulation.java
+/root/starrocks/fe/fe-common/src/main/java/com/starrocks/common/jmockit/MethodReflection.java
+/root/starrocks/fe/fe-common/src/main/java/com/starrocks/common/jmockit/ThrowOfCheckedException.java
+/root/starrocks/fe/fe-common/src/main/java/com/starrocks/common/jmockit/GeneratedClasses.java
+/root/starrocks/fe/fe-common/src/main/java/com/starrocks/common/jmockit/FieldReflection.java
+/root/starrocks/fe/fe-common/src/main/java/com/starrocks/common/jmockit/ConstructorReflection.java
+/root/starrocks/fe/fe-common/src/main/java/com/starrocks/common/jmockit/ParameterReflection.java

@@ -1,0 +1,60 @@
+a5d2295e956 Merge pull request #59 from pinterest/shawnlyu/ars-latency-cherry-pick
+31a95dd0d13 Merge pull request #58 from pinterest/shawnlyu/cherrypick
+ceeaec29eef Merge pull request #56 from pinterest/cbrennan/pick_cache_select_fix_schema
+d5d4498c914 [BugFix] fix cache select error after DDL (backport #59812) (#59848)
+9ba1a0842f3 [BugFix] fix cache select crash for struct/json/map/array column (backport #57448) (#57505)
+c228a4b7472 Merge pull request #55 from pinterest/cbrennan/cherrypick_altertable
+af625afccf8 Merge pull request #53 from pinterest/shawnlyu/routine-load-latency
+516a8436d47 Merge pull request #50 from pinterest/cbrennan/priv_spaces
+050da559b15 Merge pull request #47 from pinterest/revert-46-http-early-disconnection-fix
+1f7c674b0a3 Merge pull request #45 from pinterest/cbrennan/cauthz_metric
+51a6313e7be Merge pull request #46 from pinterest/http-early-disconnection-fix
+05a0df76a82 Merge pull request #44 from pinterest/cbrennan/cherrypick_cauthz
+3b770e9a736 Merge branch 'pinterest-integration-3.3' into http-early-diconnection-fix
+13cdd0902cb Merge pull request #42 from pinterest/cbrennan/temppartitionbugfix
+4e61d701174 Merge pull request #40 from pinterest/cbrennan/cache_select_bugfix
+187e30b2d34 Merge pull request #37 from pinterest/cbrennan/bug_patch_abort
+0d0b42b450b Merge pull request #36 from pinterest/cbrennan/bug_patch_5_2
+eff140eb803 Merge pull request #31 from pinterest/saahilbarai/hll_testing
+6cb6c971435 Merge pull request #30 from pinterest/cbrennan/wg_mgmt
+6aa4f4d114f prune from WorkerGroupManager when there's no CN in some resource isolation group
+07bb7e4a3c6 Merge pull request #29 from pinterest/cbrennan/patch_hll_syntax
+c602cdf2166 Merge pull request #27 from pinterest/cbrennan/patch_cache_improvement
+0825dee6830 Cherry-pick includes merge resolution by accepting incoming changes to config.h
+80ef98e0fac Merge pull request #26 from pinterest/cbrennan/tm_metric
+6e3cbbc85ba Merge pull request #24 from pinterest/saahilbarai/externalAuth
+cad25c9460a Merge pull request #25 from pinterest/saahilbarai/mv_row_count_bug_fix
+357b90ae147 Merge pull request #23 from pinterest/cache-select-backup-replicas
+97fa5e916e6 Merge pull request #22 from pinterest/show_fix
+b5c0a80775e Merge pull request #21 from pinterest/pull_3.3.5
+507902436ec Merge pull request #20 from pinterest/tablet_num
+d3d6631ed82 Merge pull request #19 from pinterest/cherrypick_hllfix
+edf06cd430e Merge pull request #18 from pinterest/delete_test_to_compile
+27fd671eef3 Merge pull request #16 from pinterest/saahilbarai/cherrypick_exchange_enhancement_3.3
+085e7da7600 partial cherrypick - only call getAliveComputeNodes once per query
+cf615fd0c51 Merge pull request #15 from pinterest/merge_hll
+bd19ba3ad61 Merge branch 'pinterest-integration-3.3' into merge_hll
+dbccef49c1f Merge pull request #14 from pinterest/cbrennan/rig_fix
+80ba5fe8bd4 [BugFix] Don't update datacache metrics after cache select (#51764) (#51941)
+bec060d891f Merge pull request #12 from pinterest/cbrennan/resource-isolation-3.3_cacheselect
+e30a6efd9af Merge branch 'pinterest-integration-3.3' into cbrennan/resource-isolation-3.3_cacheselect Need to cherrypick from upstream for BE build fix related to error seen when loading: /opt/starrocks/be/lib/starrocks_be: error while loading shared libraries: libbfd-2.38-system.so: cannot open shared object file: No such file or directory
+d682c965ae0 bug fix for cache selection
+cd7579e01b4 Merge pull request #13 from pinterest/sbarai/cherry_pick_backup_bug_fix
+8376c2c488e Merge branch 'pinterest-integration-3.3' into cbrennan/resource-isolation-3.3_cacheselect
+13957b091b0 Merge pull request #11 from pinterest/cbrennan/resource-isolation-3.3_show
+55795e439b7 cache select logic and remove obsolete TODOs
+b98a9930ef8 Merge pull request #10 from pinterest/cbrennan/resource-isolation-3.3_warehousenodemgmt
+573241b766f rename label + add resource isolation group to SHOW FRONTENDS and SHOW COMPUTE NODES
+54c58b29665 Merge pull request #8 from pinterest/cbrennan/resource-isolation-3.3
+4956f98f7f0 [Enhancement] Improve cache select performance (backport #48262) (#49919)
+d0199b086aa [BugFix] Fix wrong display for cache select in profile (backport #46758) (#46765)
+cc75c4aa654 [BugFix] Fix datacache select can't work when connect to follower FE (backport #45906) (#45937)
+80473b13f5c [Doc] update cache select doc (backport #45761) (#45841)
+f6cb6ab46be [BugFix] fix cache select task property not set correctly (backport #45592) (#45617)
+7bb06837dff [Enhancement] support cache select metrics for cloud table (backport #45528) (#45553)
+40c21b55a11 [Enhancement] Fix serveral cache select use problems (backport #45220) (#45515)
+6b792263319 [Doc] support cache select docs for cloud table (backport #45204) (#45363)
+e00ace8dde0 [BugFix] fix cache select uses wrong catalog (backport #44815) (#44857)
+8a6e5a2cc7e [Enhancement] support cache select for cloud table (backport #44443) (#44669)
+cea9e30b06c [Enhancement] Make cache select properties case insensitive  (backport #44624) (#44672)
+037bf697ad8 [Feature] Support cache select for DataCache (backport #39273) (#43938)

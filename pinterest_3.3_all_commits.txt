@@ -1,0 +1,101 @@
+ceeaec29eef3143acbc139761b81d473f2163c1f|Merge pull request #56 from pinterest/cbrennan/pick_cache_select_fix_schema|Connor Brennan|2025-09-08
+c228a4b74720395a099143ddbe6d119c75344b11|Merge pull request #55 from pinterest/cbrennan/cherrypick_altertable|Connor Brennan|2025-09-03
+df3d074ddaa986bec5989da7e69f683bff859a88|Fix Java 11 compatibility issues in cherry-picked LakeTableAsyncFastSchemaChangeJobTest|Connor Brennan|2025-08-29
+1c8a63c08bdfd49472ea046ef3c0c74530e7f264|Fix CacheSelectBackendSelectorTest JMockit expectations - add missing getServingState() mock|Connor Brennan|2025-08-29
+516a8436d4710a14ba79cc0103ad4052631496ea|Merge pull request #50 from pinterest/cbrennan/priv_spaces|Connor Brennan|2025-07-22
+99e7c3d23ad6926878f0d9d1c5a835d9cd13970e|replace space in access type with underscore, make static method public to be shared|Connor Brennan|2025-07-21
+050da559b15541b2d6f91196f7327cbe9cfad83f|Merge pull request #47 from pinterest/revert-46-http-early-disconnection-fix|Connor Brennan|2025-06-30
+e9d10477a4aa0365ef98c4b52849b517e13bd7d3|lint|Connor Brennan|2025-06-26
+1f7c674b0a3a5e0c0a6301f15934ebd0ab403114|Merge pull request #45 from pinterest/cbrennan/cauthz_metric|Connor Brennan|2025-06-26
+05a0df76a82b8ed43ac6c21f52c3d0a71e823390|Merge pull request #44 from pinterest/cbrennan/cherrypick_cauthz|Connor Brennan|2025-06-25
+3b770e9a736d6ed5d98b848a92eaf89d08e97602|Merge branch 'pinterest-integration-3.3' into http-early-diconnection-fix|Anatolijs Vasiljevs|2025-06-25
+aadc1d0d649eb57dafc7a3faef66bb367a97957b|update in HttpResultSender sendQueryResult() method to send HTTP header and query metadata after first batch of data retrieved or no data retrieved at all to avoid closing HTTP channel prematurely if data retrieval error is detected.|Anatolijs Vasiljevs|2025-06-25
+999e1c90dd01f230daae171aef43d76ce190a564|all caps|Connor Brennan|2025-06-24
+7a18cada893e20f6b28a7af023e178e121f8d65f|didn't need function|Connor Brennan|2025-06-24
+c12dc8434ef746494e2f1b24dc7013c4cd49e449|add fail open policy counter|Connor Brennan|2025-06-24
+730daabc23c3a7f4fee661eea8f895dd90a7e1cb|change to boolean|mingmayhu|2025-05-20
+88706b27029993650a821cf9720a8e74c175484d|add fail open config|mingmayhu|2025-05-20
+13cdd0902cbd95aa870cb9237de929aaa8932c5a|Merge pull request #42 from pinterest/cbrennan/temppartitionbugfix|Connor Brennan|2025-06-20
+e984ad58cda23de4447a4635782b238c7601c131|use older api to get context in unit test|Connor Brennan|2025-06-20
+fd89f4a509d33444ebe67b50d9173d2d9be8449c|[BugFix] Create temporary partitions bugfix + fix comparisons on Type.Date and Type.Datetime (#60014)|Connor Brennan|2025-06-19
+4e61d701174b3683bc8c48be3644f34e375d78e0|Merge pull request #40 from pinterest/cbrennan/cache_select_bugfix|Connor Brennan|2025-06-04
+187e30b2d34849372ce6adf717155e7f0d0487e7|Merge pull request #37 from pinterest/cbrennan/bug_patch_abort|Connor Brennan|2025-05-15
+0d0b42b450b476fd0e98c62b1021163df7e0f705|Merge pull request #36 from pinterest/cbrennan/bug_patch_5_2|Connor Brennan|2025-05-07
+6cb6c971435b6c59e42e96bd51407c2b3c7dc2c9|Merge pull request #30 from pinterest/cbrennan/wg_mgmt|Connor Brennan|2025-03-31
+6aa4f4d114f354191a4b13843bfa044d9cc7feb2|prune from WorkerGroupManager when there's no CN in some resource isolation group|Connor Brennan|2025-03-31
+169d92bb46ff547dd254ed601dd6e2b614374572|lint|Connor Brennan|2025-03-31
+733b7282580a99a81752a5dccce766537f11abd2|manage worker groups for RIG, use StarOs for primary tablet->CN assignment|Connor Brennan|2025-03-28
+07bb7e4a3c60ea9bc1710fc09131831a3a4978d0|Merge pull request #29 from pinterest/cbrennan/patch_hll_syntax|Connor Brennan|2025-03-11
+c602cdf2166e591c029156f8af90aac1e18d55b9|Merge pull request #27 from pinterest/cbrennan/patch_cache_improvement|Connor Brennan|2025-03-05
+80ef98e0fac988759d742e68ccaeb7f612ace003|Merge pull request #26 from pinterest/cbrennan/tm_metric|Connor Brennan|2025-02-18
+40b0b9e7fba1e77ac7406a9924dd40b7feae21ba|revert a couple unneeded changes|Connor Brennan|2025-02-13
+d040c2db5559add1397b22a3babd8182fcffc982|metrics for tracking cn to tablet mappings|Connor Brennan|2025-02-13
+97fa5e916e6a0874335a0ebfd1d5d3bd2ac4e809|Merge pull request #22 from pinterest/show_fix|Connor Brennan|2025-01-07
+15cfe900a6cf5616e62cbd3b24112ff25a2ccccc|add prepare() call to every method in StarOSAgent which uses serviceId|Connor Brennan|2025-01-06
+d9d35553f9bfb6dfce5dff918d9c5a454b1c0d1e|Revert "remove construction/init of StarOSAgent, call StarOsAgent.prepare once immediately after init"|Connor Brennan|2025-01-07
+a6503d4e5ee50f556f5a0dbf2e97631559d5ea41|Revert "remove construction/init of StarOSAgent, call StarOsAgent.prepare once immediately after init"|Connor Brennan|2025-01-07
+99e772bb5d11a305a08a7c19289431afd312a013|Revert "move prepare call to after GlobalStateMgr is ready"|Connor Brennan|2025-01-07
+828c5f771f7f81d66a401e874da61f5039f6060f|revert auto added EOL made by IDEA|Anatolijs Vasiljevs|2025-01-06
+e1c1a0c8fb02a6e4504016436733d3344e3f5039|revert auto added EOL made by IDEA|Anatolijs Vasiljevs|2025-01-06
+cc129f0126e2f6d2e6f512c59afcea16e234e0b4|revert auto added EOL made by IDEA|Anatolijs Vasiljevs|2025-01-06
+3e414ba0aac3871e8043fd2e0776532c519059ca|Added unit tests, revert linter unnecessary changes|Anatolijs Vasiljevs|2025-01-06
+27a19861166e969dccea79e4f4174ae41e1b89ea|move prepare call to after GlobalStateMgr is ready|Connor Brennan|2024-12-18
+8166305289207fbbdd2ed99c2fc11838974d21df|remove construction/init of StarOSAgent, call StarOsAgent.prepare once immediately after init|Connor Brennan|2024-12-17
+e5385518dfc9ac0a430afeaf61e689226d75ae46|initial commit|Anatolijs Vasiljevs|2024-12-27
+b5c0a80775e6337863d169d5713bc1a6f785ff6f|Merge pull request #21 from pinterest/pull_3.3.5|Connor Brennan|2024-12-18
+0011722657dca27b128bef8540f3e12b55f03e7b|remove construction/init of StarOSAgent, call StarOsAgent.prepare once immediately after init|Connor Brennan|2024-12-17
+f9c016146694c216043f72e66f97118d0e7cd2e2|fix editlog test|Connor Brennan|2024-11-25
+fb1e35fbe8b651d7428d91e541f6aa182179e819|resolve merge conflicts|Connor Brennan|2024-11-25
+507902436ecad6150025118f149b85864ada5a66|Merge pull request #20 from pinterest/tablet_num|Connor Brennan|2024-11-21
+f460673b792e7da9a29f7444e411007a3c3d9304|respond to comments, explain code more|Connor Brennan|2024-11-20
+39e4d82826f986f7d3dbca5e5a0dc414367e13df|Correct backup selection checks for rig vs non-rig situations + improve logging + add nodes to tabletcomputenodemapper when deserializing SystemInfoService + have WarehouseManager return all cn matching-rig instead of just those which are available|Connor Brennan|2024-11-20
+0df2d8f1a0c59fef21298a845bcd5c1b9f16eb00|lint file and log stacktrace|Connor Brennan|2024-11-15
+06982ba72dfa846098a2d3b9eb83f563f6149a1f|show proc tablet_mapping, expand show compute nodes, fix bug with replaying adding cn|Connor Brennan|2024-11-14
+d3d6631ed82ac376e9146d8ea2c6cd499cb0cdb3|Merge pull request #19 from pinterest/cherrypick_hllfix|Connor Brennan|2024-11-05
+76facf78d7d927504e2ef3dcd382ae2fda7ec98a|merge in upstream branch_3.3.4_08fd66 with hll fix from https://github.com/StarRocks/starrocks/pull/52540|Connor Brennan|2024-11-05
+edf06cd430e79a8082002a29a9ca5492309d82fb|Merge pull request #18 from pinterest/delete_test_to_compile|Connor Brennan|2024-10-30
+1700627c5d07c2897d5d099bae04878a2284c320|remove test that prevents compilation following cherrypicks|Connor Brennan|2024-10-30
+085e7da76004088024db3d4b8f467493e68a6d08|partial cherrypick - only call getAliveComputeNodes once per query|Connor|2024-10-21
+cf615fd0c5170260e27ca393a5e1630bf1f34910|Merge pull request #15 from pinterest/merge_hll|Connor Brennan|2024-10-28
+bd19ba3ad61eee13cbd9414ef2c3e1247265b3a5|Merge branch 'pinterest-integration-3.3' into merge_hll|Connor|2024-10-18
+dbccef49c1fc321d0cd1bfd61103dca4cffcb87f|Merge pull request #14 from pinterest/cbrennan/rig_fix|Connor Brennan|2024-10-18
+ddad31fc392af7dcabf9dd15d719f0a4ad1387df|merge upstream/branch_3.3.4_08fd66|Connor|2024-10-18
+d2c99225974c5e8d4cc4a6d30f52706c2fa89521|lint|Connor|2024-10-16
+fe98b3774a32b9d60eb50ecc5b58a6fc80e8ccdf|return empty collection instead of null if no cn available|Connor|2024-10-16
+d7e9d31e1e4eda4715a68ec2936bdae0840d6f31|bugfix for issue during upgrade|Connor|2024-10-15
+bec060d891f8d3b4d3b0a71384683dd255cc836a|Merge pull request #12 from pinterest/cbrennan/resource-isolation-3.3_cacheselect|Connor Brennan|2024-10-11
+e30a6efd9afecd3d2ef930b7687161c46e1c53c5|Merge branch 'pinterest-integration-3.3' into cbrennan/resource-isolation-3.3_cacheselect Need to cherrypick from upstream for BE build fix related to error seen when loading: /opt/starrocks/be/lib/starrocks_be: error while loading shared libraries: libbfd-2.38-system.so: cannot open shared object file: No such file or directory|Connor|2024-10-07
+d682c965ae0f977ebe2e8df8f799ff4b23030302|bug fix for cache selection|Connor|2024-09-26
+8376c2c488e0e845e1bdf401919d8217d133fe7f|Merge branch 'pinterest-integration-3.3' into cbrennan/resource-isolation-3.3_cacheselect|Connor|2024-09-20
+13957b091b0b62e93bbc5ece097a778074bc5542|Merge pull request #11 from pinterest/cbrennan/resource-isolation-3.3_show|Connor Brennan|2024-09-20
+ba36f3fe6af821c7c3bc4a33e892387d2b2e06ff|fix order of columns|Connor|2024-09-20
+a0aa5d55b6310fd63445433fa6a6c30a20746437|merge|Connor|2024-09-20
+5bcf04fafab208f9a5ee2638a07738cc8773801d|correct some backend selection logic and change func name|Connor|2024-09-20
+6c8fd83f5ef3cf9ef0813517753a09d2e2ea6c02|defaults and tests|Connor|2024-09-19
+e3aa09d181c16717501e2601c9b0e2a8d5941dee|remove build.sh|Connor|2024-09-19
+ec2132d2df07e968bb1741023e81a1b32040a10d|lint|Connor|2024-09-19
+6442fac860717d3c395a4fb1bc141fa57df24678|gitignore build.sh and remove newlines and unnecessary code|Connor|2024-09-19
+55795e439b79c1176db2b9f507587d8746b6a46e|cache select logic and remove obsolete TODOs|Connor|2024-09-19
+7f87cc8580ae7185c8bb6d49d9e1420a9b38f8d2|small refactor of resoure isolation group utilities|Connor|2024-08-29
+5a9b98cc40e867526b5d34dccea998cae6e0ac14|TODOs to remind me what to look at later|Connor|2024-08-27
+42a2b62a138b7d6b9a60892a713cbf89381fd668|compute node selection for ingestion and reads. Note, has logging which should be quieted. Missing unit tests. has some directional todos.|Connor|2024-08-27
+b98a9930ef8f71623514bdc921d375d740bc3bc0|Merge pull request #10 from pinterest/cbrennan/resource-isolation-3.3_warehousenodemgmt|Connor Brennan|2024-09-19
+af8a11472c4c2f0bd371a8cd1f91f588c347127b|edge case unit test|Connor|2024-09-19
+a28dee3322ce66567786a3a4192f915c0c827f08|Zhenxiao's comments|Connor|2024-09-19
+3aa54868956e68005cb6c1b7fff1609f5e46b244|Charles's comments, check rig in WorkerProvider, rethink some stuff in tabletcomputenodemapper|Connor|2024-09-18
+9d2870a852ca32b3caec1d3e793224aeff92a55c|create SHOW RESOURCE ISOLATION GROUPS statement|Connor|2024-09-13
+573241b766f1fad0160d32d6a4cc607e9f701b08|rename label + add resource isolation group to SHOW FRONTENDS and SHOW COMPUTE NODES|Connor|2024-09-13
+12f3cdd26b585397157ae935043e303737d21d53|unused imports|Connor|2024-09-13
+1a740bc10f7a8139fb4e1fe5c2cb093070e19085|bounds|Connor|2024-09-13
+4ce975d61e9315b5e8c00f1db77bb4c6b4a68e26|expand test to assert that load is somewhat evenly distributed to backups when some cn is down|Connor|2024-09-13
+020b3a5a0753bbb9f2a85d9e0ac8e994335c4463|rename func, use tablet mapper in WorkerProvider, specify replicas in arg instead of storing as state|Connor|2024-09-12
+dd897c64d0591840ac7562854047c6d878f5c3c3|unused imports|Connor|2024-09-11
+687120fc64c1d02be8578c207b7857db7e88c230|node selection by resource group id|Connor|2024-09-11
+54c58b29665286c50938e1a31b477143526e550e|Merge pull request #8 from pinterest/cbrennan/resource-isolation-3.3|Connor Brennan|2024-09-06
+2029aecffd53f9b2b614fc5adc0f12f8f73ba947|Charles's comments|Connor|2024-09-04
+7597c95b879e92071d6d043af58e363a4624fd42|undo pom.xml python change|Connor|2024-08-30
+f859659e220c9c2f399bd11aa0285605cc374e21|lint|Connor|2024-08-23
+85c4aa125c4a0e7256d141c6b51f8a2342954f75|unused imports|Connor|2024-08-23
+02c44a34d64ecddde03984a8ab7662edea4f9550|parsing sql statements and passing assigned group to Frontend and ComputeNode classes|Connor|2024-08-23
+54d0f54a524b8e7776822d087763271feb621857|[Enhancement] User friendly error message when AWS parseRegion gets error (#27498)|Zhenxiao Luo|2023-07-24
+9e3e6aeb96789b6e18d9d44d45a1c06deeea2245|[Refactor] use constants in Parquet file reader (#13249)|Zhenxiao Luo|2022-11-11
