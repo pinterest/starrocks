@@ -726,7 +726,7 @@ public class StarOSAgent {
         return result;
     }
 
-    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException, StarClientException {
         ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
         Set<Long> backendIds = getAllNodeIdsByShard(shardInfo, true);
         if (backendIds.isEmpty()) {
