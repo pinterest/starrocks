@@ -1,5 +1,3 @@
-# *.xml line was added by cbrennan
-*.xml
 *.swp
 *.pyc
 be/output
@@ -111,16 +109,3 @@ build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
 
-*.tar.gz
-incident_logs/
-
-# Temporary analysis and planning files
-*.pdf
-cherry_pick_plan.md
-commits_in_*.txt
-comprehensive_*.md
-exchange_problem.md
-final_migration_plan.md
-migration_log.md
-patch_ids.txt
-*profile.txt
