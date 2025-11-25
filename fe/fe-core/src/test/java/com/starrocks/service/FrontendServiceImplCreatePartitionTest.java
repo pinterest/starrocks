@@ -102,7 +102,7 @@ public class FrontendServiceImplCreatePartitionTest {
         WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         new Expectations(warehouseMgr) {
             {
-                warehouseMgr.getAliveComputeNodeId(anyLong, (LakeTablet) any);
+                warehouseMgr.getComputeNodeId(anyLong, (LakeTablet) any);
                 result = 50001L;
                 result = null;
             }

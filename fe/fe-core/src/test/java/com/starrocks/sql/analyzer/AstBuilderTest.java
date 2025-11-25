@@ -33,6 +33,7 @@ import com.starrocks.sql.parser.StarRocksParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

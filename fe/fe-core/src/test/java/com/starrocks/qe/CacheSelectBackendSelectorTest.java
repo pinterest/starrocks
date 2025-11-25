@@ -20,7 +20,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
@@ -236,7 +236,7 @@ public class CacheSelectBackendSelectorTest {
 
         try {
             selector.computeScanRangeAssignment();
-        } catch (UserException e) {
+        } catch (DdlException e) {
             System.out.printf("Error: %s%n", e);
             throw new RuntimeException(e);
         } finally {
@@ -307,7 +307,7 @@ public class CacheSelectBackendSelectorTest {
 
         try {
             selector.computeScanRangeAssignment();
-        } catch (UserException e) {
+        } catch (DdlException e) {
             throw new RuntimeException(e);
         } finally {
             int givenScanNodeId = scanNode.getId().asInt();
@@ -373,7 +373,7 @@ public class CacheSelectBackendSelectorTest {
             }
         };
 
-        UserException exception = assertThrows(UserException.class, selector::computeScanRangeAssignment);
+        DdlException exception = assertThrows(DdlException.class, selector::computeScanRangeAssignment);
         Assert.assertEquals("Compute node not found. Check if any compute node is down." +
                 " nodeId: -1 compute node: [whatever alive: true, available: false, inBlacklist: false]" +
                 " [whatever alive: true, available: false, inBlacklist: false]" +
@@ -451,7 +451,7 @@ public class CacheSelectBackendSelectorTest {
 
         try {
             selector.computeScanRangeAssignment();
-        } catch (UserException e) {
+        } catch (DdlException e) {
             throw new RuntimeException(e);
         } finally {
             int givenScanNodeId = scanNode.getId().asInt();
@@ -554,7 +554,7 @@ public class CacheSelectBackendSelectorTest {
 
         try {
             selector.computeScanRangeAssignment();
-        } catch (UserException e) {
+        } catch (DdlException e) {
             throw new RuntimeException(e);
         } finally {
             Assert.assertEquals(1, assignment.size());
@@ -632,7 +632,7 @@ public class CacheSelectBackendSelectorTest {
 
         try {
             selector.computeScanRangeAssignment();
-        } catch (UserException e) {
+        } catch (DdlException e) {
             throw new RuntimeException(e);
         } finally {
             int givenScanNodeId = scanNode.getId().asInt();
@@ -684,7 +684,7 @@ public class CacheSelectBackendSelectorTest {
             }
         };
 
-        UserException exception = assertThrows(UserException.class, selector::computeScanRangeAssignment);
+        DdlException exception = assertThrows(DdlException.class, selector::computeScanRangeAssignment);
         Assert.assertEquals("No CN nodes available for the specified resource group. resourceGroup: unknowngroup",
                 exception.getMessage());
 
@@ -748,7 +748,7 @@ public class CacheSelectBackendSelectorTest {
             }
         };
 
-        UserException exception = assertThrows(UserException.class, selector::computeScanRangeAssignment);
+        DdlException exception = assertThrows(DdlException.class, selector::computeScanRangeAssignment);
         Assert.assertEquals(
                 "No CN nodes available for the specified resource group." + " resourceGroup: unknowngroup, tabletId: 0",
                 exception.getMessage());

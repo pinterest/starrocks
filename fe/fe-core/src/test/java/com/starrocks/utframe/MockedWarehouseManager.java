@@ -103,13 +103,8 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-    public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
-        return computeNodeId;
-    }
-
-    @Override
-    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-        return computeNodeIdSetAssignedToTablet;
+    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        return Sets.newHashSet(computeNodeIdSetAssignedToTablet);
     }
 
     public void setComputeNodeIdsAssignToTablet(Set<Long> computeNodeIds) {

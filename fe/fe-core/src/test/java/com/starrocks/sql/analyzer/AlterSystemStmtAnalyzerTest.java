@@ -94,13 +94,13 @@ public class AlterSystemStmtAnalyzerTest {
         Void result = visitor.visitModifyComputeNodeClause(clause, null);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testVisitModifyComputeNodeClauseException() {
         mockNet();
         AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyComputeNodeClause clause = new ModifyComputeNodeClause("test",
                 Map.of("labels.location", "rack:1"));
-        Void result = visitor.visitModifyComputeNodeClause(clause, null);
+        assertThrows(SemanticException.class, () -> visitor.visitModifyComputeNodeClause(clause, null));
     }
 
     @Test
@@ -112,13 +112,13 @@ public class AlterSystemStmtAnalyzerTest {
         Void result = visitor.visitModifyFrontendClause(clause, null);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testVisitModifyFrontendPropertiesClauseException() {
         mockNet();
         AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyFrontendClause clause = new ModifyFrontendClause("test:1",
                 Map.of("labels.location", "rack:1"), null);
-        Void result = visitor.visitModifyFrontendClause(clause, null);
+        assertThrows(SemanticException.class, () -> visitor.visitModifyFrontendClause(clause, null));
     }
 
     @Test
@@ -270,13 +270,13 @@ public class AlterSystemStmtAnalyzerTest {
         ComputeNode persistentState = (ComputeNode)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_COMPUTE_NODE_STATE_CHANGE);
         nodeMgrFollower.getClusterInfo().updateInMemoryStateComputeNode(persistentState);
-        Assert.assertEquals("somegroup",
+        Assertions.assertEquals("somegroup",
                 nodeMgrFollower.getClusterInfo().getComputeNode(persistentState.getId()).getResourceIsolationGroup());
 
         // test restart
         NodeMgr nodeMgrLeader = new NodeMgr();
         nodeMgrLeader.load(finalImage.getMetaBlockReader());
-        Assert.assertEquals("somegroup",
+        Assertions.assertEquals("somegroup",
                 nodeMgrLeader.getClusterInfo().getComputeNode(persistentState.getId()).getResourceIsolationGroup());
     }
 }

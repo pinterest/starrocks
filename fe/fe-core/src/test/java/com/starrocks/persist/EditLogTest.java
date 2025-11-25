@@ -177,9 +177,7 @@ public class EditLogTest {
                 feInMemory.getEditLogPort());
         feToWrite.updateHostAndEditLogPort("testHost", 1000);
         feToWrite.setResourceIsolationGroup("somegroup2");
-        JournalEntity journal = new JournalEntity();
-        journal.setData(feToWrite);
-        journal.setOpCode(OperationType.OP_UPDATE_FRONTEND_V2);
+        JournalEntity journal = new JournalEntity(OperationType.OP_UPDATE_FRONTEND_V2, feToWrite);
         EditLog editLog = new EditLog(null);
         editLog.loadJournal(mgr, journal);
         List<Frontend> updatedFrontends = mgr.getNodeMgr().getFrontends(null);
@@ -196,9 +194,7 @@ public class EditLogTest {
         ComputeNode cnInMemory =  systemInfoService.getComputeNodes().get(0);
         ComputeNode cnToWrite = new ComputeNode(cnInMemory.getId(), cnInMemory.getHost(), cnInMemory.getHeartbeatPort());
         cnToWrite.setResourceIsolationGroup("somegroup");
-        JournalEntity journal = new JournalEntity();
-        journal.setData(cnToWrite);
-        journal.setOpCode(OperationType.OP_COMPUTE_NODE_STATE_CHANGE);
+        JournalEntity journal = new JournalEntity(OperationType.OP_COMPUTE_NODE_STATE_CHANGE, cnToWrite);
         EditLog editLog = new EditLog(null);
 
         TabletComputeNodeMapper tabletComputeNodeMapper = systemInfoService.internalTabletMapper();
@@ -217,10 +213,8 @@ public class EditLogTest {
 
     @Test
     public void testLoadJournalException(@Mocked GlobalStateMgr globalStateMgr) {
-        JournalEntity journal = new JournalEntity();
-        journal.setOpCode(OperationType.OP_SAVE_NEXTID);
         // set data to null, and it will throw NPE in loadJournal()
-        journal.setData(null);
+        JournalEntity journal = new JournalEntity(OperationType.OP_SAVE_NEXTID, null);
 
         EditLog editLog = new EditLog(null);
         new Expectations() {

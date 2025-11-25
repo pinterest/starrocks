@@ -23,10 +23,12 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
@@ -87,7 +89,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testGetAliveComputeNodes() throws UserException {
+    public void testGetAliveComputeNodes() throws DdlException, StarRocksException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public NodeMgr getNodeMgr() {
@@ -135,7 +137,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testUsingResourceIsolationGroups(@Mocked WorkerGroupManager workerGroupManager) throws UserException {
+    public void testUsingResourceIsolationGroups(@Mocked WorkerGroupManager workerGroupManager) throws DdlException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public NodeMgr getNodeMgr() {
@@ -218,7 +220,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws UserException {
+    public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws DdlException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(true);
@@ -252,7 +254,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws DdlException {
                 if (workerGroupId == DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -295,7 +297,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws UserException {
+    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws DdlException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(false);
@@ -329,7 +331,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws DdlException {
                 if (workerGroupId == DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -369,10 +371,11 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, "aaa", null, null);
+        Partition partition = new Partition(123, "aaa", null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        PhysicalPartition physicalPartition = new PhysicalPartition(123, "aaa", 123, index);
         ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
-                () -> scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1));
+                () -> scanNode.addScanRangeLocations(partition, physicalPartition, index, Collections.emptyList(), 1));
         Assert.assertEquals(
                 "No alive backend or compute node in warehouse null. Also possible that there are no CN of the resource " +
                         "isolation group matching the FE.",
@@ -381,7 +384,7 @@ public class WarehouseManagerTest {
 
     @Test
     public void testSelectWorkerGroupByWarehouseId_checkAliveNodesOnce(@Mocked WarehouseManager mockWarehouseMgr)
-            throws UserException {
+            throws DdlException, StarRocksException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(false);
@@ -403,7 +406,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws DdlException {
                 if (workerGroupId == DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -448,12 +451,13 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, "aaa", null, null);
+        Partition partition = new Partition(123, "aaa", null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
-        scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1);
+        PhysicalPartition physicalPartition = new PhysicalPartition(123, "aaa", 123, index);
+        scanNode.addScanRangeLocations(partition, physicalPartition, index, Collections.emptyList(), 1);
         // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
         // getAliveComputeNodes.
-        scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1);
+        scanNode.addScanRangeLocations(partition, physicalPartition, index, Collections.emptyList(), 1);
     }
 
     private OlapScanNode newOlapScanNode() {

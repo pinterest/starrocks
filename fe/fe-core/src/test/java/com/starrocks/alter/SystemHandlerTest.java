@@ -23,7 +23,6 @@ import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -60,26 +59,20 @@ public class SystemHandlerTest {
         systemHandler = new SystemHandler();
     }
 
-    @Test(expected = RuntimeException.class)
-    public void testModifyBackendAddressLogic() throws UserException {
-        ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
-        List<AlterClause> clauses = new ArrayList<>();
-        clauses.add(clause);
-        systemHandler.process(clauses, null, null);
-    }
-
-    @Test(expected = NullPointerException.class)
-    public void testModifyFrontendAddressLogic() throws UserException {
-        ModifyFrontendClause clause = new ModifyFrontendClause("127.0.0.1", "sandbox-fqdn");
-        List<AlterClause> clauses = new ArrayList<>();
-        clauses.add(clause);
-        systemHandler.process(clauses, null, null);
+    @Test
+    public void testModifyBackendAddressLogic() {
+        assertThrows(RuntimeException.class, () -> {
+            ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
+            List<AlterClause> clauses = new ArrayList<>();
+            clauses.add(clause);
+            systemHandler.process(clauses, null, null);
+        });
     }
 
     @Test
     public void testModifyFrontendAddressLogic() {
         assertThrows(NullPointerException.class, () -> {
-            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
+            ModifyFrontendClause clause = new ModifyFrontendClause("127.0.0.1", "sandbox-fqdn", null);
             List<AlterClause> clauses = new ArrayList<>();
             clauses.add(clause);
             systemHandler.process(clauses, null, null);

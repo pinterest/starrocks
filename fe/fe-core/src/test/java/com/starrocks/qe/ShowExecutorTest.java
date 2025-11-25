@@ -902,13 +902,13 @@ public class ShowExecutorTest {
                     resultSet.getMetaData().getColumn(i).getName());
         }
 
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("16", resultSet.getString(13));
-        Assert.assertEquals("10", resultSet.getString(14));
-        Assert.assertEquals("1.00 %", resultSet.getString(15));
-        Assert.assertEquals("3.0 %", resultSet.getString(16));
-        Assert.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(17));
-        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(22));
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("16", resultSet.getString(13));
+        Assertions.assertEquals("10", resultSet.getString(14));
+        Assertions.assertEquals("1.00 %", resultSet.getString(15));
+        Assertions.assertEquals("3.0 %", resultSet.getString(16));
+        Assertions.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(17));
+        Assertions.assertEquals(String.valueOf(tabletNum), resultSet.getString(22));
     }
 
     @Test
@@ -973,18 +973,18 @@ public class ShowExecutorTest {
         ShowResourceIsolationGroupStatement stmt = new ShowResourceIsolationGroupStatement();
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
-        Assert.assertEquals(5,
+        Assertions.assertEquals(5,
                 resultSet.getMetaData().getColumnCount());
         for (int i = 0; i < ShowResourceIsolationGroupStatement.TITLE_NAMES.size(); ++i) {
-            Assert.assertEquals(ShowResourceIsolationGroupStatement.TITLE_NAMES.get(i),
+            Assertions.assertEquals(ShowResourceIsolationGroupStatement.TITLE_NAMES.get(i),
                     resultSet.getMetaData().getColumn(i).getName());
 
         }
         List<List<String>> rows = resultSet.getResultRows();
-        Assert.assertEquals(3, rows.size());
-        Assert.assertEquals(" fe5 1 4 1", String.join(" ", rows.get(0)));
-        Assert.assertEquals("somegroup fe1,fe2,fe3 3 1,2 2", String.join(" ", rows.get(1)));
-        Assert.assertEquals("someothergroup fe4 1 3 1", String.join(" ", rows.get(2)));
+        Assertions.assertEquals(3, rows.size());
+        Assertions.assertEquals(" fe5 1 4 1", String.join(" ", rows.get(0)));
+        Assertions.assertEquals("somegroup fe1,fe2,fe3 3 1,2 2", String.join(" ", rows.get(1)));
+        Assertions.assertEquals("someothergroup fe4 1 3 1", String.join(" ", rows.get(2)));
     }
 
     @Test

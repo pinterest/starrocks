@@ -24,7 +24,7 @@ public class AstVisitorTest {
     public void testVisitModifyFrontendClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
         Object ret = visitor.visitModifyFrontendClause(null, null);
-        Assert.assertNull(ret);
+        Assertions.assertNull(ret);
     }
 
     @Test
@@ -38,6 +38,6 @@ public class AstVisitorTest {
     public void testVisitModifyComputeNodeClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
         Object ret = visitor.visitModifyComputeNodeClause(null, null);
-        Assert.assertNull(ret);
+        Assertions.assertNull(ret);
     }
 }
