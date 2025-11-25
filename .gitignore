@@ -111,3 +111,5 @@ build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
 
+*.tar.gz
+incident_logs/
