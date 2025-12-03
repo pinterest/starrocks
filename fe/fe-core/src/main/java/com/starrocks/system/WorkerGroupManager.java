@@ -101,8 +101,13 @@ public class WorkerGroupManager implements Writable {
             }
             LOG.info("Going to StarOS to get or create worker group mapping for resource isolation group: {}",
                     resourceIsolationGroup);
-            long workerGroupId =
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().getOrCreateWorkerGroupForOwner(resourceIsolationGroup);
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            if (starOSAgent == null) {
+                // StarOSAgent may be null in unit tests or during startup
+                LOG.warn("StarOSAgent is null, returning default worker group ID for RIG: {}", resourceIsolationGroup);
+                return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+            }
+            long workerGroupId = starOSAgent.getOrCreateWorkerGroupForOwner(resourceIsolationGroup);
             LOG.info("Stored new mapping from resource isolation group {} to worker group {}", resourceIsolationGroup,
                     workerGroupId);
             resourceIsolationGroupToWorkerGroupId.put(resourceIsolationGroup, workerGroupId);

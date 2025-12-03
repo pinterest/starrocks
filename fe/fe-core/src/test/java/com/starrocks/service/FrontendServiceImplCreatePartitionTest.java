@@ -123,7 +123,11 @@ public class FrontendServiceImplCreatePartitionTest {
         TCreatePartitionResult partition = impl.createPartition(request);
 
         Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
-        Assertions.assertTrue(partition.getStatus().getError_msgs().get(0)
-                .contains("No alive compute node found for tablet. " + "Check if any backend is down or not. tablet_id:"));
+        // Error message changed due to RIG code path - now includes warehouse and RIG context
+        String errorMsg = partition.getStatus().getError_msgs().get(0);
+        Assertions.assertTrue(
+                errorMsg.contains("No alive compute node found for tablet") ||
+                errorMsg.contains("No alive backend or compute node in warehouse"),
+                "Unexpected error message: " + errorMsg);
     }
 }

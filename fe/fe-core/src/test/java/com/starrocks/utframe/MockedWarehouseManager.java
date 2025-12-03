@@ -154,4 +154,10 @@ public class MockedWarehouseManager extends WarehouseManager {
             aliveComputeNodes.addAll(computeNodes);
         }
     }
+
+    @Override
+    public java.util.Optional<Long> selectWorkerGroupByWarehouseId(long warehouseId) {
+        // Return default worker group ID (0) for tests to avoid NPE from getMySelf() in RIG code path
+        return java.util.Optional.of(0L);
+    }
 }

@@ -903,12 +903,14 @@ public class ShowExecutorTest {
         }
 
         Assertions.assertTrue(resultSet.next());
-        Assertions.assertEquals("16", resultSet.getString(13));
-        Assertions.assertEquals("10", resultSet.getString(14));
-        Assertions.assertEquals("1.00 %", resultSet.getString(15));
-        Assertions.assertEquals("3.0 %", resultSet.getString(16));
-        Assertions.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(17));
-        Assertions.assertEquals(String.valueOf(tabletNum), resultSet.getString(22));
+        Assertions.assertEquals("16", resultSet.getString(13)); // CpuCores
+        Assertions.assertEquals("100.000B", resultSet.getString(14)); // MemLimit
+        Assertions.assertEquals("10", resultSet.getString(15)); // NumRunningQueries
+        Assertions.assertEquals("1.00 %", resultSet.getString(16)); // MemUsedPct
+        Assertions.assertEquals("3.0 %", resultSet.getString(17)); // CpuUsedPct
+        Assertions.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(18)); // DataCacheMetrics
+        Assertions.assertEquals("OK", resultSet.getString(20)); // StatusCode
+        Assertions.assertEquals(String.valueOf(tabletNum), resultSet.getString(24)); // TabletNum
     }
 
     @Test

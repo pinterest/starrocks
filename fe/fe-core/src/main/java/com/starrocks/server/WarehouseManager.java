@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
@@ -282,12 +283,15 @@ public class WarehouseManager implements Writable {
     // Warehouse id is unused in pinterest. In this version of starrocks we use resource isolation group instead of warehouse id.
     private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
         if (warehouseId == DEFAULT_WAREHOUSE_ID) {
-            String thisRig = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
-            Optional<Long> workerGroup = GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getWorkerGroup(thisRig);
-            if (workerGroup.isPresent()) {
-                return workerGroup;
+            Frontend mySelf = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+            if (mySelf != null) {
+                String thisRig = mySelf.getResourceIsolationGroup();
+                Optional<Long> workerGroup = GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getWorkerGroup(thisRig);
+                if (workerGroup.isPresent()) {
+                    return workerGroup;
+                }
+                LOG.warn("Could not get worker group using WorkerGroupManager, falling back on earlier implementation");
             }
-            LOG.warn("Could not get worker group using WorkerGroupManager, falling back on earlier implementation");
         } else {
             LOG.warn("Violating expectations that we don't use warehouse feature: {}", warehouseId);
         }

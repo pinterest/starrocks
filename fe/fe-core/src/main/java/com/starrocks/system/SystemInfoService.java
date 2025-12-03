@@ -435,7 +435,10 @@ public class SystemInfoService implements GsonPostProcessable {
                 Long originalWorkerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
                 if (computeNode.getStarletPort() != 0) {
                     originalWorkerGroupId = computeNode.getWorkerGroupId();
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, originalWorkerGroupId);
+                    StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                    if (starOSAgent != null) {
+                        starOSAgent.removeWorker(workerAddr, originalWorkerGroupId);
+                    }
                 }
                 // Step 2: update in-memory representation of compute node.
                 computeNode.setResourceIsolationGroup(newResourceIsolationGroup);
