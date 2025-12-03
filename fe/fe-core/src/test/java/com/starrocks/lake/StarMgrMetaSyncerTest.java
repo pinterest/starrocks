@@ -62,9 +62,12 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.WorkerGroupManager;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.utframe.UtFrameUtils;
@@ -119,7 +122,13 @@ public class StarMgrMetaSyncerTest {
     @Mocked
     private EditLog editLog;
 
+    @Mocked
+    private WorkerGroupManager workerGroupManager;
+
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+    
+    // Use a real WarehouseManager with default warehouse initialized
+    private WarehouseManager warehouseManager = new WarehouseManager();
 
     private StarMgrMetaSyncer starMgrMetaSyncer;
 
@@ -173,8 +182,33 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getClusterSnapshotMgr();
                 minTimes = 0;
                 result = clusterSnapshotMgr;
+
+                globalStateMgr.getWorkerGroupMgr();
+                minTimes = 0;
+                result = workerGroupManager;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
+
+        // Initialize default warehouse so that getWarehouse(DEFAULT_WAREHOUSE_ID) works
+        warehouseManager.initDefaultWarehouse();
+
+        // Mock WarehouseManager.selectWorkerGroupByWarehouseId to bypass the alive nodes check
+        // which requires StarOSAgent.getWorkersByWorkerGroup to work
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public java.util.Optional<Long> selectWorkerGroupByWarehouseId(long warehouseId) {
+                return java.util.Optional.of(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            }
+        };
+
+        // Create a mock Frontend for getMySelf() - needed by RIG code in selectWorkerGroupInternal
+        Frontend mockFrontend = new Frontend(
+                com.starrocks.ha.FrontendNodeType.LEADER, "test_fe", "127.0.0.1", 9010);
+        mockFrontend.setResourceIsolationGroup("");  // default RIG
 
         new Expectations() {
             {
@@ -185,6 +219,10 @@ public class StarMgrMetaSyncerTest {
                 systemInfoService.getBackend(1);
                 minTimes = 0;
                 result = new Backend(10001, "host1", 1001);
+
+                workerGroupManager.getWorkerGroup(anyString);
+                minTimes = 0;
+                result = java.util.Optional.of(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             }
         };
 
@@ -193,6 +231,10 @@ public class StarMgrMetaSyncerTest {
                 nodeMgr.getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
+
+                nodeMgr.getMySelf();
+                minTimes = 0;
+                result = mockFrontend;
             }
         };
 

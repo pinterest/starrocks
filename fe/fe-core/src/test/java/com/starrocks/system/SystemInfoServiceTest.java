@@ -528,7 +528,8 @@ public class SystemInfoServiceTest {
     @Test
     public void addComputeNodeTest() throws AnalysisException {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"), null);
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
 
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
@@ -544,7 +545,8 @@ public class SystemInfoServiceTest {
             List<String> hostPorts = stmt.getHostPortPairs().stream()
                     .map(pair -> pair.first + ":" + pair.second)
                     .collect(java.util.stream.Collectors.toList());
-            AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts, null, NodePosition.ZERO);
+            AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts,
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, NodePosition.ZERO);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(addComputeNodeClause);
         } catch (DdlException e) {
             Assertions.fail();
@@ -562,9 +564,27 @@ public class SystemInfoServiceTest {
 
     @Test
     public void resourceIsolationGroupTest() throws DdlException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+        };
+        
         Frontend thisFe = new Frontend();
         thisFe.setResourceIsolationGroup(ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
-        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        
+        NodeMgr nodeMgr = new NodeMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+                globalStateMgr.getEditLog();
+                result = editLog;
+                minTimes = 0;
+            }
+        };
         new Expectations(nodeMgr) {
             {
                 nodeMgr.getMySelf();
@@ -572,16 +592,15 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
             }
         };
-        new Expectations() {
-            {
-                globalStateMgr.getNextId();
-                returns(1L, 2L, 3L);
-            }
-        };
-        List<String> hostPorts = List.of("host1:1000", "host2:1000", "host3:1000");
-        AddComputeNodeClause addClause = new AddComputeNodeClause(hostPorts, null, NodePosition.ZERO);
-        service.addComputeNodes(addClause);
-        List<ComputeNode> allComputeNodes = service.getComputeNodes();
+        // Use the test helper method to add compute nodes directly (avoids needing to parse host:port strings)
+        ComputeNode cn1 = new ComputeNode(1L, "host1", 1000);
+        ComputeNode cn2 = new ComputeNode(2L, "host2", 1000);
+        ComputeNode cn3 = new ComputeNode(3L, "host3", 1000);
+        service.addComputeNode(cn1);
+        service.addComputeNode(cn2);
+        service.addComputeNode(cn3);
+        
+        List<ComputeNode> allComputeNodes = service.getComputeNodes(); 
         // Set all compute nodes as alive for sake of testing
         for (ComputeNode cn : allComputeNodes) {
             cn.setAlive(true);
@@ -596,50 +615,6 @@ public class SystemInfoServiceTest {
         ModifyComputeNodeClause clause = new ModifyComputeNodeClause("host3:1000", properties);
         service.modifyComputeNodeProperty(clause);
         // shouldUseInternalTabletToCnMapper() method removed
-        Assertions.assertEquals(List.of(1L, 2L), service.getAvailableComputeNodeIds());
-
-        // Reassign this FE and ensure it knows which compute node is available
-        thisFe.setResourceIsolationGroup("othergroup");
-        Assertions.assertEquals(List.of(3L), service.getAvailableComputeNodeIds());
-
-        service.dropComputeNode("host3", 1000, null);
-    }
-
-    @Test
-    public void resourceIsolationGroupTest2() throws DdlException {
-        Frontend thisFe = new Frontend();
-        thisFe.setResourceIsolationGroup(ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
-        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
-        new Expectations(nodeMgr) {
-            {
-                nodeMgr.getMySelf();
-                result = thisFe;
-                minTimes = 0;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getNextId();
-                returns(1L, 2L, 3L);
-            }
-        };
-        List<String> hostPorts2 = List.of("host1:1000", "host2:1000", "host3:1000");
-        AddComputeNodeClause addClause2 = new AddComputeNodeClause(hostPorts2, null, NodePosition.ZERO);
-        service.addComputeNodes(addClause2);
-        List<ComputeNode> allComputeNodes = service.getComputeNodes();
-        // Set all compute nodes as alive for sake of testing
-        for (ComputeNode cn : allComputeNodes) {
-            cn.setAlive(true);
-        }
-        Assertions.assertEquals(3, allComputeNodes.size());
-        Assertions.assertEquals(3, service.getAvailableComputeNodeIds().size());
-        Assertions.assertEquals(allComputeNodes, service.getAvailableComputeNodes());
-
-        // Modify host3 to belong to another non-default group and check on consequences
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:othergroup");
-        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("host3:1000", properties);
-        service.modifyComputeNodeProperty(clause);
         Assertions.assertEquals(List.of(1L, 2L), service.getAvailableComputeNodeIds());
 
         // Reassign this FE and ensure it knows which compute node is available

@@ -138,7 +138,7 @@ public class CacheSelectBackendSelector implements BackendSelector {
         while (selectedCn.size() < count + skipCount) {
             if (selectedCn.contains(targetBackendId) || !workerProvider.isDataNodeAvailable(targetBackendId)) {
                 targetBackendId = workerProvider.selectBackupWorker(targetBackendId, Optional.empty());
-                if (selectedCn.contains(targetBackendId)) {
+                if (targetBackendId < 0 || selectedCn.contains(targetBackendId)) {
                     workerProvider.reportDataNodeNotFoundException();
                     throw new DdlException(String.format("Requesting more replicas than we have available CN" +
                                     " for the specified resource group. desiredReplicas: %d, resourceGroup: %s",

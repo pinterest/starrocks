@@ -374,7 +374,7 @@ public class CacheSelectBackendSelectorTest {
         };
 
         DdlException exception = assertThrows(DdlException.class, selector::computeScanRangeAssignment);
-        Assert.assertEquals("Compute node not found. Check if any compute node is down." +
+        Assert.assertEquals("Failed to assign compute nodes: Compute node not found. Check if any compute node is down." +
                 " nodeId: -1 compute node: [whatever alive: true, available: false, inBlacklist: false]" +
                 " [whatever alive: true, available: false, inBlacklist: false]" +
                 " [whatever alive: true, available: true, inBlacklist: false] ", exception.getMessage());

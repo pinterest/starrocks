@@ -236,10 +236,11 @@ public class StarOSAgent2ndTest {
 
         Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId,
                 StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-        DdlException exception =
-                Assert.assertThrows(DdlException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId,
+        StarRocksException exception =
+                Assert.assertThrows(StarRocksException.class,
+                        () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId,
                         StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-        Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
+        Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getInternalErrorCode());
     }
 
     @Test

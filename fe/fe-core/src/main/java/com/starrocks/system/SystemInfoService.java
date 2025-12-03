@@ -221,16 +221,17 @@ public class SystemInfoService implements GsonPostProcessable {
         LOG.info("update historical compute nodes, warehouse: {}, nodes: {}", warehouse, computeNodeIds);
     }
 
-    // Final entry of adding compute node
+    // Final entry of adding compute node.
+    // IMPORTANT: idToComputeNodeRef.put() must happen BEFORE addComputeNodeToWarehouse() to match
+    // upstream 3.5 behavior - if warehouse lookup fails, the node should still be registered.
     public void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
         addComputeNodeToWarehouse(newComputeNode, warehouse);
 
         // try to record the historical compute nodes
         tryUpdateHistoricalComputeNodes(warehouse);
-
-        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
 
         tabletComputeNodeMapper.addComputeNode(newComputeNode.getId(),
                 DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
@@ -331,16 +332,11 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
-    // Final entry of adding backend
+    // Final entry of adding backend.
+    // IMPORTANT: idToBackendRef.put() must happen BEFORE addComputeNodeToWarehouse() to match
+    // upstream 3.5 behavior - if warehouse lookup fails, the backend should still be registered.
     private void addBackend(String host, int heartbeatPort, String warehouse) throws DdlException {
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
-        // add backend to DEFAULT_CLUSTER
-        setBackendOwner(newBackend);
-        addComputeNodeToWarehouse(newBackend, warehouse);
-
-        // try to record the historical backend nodes
-        tryUpdateHistoricalBackends(warehouse);
-
         // update idToBackend
         idToBackendRef.put(newBackend.getId(), newBackend);
 
@@ -348,6 +344,13 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVersions.put(newBackend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
+
+        // add backend to DEFAULT_CLUSTER
+        setBackendOwner(newBackend);
+        addComputeNodeToWarehouse(newBackend, warehouse);
+
+        // try to record the historical backend nodes
+        tryUpdateHistoricalBackends(warehouse);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
