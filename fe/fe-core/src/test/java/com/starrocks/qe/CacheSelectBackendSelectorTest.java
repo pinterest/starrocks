@@ -218,7 +218,9 @@ public class CacheSelectBackendSelectorTest {
                 starOsAgent.getShardInfo(givenTabletId, 3L);
                 result = mockedShardInfo;
 
-                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, true);
+                // Hybrid approach: production code calls with false first to get ALL replicas
+                // Since StarOS only returns primary (single replica), we fall back to TabletComputeNodeMapper
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, false);
                 result = starOsPreferredCnId;
 
                 systemInfoService.internalTabletMapper();
@@ -246,6 +248,196 @@ public class CacheSelectBackendSelectorTest {
             expectedSelections.forEach(id -> expectedAssignment.put(id, givenScanNodeId, givenRangeParams));
             Assert.assertEquals(expectedAssignment, assignment);
         }
+    }
+
+    /**
+     * Test hybrid approach: when StarOS returns enough replicas (including secondary replicas),
+     * use them directly WITHOUT falling back to TabletComputeNodeMapper.
+     * This tests forward compatibility for when StarOS supports multiple replicas per shard.
+     */
+    @Test
+    public void testStarOSReturnsMultipleReplicasNoTabletMapperFallback(
+            @Mocked SystemInfoService systemInfoService,
+            @Mocked WorkerProvider callerWorkerProvider,
+            @Mocked WorkerGroupManager workerGroupManager,
+            @Mocked StarOSAgent starOsAgent) throws StarClientException {
+        ScanNode scanNode = newOlapScanNode(1, 1);
+        Map<Long, ComputeNode> nodes = new HashMap<>();
+        int totalCnCount = 10;
+        for (long computeNodeId = 0; computeNodeId < totalCnCount; computeNodeId++) {
+            ComputeNode cn = new ComputeNode(computeNodeId, "host" + computeNodeId, 100);
+            cn.setAlive(true);
+            cn.setResourceIsolationGroup("mygroup");
+            nodes.put(computeNodeId, cn);
+        }
+
+        List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
+        Long givenTabletId = 0L;
+        Assert.assertEquals(givenTabletId.longValue(), locations.get(0).scan_range.internal_scan_range.tablet_id);
+
+        // Request 3 replicas
+        int numReplicasDesired = 3;
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(List.of("mygroup"), numReplicasDesired, 0);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        CacheSelectBackendSelector selector =
+                new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
+                        DEFAULT_WAREHOUSE_ID);
+
+        // StarOS returns 5 replicas (primary + 4 secondary) - more than we need
+        List<Long> starOSReplicas = List.of(100L, 101L, 102L, 103L, 104L);
+        ShardInfo mockedShardInfo = ShardInfo.newBuilder().build();
+
+        // Expected: we should use the first 3 from StarOS (100, 101, 102)
+        Set<Long> expectedSelections = Set.of(100L, 101L, 102L);
+
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getStarOSAgent();
+                result = starOsAgent;
+
+                globalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+        new Expectations() {
+            {
+                workerGroupManager.getWorkerGroup("mygroup");
+                result = 1L;
+
+                starOsAgent.getShardInfo(givenTabletId, 1L);
+                result = mockedShardInfo;
+
+                // StarOS returns multiple replicas - enough for our request
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, false);
+                result = starOSReplicas;
+
+                // TabletComputeNodeMapper should NOT be called since StarOS has enough replicas
+                systemInfoService.internalTabletMapper();
+                times = 0;
+
+                for (Long cnId : expectedSelections) {
+                    callerWorkerProvider.selectWorkerUnchecked(cnId);
+                    minTimes = 1;
+                }
+
+                callerWorkerProvider.setAllowGetAnyWorker(true);
+                times = 1;
+            }
+        };
+
+        try {
+            selector.computeScanRangeAssignment();
+        } catch (DdlException e) {
+            System.out.printf("Error: %s%n", e);
+            throw new RuntimeException(e);
+        }
+
+        // Verify the assignment contains exactly the first 3 StarOS replicas
+        Assert.assertEquals(expectedSelections.size(), assignment.size());
+        Assert.assertEquals(expectedSelections, assignment.keySet());
+    }
+
+    /**
+     * Test hybrid approach with backup replicas: when StarOS returns enough replicas,
+     * use them directly and skip the primary (skipCount) as expected for backup replica requests.
+     */
+    @Test
+    public void testStarOSReturnsMultipleReplicasForBackupRequest(
+            @Mocked SystemInfoService systemInfoService,
+            @Mocked WorkerProvider callerWorkerProvider,
+            @Mocked WorkerGroupManager workerGroupManager,
+            @Mocked StarOSAgent starOsAgent) throws StarClientException {
+        ScanNode scanNode = newOlapScanNode(1, 1);
+        Map<Long, ComputeNode> nodes = new HashMap<>();
+        int totalCnCount = 10;
+        for (long computeNodeId = 0; computeNodeId < totalCnCount; computeNodeId++) {
+            ComputeNode cn = new ComputeNode(computeNodeId, "host" + computeNodeId, 100);
+            cn.setAlive(true);
+            cn.setResourceIsolationGroup("mygroup");
+            nodes.put(computeNodeId, cn);
+        }
+
+        List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
+        Long givenTabletId = 0L;
+
+        // Request 2 BACKUP replicas (numReplicasDesired=0, numBackupReplicasDesired=2)
+        // This means skipCount=1 (skip primary), and we need 2 backup replicas
+        int numBackupReplicasDesired = 2;
+        CacheSelectComputeNodeSelectionProperties props =
+                new CacheSelectComputeNodeSelectionProperties(List.of("mygroup"), 0, numBackupReplicasDesired);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        CacheSelectBackendSelector selector =
+                new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
+                        DEFAULT_WAREHOUSE_ID);
+
+        // StarOS returns 4 replicas: primary (100) + 3 secondary (101, 102, 103)
+        // totalNeeded = count + skipCount = 2 + 1 = 3, and StarOS has 4, so sufficient
+        List<Long> starOSReplicas = List.of(100L, 101L, 102L, 103L);
+        ShardInfo mockedShardInfo = ShardInfo.newBuilder().build();
+
+        // Expected: skip first replica (100), take next 2 (101, 102)
+        Set<Long> expectedSelections = Set.of(101L, 102L);
+
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getStarOSAgent();
+                result = starOsAgent;
+
+                globalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+        new Expectations() {
+            {
+                workerGroupManager.getWorkerGroup("mygroup");
+                result = 1L;
+
+                starOsAgent.getShardInfo(givenTabletId, 1L);
+                result = mockedShardInfo;
+
+                // StarOS returns multiple replicas - enough for backup request
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, false);
+                result = starOSReplicas;
+
+                // TabletComputeNodeMapper should NOT be called
+                systemInfoService.internalTabletMapper();
+                times = 0;
+
+                for (Long cnId : expectedSelections) {
+                    callerWorkerProvider.selectWorkerUnchecked(cnId);
+                    minTimes = 1;
+                }
+
+                callerWorkerProvider.setAllowGetAnyWorker(true);
+                times = 1;
+            }
+        };
+
+        try {
+            selector.computeScanRangeAssignment();
+        } catch (DdlException e) {
+            System.out.printf("Error: %s%n", e);
+            throw new RuntimeException(e);
+        }
+
+        // Verify: should have skipped primary (100) and selected backups (101, 102)
+        Assert.assertEquals(expectedSelections.size(), assignment.size());
+        Assert.assertEquals(expectedSelections, assignment.keySet());
+        Assert.assertFalse("Primary replica should be skipped for backup request",
+                assignment.containsKey(100L));
     }
 
     @Test
@@ -433,7 +625,8 @@ public class CacheSelectBackendSelectorTest {
                 starOsAgent.getShardInfo(givenTabletId, 1L);
                 result = mockedShardInfo;
 
-                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, true);
+                // Hybrid approach: production code calls with false first to get ALL replicas
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, false);
                 result = starOsPreferredCnId;
 
                 systemInfoService.internalTabletMapper();
@@ -544,7 +737,8 @@ public class CacheSelectBackendSelectorTest {
                 starOsAgent.getShardInfo(givenTabletId, 1L);
                 result = mockedShardInfo;
 
-                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, true);
+                // Hybrid approach: production code calls with false first to get ALL replicas
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, false);
                 result = starOsPreferredCnId;
 
                 systemInfoService.internalTabletMapper();
@@ -730,7 +924,8 @@ public class CacheSelectBackendSelectorTest {
                 result = globalStateMgr;
             }
         };
-        Long starOsPreferredCnId = -1L;
+        // Empty list to simulate StarOS returning no replicas for unknown group
+        List<Long> starOsPreferredCnId = List.of();
         ShardInfo mockedShardInfo = ShardInfo.newBuilder().build();
         new Expectations() {
             {
@@ -740,17 +935,16 @@ public class CacheSelectBackendSelectorTest {
                 starOsAgent.getShardInfo(givenTabletId, 1L);
                 result = mockedShardInfo;
 
-                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, true);
+                // Hybrid approach: production code calls with false first to get ALL replicas
+                starOsAgent.getAllNodeIdsByShard(mockedShardInfo, false);
                 result = starOsPreferredCnId;
-
-                systemInfoService.internalTabletMapper();
-                result = tabletComputeNodeMapper;
             }
         };
 
         DdlException exception = assertThrows(DdlException.class, selector::computeScanRangeAssignment);
+        // With hybrid approach, when StarOS returns empty list, we throw "Could not get any cn" error
         Assert.assertEquals(
-                "No CN nodes available for the specified resource group." + " resourceGroup: unknowngroup, tabletId: 0",
+                "Could not get any cn for tablet 0, shard info: ",
                 exception.getMessage());
 
     }

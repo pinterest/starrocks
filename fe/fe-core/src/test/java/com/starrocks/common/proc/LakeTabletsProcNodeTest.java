@@ -14,7 +14,6 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -85,10 +84,10 @@ public class LakeTabletsProcNodeTest {
                 result = agent;
 
                 agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet1);
-                result = Sets.newHashSet(10000L, 10001L);
+                result = Lists.newArrayList(10000L, 10001L);
 
                 agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet2);
-                result = Sets.newHashSet(10001L, 10002L);
+                result = Lists.newArrayList(10001L, 10002L);
             }
         };
 

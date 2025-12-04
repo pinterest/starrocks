@@ -44,7 +44,6 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -53,7 +52,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static com.starrocks.lake.StarOSAgent.DEFAULT_WORKER_GROUP_ID;
 import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
@@ -82,10 +80,10 @@ public class WarehouseManagerTest {
                 () -> mgr.getAllComputeNodeIds("a"));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getAllComputeNodeIds(1L));
-        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse name: a not exist.",
-                () -> mgr.getComputeNodeId("a", null));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-                () -> mgr.getComputeNodeId(1L, 1L));
+                () -> mgr.getComputeNodeId(1L, (LakeTablet) null));
+        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
+                () -> mgr.getAliveComputeNodeId(1L, (LakeTablet) null));
     }
 
     @Test
@@ -181,14 +179,14 @@ public class WarehouseManagerTest {
             }
 
             @Mock
-            public Set<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
-                if (shardInfo.getGroupIds(0) == DEFAULT_WORKER_GROUP_ID) {
-                    return Sets.newHashSet(List.of(1L));
+            public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId) {
+                if (workerGroupId == DEFAULT_WORKER_GROUP_ID) {
+                    return List.of(1L);
                 }
-                if (shardInfo.getGroupIds(0)  == otherWorkerGroupId) {
-                    return Sets.newHashSet(List.of(2L));
+                if (workerGroupId == otherWorkerGroupId) {
+                    return List.of(2L);
                 }
-                return Sets.newHashSet();
+                return List.of();
             }
         };
 
@@ -209,11 +207,11 @@ public class WarehouseManagerTest {
         mgr.initDefaultWarehouse();
 
         LakeTablet arbitraryTablet = new LakeTablet(1001L);
-        Assert.assertEquals(Set.of(1L),
+        Assert.assertEquals(List.of(1L),
                 mgr.getAllComputeNodeIdsAssignToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, arbitraryTablet));
 
         thisFe.setResourceIsolationGroup(otherResourceIsolationGroup);
-        Assert.assertEquals(Set.of(2L),
+        Assert.assertEquals(List.of(2L),
                 mgr.getAllComputeNodeIdsAssignToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, arbitraryTablet));
 
         mgr.getAllComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_ID);

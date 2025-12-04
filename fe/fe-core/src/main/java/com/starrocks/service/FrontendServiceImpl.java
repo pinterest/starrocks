@@ -2397,7 +2397,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
                         try {
                             // use default warehouse nodes
-                            Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeId(
+                            Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAliveComputeNodeId(
                                     txnState.getWarehouseId(), cloudNativeTablet);
                             if (computeNodeId == null) {
                                 errorStatus.setError_msgs(Lists.newArrayList(

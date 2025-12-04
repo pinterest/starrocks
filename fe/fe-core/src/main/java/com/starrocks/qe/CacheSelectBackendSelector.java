@@ -82,21 +82,46 @@ public class CacheSelectBackendSelector implements BackendSelector {
         // skipCount variable uses for backup cache replicas CN nodes selection
         // to skip first CN node (primary) from the selected nodes
         int skipCount = props.numBackupReplicasDesired > 0 ? 1 : 0;
-        Set<Long> primaryCn = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
-        if (primaryCn.isEmpty()) {
-            throw new DdlException(String.format("Could not get primary cn for tablet %d, shard info: %s", tabletId, shardInfo));
+        int totalNeeded = count + skipCount;
+
+        // Hybrid approach: First try to get ALL replicas from StarOS (including secondary replicas).
+        // If StarOS returns enough replicas, use them directly. Otherwise, fall back to
+        // TabletComputeNodeMapper for deterministic backup CN selection via consistent hashing.
+        List<Long> allStarOSReplicas = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                .getAllNodeIdsByShard(shardInfo, false);  // false = get all replicas, not just primary
+
+        if (allStarOSReplicas.isEmpty()) {
+            throw new DdlException(String.format("Could not get any cn for tablet %d, shard info: %s", tabletId, shardInfo));
         }
+
+        // If StarOS has enough replicas (e.g., secondary replicas configured), use them directly
+        if (allStarOSReplicas.size() >= totalNeeded) {
+            LOG.debug("StarOS returned {} replicas for tablet {}, using StarOS replicas directly (need {})",
+                    allStarOSReplicas.size(), tabletId, totalNeeded);
+            List<Long> selected = allStarOSReplicas.subList(skipCount, skipCount + count);
+            return new HashSet<>(selected);
+        }
+
+        // StarOS doesn't have enough replicas (common case: only primary replica).
+        // Fall back to TabletComputeNodeMapper for backup CN selection.
+        Long primaryId = allStarOSReplicas.get(0);
         if (count == 1 && skipCount == 0) {
-            return primaryCn;
+            return new HashSet<>(List.of(primaryId));
         }
-        Long primaryId = primaryCn.iterator().next();
+
+        LOG.debug("StarOS returned {} replicas for tablet {} (need {}), using TabletComputeNodeMapper for backups",
+                allStarOSReplicas.size(), tabletId, totalNeeded);
+
         List<Long> cnIdsOrderedByPreference = new ArrayList<>();
         if (skipCount == 0) {
             cnIdsOrderedByPreference.add(primaryId);
         }
+
+        // Use TabletComputeNodeMapper for deterministic backup CN selection
         List<Long> backupCn = systemInfoService.internalTabletMapper()
                 .backupComputeNodesForTablet(tabletId, primaryId, count, resourceIsolationGroupId);
         cnIdsOrderedByPreference.addAll(backupCn);
+
         if (cnIdsOrderedByPreference.isEmpty()) {
             throw new DdlException(
                     String.format("No CN nodes available for the specified resource group." + " resourceGroup: %s, tabletId: %d",

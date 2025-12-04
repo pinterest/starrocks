@@ -18,7 +18,6 @@ package com.starrocks.lake;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.manager.StarManagerServer;
@@ -726,9 +725,8 @@ public class StarOSAgent {
         return result;
     }
 
-    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException, StarClientException {
-        ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
-        Set<Long> backendIds = getAllNodeIdsByShard(shardInfo, true);
+    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+        List<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId);
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
@@ -741,7 +739,7 @@ public class StarOSAgent {
     }
 
     public long getPrimaryComputeNodeIdByShard(ShardInfo shardInfo) throws StarRocksException {
-        Set<Long> ids = getAllNodeIdsByShard(shardInfo, true);
+        List<Long> ids = getAllNodeIdsByShard(shardInfo);
         if (ids.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
@@ -757,23 +755,40 @@ public class StarOSAgent {
             throws StarRocksException {
         try {
             ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
-            return Lists.newArrayList(getAllNodeIdsByShard(shardInfo, false));
+            return getAllNodeIdsByShard(shardInfo);
         } catch (StarClientException e) {
             throw new StarRocksException(e);
         }
     }
 
-    public Set<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
+    /**
+     * Get all node IDs assigned to a shard, including all replicas (not just primary).
+     * This is the multi-replica compatible version that returns a List to preserve ordering.
+     */
+    public List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {
+        List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
+        List<Long> nodeIds = new ArrayList<>();
+        replicas.stream()
+                .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))
+                .forEach(x -> x.ifPresent(nodeIds::add));
+        return nodeIds;
+    }
+
+    /**
+     * Get node IDs assigned to a shard, optionally filtering to primary replicas only.
+     * When onlyPrimary=true, returns only the primary replica (for RIG use cases).
+     * When onlyPrimary=false, returns all replicas (for multi-replica failover).
+     */
+    public List<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
         List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
         if (onlyPrimary) {
             replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
                     .collect(Collectors.toList());
         }
-        Set<Long> nodeIds = Sets.newHashSet();
+        List<Long> nodeIds = new ArrayList<>();
         replicas.stream()
                 .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))
                 .forEach(x -> x.ifPresent(nodeIds::add));
-
         return nodeIds;
     }
 

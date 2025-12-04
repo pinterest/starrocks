@@ -16,7 +16,6 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
-import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -183,55 +182,67 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-        if (tablet == null) {
-            LOG.warn("Calling getComputeNodeId with null tablet");
+        try {
+            long workerGroupId = selectWorkerGroupInternal(warehouseId)
+                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), workerGroupId);
+        } catch (StarRocksException e) {
             return null;
         }
-        return getComputeNodeId(warehouseId, tablet.getId());
     }
 
+    /**
+     * Get compute node ID by tablet ID (shard ID). This is used by RIG-specific code paths
+     * that need to look up tablet ownership by ID without having the full LakeTablet object.
+     */
     public Long getComputeNodeId(Long warehouseId, Long tabletId) {
-        Warehouse warehouse = idToWh.get(warehouseId);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
-        }
-
-        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouseId, tabletId);
-        if (ids != null && !ids.isEmpty()) {
-            return ids.iterator().next();
-        } else {
+        try {
+            long workerGroupId = selectWorkerGroupInternal(warehouseId)
+                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getPrimaryComputeNodeIdByShard(tabletId, workerGroupId);
+        } catch (StarRocksException e) {
             return null;
         }
     }
 
-    public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-        Warehouse warehouse = nameToWh.get(warehouseName);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
-        }
-        Set<Long> ids = getAllComputeNodeIdsAssignToTablet(warehouse.getId(), tablet);
-        if (ids != null && !ids.isEmpty()) {
-            return ids.iterator().next();
-        } else {
-            return null;
-        }
-    }
-
-    private Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, Long tabletId) {
+    /**
+     * Get an alive compute node for the tablet. This method iterates through ALL replicas
+     * (not just primary) to find one that is alive, supporting multi-replica failover.
+     * Use this for operations that need resilience to CN failures.
+     */
+    public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tabletId, workerGroupId);
-
-            return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(shardInfo, true);
-        } catch (Exception e) {
+            List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
+            Long nodeId = nodeIds.stream().filter(id ->
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id) ||
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                            .checkComputeNodeAlive(id))
+                    .findFirst()
+                    .orElse(null);
+            return nodeId;
+        } catch (StarRocksException e) {
+            LOG.warn("get alive compute node id to tablet {} fail {}.", tablet.getId(), e.getMessage());
             return null;
         }
     }
 
-    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-        return getAllComputeNodeIdsAssignToTablet(warehouseId, tablet.getShardId());
+    /**
+     * Get all compute node IDs assigned to a tablet (all replicas, not just primary).
+     * Returns List to preserve ordering and support multi-replica scenarios.
+     */
+    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        try {
+            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
+        } catch (StarRocksException e) {
+            LOG.warn("get all compute node ids assign to tablet {} fail {}.", tablet.getId(), e.getMessage());
+            return null;
+        }
     }
 
     public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {

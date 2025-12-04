@@ -103,11 +103,18 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-        return Sets.newHashSet(computeNodeIdSetAssignedToTablet);
+    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        return Lists.newArrayList(computeNodeIdSetAssignedToTablet);
     }
 
-    public void setComputeNodeIdsAssignToTablet(Set<Long> computeNodeIds) {
+    @Override
+    public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
+        // Return the first alive compute node for tests
+        return computeNodeIdSetAssignedToTablet.isEmpty() ? null : computeNodeIdSetAssignedToTablet.get(0);
+    }
+
+    public void setComputeNodeIdsAssignToTablet(List<Long> computeNodeIds) {
+        computeNodeIdSetAssignedToTablet.clear();
         computeNodeIdSetAssignedToTablet.addAll(computeNodeIds);
     }
 
