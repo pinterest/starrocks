@@ -13,31 +13,29 @@
 // limitations under the License.
 package com.starrocks.system;
 
-import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class WorkerGroupManager implements Writable {
+/**
+ * Maps Resource Isolation Group (RIG) names to StarOS Worker Group IDs.
+ * Mappings are lazily discovered/created from StarOS and cached locally.
+ * Note: This class is NOT persisted - mappings are re-discovered from StarOS after FE restart.
+ */
+public class WorkerGroupManager {
     private static final Logger LOG = LogManager.getLogger(WorkerGroupManager.class);
 
     // writeLock must be acquired when we might create a new worker group.
     private final ReentrantReadWriteLock stateLock = new ReentrantReadWriteLock();
     private final Lock writeLock = stateLock.writeLock();
 
-    @SerializedName("rigToWgid")
     private final Map<String, Long> resourceIsolationGroupToWorkerGroupId = new HashMap<>();
 
     public WorkerGroupManager() {
@@ -68,8 +66,13 @@ public class WorkerGroupManager implements Writable {
                 return Optional.of(resourceIsolationGroupToWorkerGroupId.get(resourceIsolationGroup));
             }
             LOG.info("Going to StarOS to get worker group mapping for resource isolation group: {}", resourceIsolationGroup);
-            Optional<Long> workerGroupId =
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().tryGetWorkerGroupForOwner(resourceIsolationGroup);
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            if (starOSAgent == null) {
+                // StarOSAgent may be null in unit tests or during startup
+                LOG.warn("StarOSAgent is null, returning empty for RIG: {}", resourceIsolationGroup);
+                return Optional.empty();
+            }
+            Optional<Long> workerGroupId = starOSAgent.tryGetWorkerGroupForOwner(resourceIsolationGroup);
             if (workerGroupId.isEmpty()) {
                 LOG.warn("No worker group id found for resource isolation group {}", resourceIsolationGroup);
                 return Optional.empty();
@@ -115,10 +118,5 @@ public class WorkerGroupManager implements Writable {
         } finally {
             writeLock.unlock();
         }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 }
