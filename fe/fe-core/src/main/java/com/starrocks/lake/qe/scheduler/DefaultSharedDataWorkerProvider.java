@@ -256,15 +256,19 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     // Makes best effort attempt to use the internal tablet mapper to select a backup based on tabletId
+    // Uses this provider's resourceIsolationGroup (not the FE's RIG) to ensure alignment with CacheSelectBackendSelector
     private Optional<Long> useInternalTabletMapperToSelectBackup(long workerId, Long tabletId) {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         TabletComputeNodeMapper mapper = systemInfoService.internalTabletMapper();
+        // CRITICAL: Use this.resourceIsolationGroup (the provider's RIG), NOT getMySelf().getResourceIsolationGroup()
+        // This ensures that backup selection matches what CacheSelectBackendSelector warmed up
         List<Long> cnIdsOrderedByPreference =
-                mapper.backupComputeNodesForTablet(tabletId, workerId, availableID2ComputeNode.size() - 1);
-        if (cnIdsOrderedByPreference == null) {
+                mapper.backupComputeNodesForTablet(tabletId, workerId, availableID2ComputeNode.size() - 1,
+                        this.resourceIsolationGroup);
+        if (cnIdsOrderedByPreference == null || cnIdsOrderedByPreference.isEmpty()) {
             LOG.warn(String.format("The internal tablet mapper doesn't seem to know about the resource" +
                             " isolation group %s. Its state is %s.",
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup(), mapper.debugString()));
+                    this.resourceIsolationGroup, mapper.debugString()));
             return Optional.empty();
         }
         for (Long possibleBackup : cnIdsOrderedByPreference) {

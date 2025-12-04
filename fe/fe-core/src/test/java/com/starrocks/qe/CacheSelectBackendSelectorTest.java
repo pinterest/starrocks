@@ -765,6 +765,169 @@ public class CacheSelectBackendSelectorTest {
         }
     }
 
+    /**
+     * Critical test: Verifies that CacheSelectBackendSelector (run by leader FE for cache warming)
+     * and DefaultSharedDataWorkerProvider.selectBackupWorker (used during query execution failover)
+     * choose the SAME backup CN for a tablet.
+     *
+     * This test covers:
+     * 1. Leader FE in a DIFFERENT RIG than the target cache warmup RIG (realistic scenario)
+     * 2. Multiple tablets to verify consistent selection across the tablet space
+     * 3. Both default and non-default resource isolation groups
+     *
+     * The alignment is critical because:
+     * - CacheSelectBackendSelector warms up backup replicas on specific CNs
+     * - When the primary CN is unavailable, selectBackupWorker must choose the same CN
+     *   that was warmed up, otherwise the cache warmup is useless
+     */
+    @Test
+    public void testCacheSelectAndWorkerProviderChooseSameBackupForAnyRIG(
+            @Mocked SystemInfoService systemInfoService,
+            @Mocked WorkerProvider callerWorkerProvider,
+            @Mocked WorkerGroupManager workerGroupManager,
+            @Mocked StarOSAgent starOsAgent) throws StarClientException {
+
+        // Test both default and non-default RIGs
+        String[] rigsToTest = {"default", "production_rig", "analytics_rig"};
+
+        for (String targetRig : rigsToTest) {
+            // Create CNs for the target RIG
+            TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
+            Map<Long, ComputeNode> nodes = LongStream.range(1L, 50L).mapToObj(id -> {
+                ComputeNode cn = new ComputeNode(id, "host" + id, 100);
+                cn.setAlive(true);
+                cn.setResourceIsolationGroup(targetRig);
+                tabletComputeNodeMapper.addComputeNode(cn.getId(), cn.getResourceIsolationGroup());
+                return cn;
+            }).collect(Collectors.toMap(ComputeNode::getId, Function.identity()));
+
+            // Leader FE is in a DIFFERENT RIG (simulating real-world leader FE warming other RIGs)
+            String leaderFeRig = "leader_rig";
+            Frontend leaderFe = new Frontend();
+            leaderFe.setResourceIsolationGroup(leaderFeRig);
+
+            globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+            new Expectations(globalStateMgr) {
+                {
+                    GlobalStateMgr.getCurrentState();
+                    minTimes = 0;
+                    result = globalStateMgr;
+
+                    globalStateMgr.getStarOSAgent();
+                    result = starOsAgent;
+
+                    globalStateMgr.getServingState();
+                    minTimes = 0;
+                    result = globalStateMgr;
+                }
+            };
+
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            new Expectations(warehouseManager) {
+                {
+                    warehouseManager.getAllComputeNodeIds(anyLong);
+                    result = Lists.newArrayList(nodes.keySet());
+                    minTimes = 0;
+                }
+            };
+
+            NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+            new MockUp<SystemInfoService>() {
+                @Mock
+                public ComputeNode getBackendOrComputeNode(long nodeId) {
+                    return nodes.get(nodeId);
+                }
+            };
+            new Expectations(nodeMgr) {
+                {
+                    nodeMgr.getMySelf();
+                    result = leaderFe;
+                    minTimes = 0;
+
+                    nodeMgr.getClusterInfo();
+                    result = systemInfoService;
+                }
+            };
+
+            ShardInfo mockedShardInfo = ShardInfo.newBuilder().build();
+
+            // Test multiple tablets to ensure consistent behavior
+            for (long tabletId = 1L; tabletId <= 20L; tabletId++) {
+                // Get the primary CN for this tablet (first in the consistent hash order)
+                Long primaryCnId = tabletComputeNodeMapper.backupComputeNodesForTablet(tabletId, -1L, 1, targetRig).get(0);
+
+                // Setup expectations for this tablet
+                final long finalTabletId = tabletId;
+                new Expectations() {
+                    {
+                        workerGroupManager.getWorkerGroup(targetRig);
+                        result = 1L;
+
+                        starOsAgent.getShardInfo(finalTabletId, 1L);
+                        result = mockedShardInfo;
+
+                        // StarOS returns only primary (simulating current behavior)
+                        starOsAgent.getAllNodeIdsByShard(mockedShardInfo, false);
+                        result = List.of(primaryCnId);
+
+                        systemInfoService.internalTabletMapper();
+                        result = tabletComputeNodeMapper;
+                    }
+                };
+
+                // Create CacheSelectBackendSelector for backup replica warming
+                ScanNode scanNode = newOlapScanNode(1, 1);
+                List<TScanRangeLocations> locations = generateScanRangeLocations(nodes, 1, 1, true);
+                locations.get(0).scan_range.internal_scan_range.tablet_id = tabletId;
+
+                // Request backup replicas (numReplicasDesired=0, numBackupReplicasDesired=1)
+                CacheSelectComputeNodeSelectionProperties props =
+                        new CacheSelectComputeNodeSelectionProperties(List.of(targetRig), 0, 1);
+                FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+                CacheSelectBackendSelector selector =
+                        new CacheSelectBackendSelector(scanNode, locations, assignment, callerWorkerProvider, props,
+                                DEFAULT_WAREHOUSE_ID);
+
+                new Expectations() {
+                    {
+                        callerWorkerProvider.selectWorkerUnchecked(anyLong);
+                        minTimes = 0;
+
+                        callerWorkerProvider.setAllowGetAnyWorker(true);
+                        minTimes = 0;
+                    }
+                };
+
+                try {
+                    selector.computeScanRangeAssignment();
+                } catch (DdlException e) {
+                    throw new RuntimeException("Failed for RIG=" + targetRig + ", tabletId=" + tabletId, e);
+                }
+
+                // Get the backup CN selected by CacheSelectBackendSelector
+                Assert.assertEquals("Should have exactly 1 backup CN selected for tabletId=" + tabletId,
+                        1, assignment.size());
+                long cacheSelectBackupCn = assignment.keySet().iterator().next();
+                Assert.assertNotEquals("Backup CN should not be the primary for tabletId=" + tabletId,
+                        primaryCnId.longValue(), cacheSelectBackupCn);
+
+                // Now verify that DefaultSharedDataWorkerProvider.selectBackupWorker chooses the SAME CN
+                // This simulates what happens during query execution when the primary CN is unavailable
+                DefaultSharedDataWorkerProvider provider =
+                        new DefaultSharedDataWorkerProvider.Factory().captureAvailableWorkers(DEFAULT_WAREHOUSE_ID, targetRig);
+
+                long workerProviderBackupCn = provider.selectBackupWorker(primaryCnId, Optional.of(tabletId));
+
+                Assert.assertEquals(
+                        String.format("CRITICAL: CacheSelectBackendSelector and DefaultSharedDataWorkerProvider " +
+                                        "chose DIFFERENT backup CNs for RIG=%s, tabletId=%d, primaryCn=%d! " +
+                                        "Cache warmup would be ineffective. CacheSelect chose %d, WorkerProvider chose %d",
+                                targetRig, tabletId, primaryCnId, cacheSelectBackupCn, workerProviderBackupCn),
+                        cacheSelectBackupCn, workerProviderBackupCn);
+            }
+        }
+    }
+
     @Test
     public void testBackupReplicasUnknownTabletId(@Mocked WarehouseManager warehouseManager,
                                                   @Mocked SystemInfoService systemInfoService,

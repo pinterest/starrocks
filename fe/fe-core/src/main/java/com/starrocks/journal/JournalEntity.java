@@ -16,18 +16,10 @@ package com.starrocks.journal;
 
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutput;
-import java.io.IOException;
-
 // this is the value written to bdb or local edit files. key is an auto-increasing long.
 public record JournalEntity(short opCode, Writable data) {
     @Override
     public String toString() {
         return " opCode=" + opCode + " " + data;
-    }
-
-    public void write(DataOutput out) throws IOException {
-        out.writeShort(opCode);
-        data.write(out);
     }
 }
