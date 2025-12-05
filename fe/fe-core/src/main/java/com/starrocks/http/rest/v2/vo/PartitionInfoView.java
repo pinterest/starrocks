@@ -31,6 +31,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.load.PartitionUtils.RangePartitionBoundary;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Frontend;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -196,8 +197,19 @@ public class PartitionInfoView {
                     if (lakeTabletOptional.isPresent()) {
                         LakeTablet lakeTablet = lakeTabletOptional.get();
                         try {
-                            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                                    .getShardInfo(lakeTablet.getShardId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                            // Use FE's worker group instead of hardcoded DEFAULT_WORKER_GROUP_ID
+                            long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+                            StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                            if (agent != null) {
+                                Frontend myself = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+                                if (myself != null) {
+                                    Optional<Long> wgId = agent.tryGetWorkerGroupForOwner(myself.getResourceIsolationGroup());
+                                    if (wgId.isPresent()) {
+                                        workerGroupId = wgId.get();
+                                    }
+                                }
+                            }
+                            ShardInfo shardInfo = agent.getShardInfo(lakeTablet.getShardId(), workerGroupId);
                             pvo.setStoragePath(shardInfo.getFilePath().getFullPath());
                         } catch (StarClientException e) {
                             throw new IllegalStateException(e.getMessage(), e);

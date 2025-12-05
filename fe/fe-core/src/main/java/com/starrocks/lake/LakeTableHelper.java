@@ -37,6 +37,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import org.apache.commons.lang3.StringUtils;
@@ -128,8 +129,21 @@ public class LakeTableHelper {
                     throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
                 }
                 WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                // Try warehouse's worker group first, then fall back to FE's worker group (not hardcoded 0)
                 long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
-                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                        .orElseGet(() -> {
+                            StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                            if (agent != null) {
+                                Frontend myself = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+                                if (myself != null) {
+                                    Optional<Long> wgId = agent.tryGetWorkerGroupForOwner(myself.getResourceIsolationGroup());
+                                    if (wgId.isPresent()) {
+                                        return wgId.get();
+                                    }
+                                }
+                            }
+                            return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+                        });
                 ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
                         workerGroupId);
 

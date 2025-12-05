@@ -45,6 +45,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.system.Frontend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,6 +55,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Metadata for StarRocks lake table
@@ -187,10 +189,21 @@ public class LakeTable extends OlapTable {
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
         List<Long> shardIds = null;
         try {
+            // Use FE's worker group instead of hardcoded DEFAULT_WORKER_GROUP_ID
+            long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+            StarOSAgent agent = globalStateMgr.getStarOSAgent();
+            if (agent != null) {
+                Frontend myself = globalStateMgr.getNodeMgr().getMySelf();
+                if (myself != null) {
+                    Optional<Long> wgId = agent.tryGetWorkerGroupForOwner(myself.getResourceIsolationGroup());
+                    if (wgId.isPresent()) {
+                        workerGroupId = wgId.get();
+                    }
+                }
+            }
             // Ignore the parameter replicationNum
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, index.getShardGroupId(),
-                    null, properties,
-                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            shardIds = agent.createShards(tabletNum, fsInfo, cacheInfo, index.getShardGroupId(),
+                    null, properties, workerGroupId);
         } catch (DdlException e) {
             LOG.error(e.getMessage(), e);
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());

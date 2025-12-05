@@ -138,6 +138,25 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    /**
+     * Get fallback worker group ID when warehouse doesn't have one configured.
+     * Falls back to the current FE's worker group instead of hardcoded 0,
+     * to support deployments where all CNs are in custom RIGs.
+     */
+    private long getFallbackWorkerGroupId() {
+        StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        if (agent != null) {
+            Frontend myself = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+            if (myself != null) {
+                Optional<Long> wgId = agent.tryGetWorkerGroupForOwner(myself.getResourceIsolationGroup());
+                if (wgId.isPresent()) {
+                    return wgId.get();
+                }
+            }
+        }
+        return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+    }
+
     public List<Long> getAllComputeNodeIds(String warehouseName) {
         Warehouse warehouse = getWarehouse(warehouseName);
 
@@ -146,7 +165,7 @@ public class WarehouseManager implements Writable {
 
     public List<Long> getAllComputeNodeIds(long warehouseId) {
         long workerGroupId = selectWorkerGroupInternal(warehouseId)
-                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                .orElseGet(this::getFallbackWorkerGroupId);
         return getAllComputeNodeIds(warehouseId, workerGroupId);
     }
 
@@ -184,7 +203,7 @@ public class WarehouseManager implements Writable {
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId)
-                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                    .orElseGet(this::getFallbackWorkerGroupId);
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getPrimaryComputeNodeIdByShard(tablet.getShardId(), workerGroupId);
         } catch (StarRocksException e) {
@@ -199,7 +218,7 @@ public class WarehouseManager implements Writable {
     public Long getComputeNodeId(Long warehouseId, Long tabletId) {
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId)
-                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                    .orElseGet(this::getFallbackWorkerGroupId);
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getPrimaryComputeNodeIdByShard(tabletId, workerGroupId);
         } catch (StarRocksException e) {
@@ -214,7 +233,7 @@ public class WarehouseManager implements Writable {
      */
     public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
         try {
-            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElseGet(this::getFallbackWorkerGroupId);
             List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
             Long nodeId = nodeIds.stream().filter(id ->
@@ -236,7 +255,7 @@ public class WarehouseManager implements Writable {
      */
     public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         try {
-            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElseGet(this::getFallbackWorkerGroupId);
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
         } catch (StarRocksException e) {
