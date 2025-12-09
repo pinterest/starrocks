@@ -145,16 +145,7 @@ public class WarehouseManager implements Writable {
      */
     private long getFallbackWorkerGroupId() {
         StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-        if (agent != null) {
-            Frontend myself = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
-            if (myself != null) {
-                Optional<Long> wgId = agent.tryGetWorkerGroupForOwner(myself.getResourceIsolationGroup());
-                if (wgId.isPresent()) {
-                    return wgId.get();
-                }
-            }
-        }
-        return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+        return (agent != null) ? agent.getCurrentFeWorkerGroupId() : StarOSAgent.DEFAULT_WORKER_GROUP_ID;
     }
 
     public List<Long> getAllComputeNodeIds(String warehouseName) {

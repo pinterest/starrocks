@@ -46,7 +46,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang.StringUtils;
@@ -59,7 +58,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -96,23 +94,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             MetricRepo.addMetric(SHARD_DELETE_COUNTER);
             MetricRepo.addMetric(META_SYNC_PROCESS_TIME_COST_TOTAL);
         }
-    }
-
-    /**
-     * Get the current FE's worker group ID. Falls back to DEFAULT_WORKER_GROUP_ID
-     * if FE's RIG info is not available.
-     */
-    private static long getFeWorkerGroupId(StarOSAgent agent) {
-        if (agent != null) {
-            Frontend myself = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
-            if (myself != null) {
-                Optional<Long> wgId = agent.tryGetWorkerGroupForOwner(myself.getResourceIsolationGroup());
-                if (wgId.isPresent()) {
-                    return wgId.get();
-                }
-            }
-        }
-        return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
     }
 
     @VisibleForTesting
@@ -158,7 +139,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 Warehouse warehouse = manager.getBackgroundWarehouse();
                 // Fall back to FE's worker group instead of hardcoded 0
                 long workerGroupId = manager.selectWorkerGroupByWarehouseId(warehouse.getId())
-                        .orElseGet(() -> getFeWorkerGroupId(starOSAgent));
+                        .orElseGet(starOSAgent::getCurrentFeWorkerGroupId);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (StarRocksException ignored1) {
@@ -347,19 +328,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         long shardId = shardIds.get(0);
         try {
             // Use the current FE's worker group ID instead of hardcoded DEFAULT_WORKER_GROUP_ID.
-            // This ensures we use a worker group that has alive CNs when RIGs are configured.
-            long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
-            Frontend myself = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
-            if (myself != null) {
-                String feRig = myself.getResourceIsolationGroup();
-                StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-                if (agent != null) {
-                    Optional<Long> wgId = agent.tryGetWorkerGroupForOwner(feRig);
-                    if (wgId.isPresent()) {
-                        workerGroupId = wgId.get();
-                    }
-                }
-            }
+            long workerGroupId = starOSAgent.getCurrentFeWorkerGroupId();
             // all shards have the same root directory
             ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, workerGroupId);
             if (shardInfo != null) {
@@ -387,7 +356,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             StarOSAgent starOSAgentLocal = GlobalStateMgr.getCurrentState().getStarOSAgent();
             // Fall back to FE's worker group instead of hardcoded 0
             long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouse.getId())
-                    .orElseGet(() -> getFeWorkerGroupId(starOSAgentLocal));
+                    .orElseGet(starOSAgentLocal::getCurrentFeWorkerGroupId);
             List<String> workerAddresses = starOSAgentLocal.listWorkerGroupIpPort(workerGroupId);
 
             // filter backend

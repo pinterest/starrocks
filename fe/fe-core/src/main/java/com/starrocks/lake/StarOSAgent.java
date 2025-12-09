@@ -52,6 +52,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -146,6 +147,38 @@ public class StarOSAgent {
             return;
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
+    }
+
+    /**
+     * Get the current FE's worker group ID based on its Resource Isolation Group.
+     * Falls back to DEFAULT_WORKER_GROUP_ID if:
+     * - FE is not assigned to a RIG
+     * - Worker group for the RIG doesn't exist yet
+     * - GlobalStateMgr/NodeMgr not initialized (e.g., in tests)
+     * - Any error occurs during lookup
+     *
+     * This method should be used instead of hardcoding DEFAULT_WORKER_GROUP_ID
+     * to ensure RIG-aware scheduling works correctly.
+     */
+    public long getCurrentFeWorkerGroupId() {
+        try {
+            GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+            if (gsm == null || gsm.getNodeMgr() == null) {
+                return DEFAULT_WORKER_GROUP_ID;
+            }
+            Frontend myself = gsm.getNodeMgr().getMySelf();
+            if (myself != null) {
+                String feRig = myself.getResourceIsolationGroup();
+                Optional<Long> wgId = tryGetWorkerGroupForOwner(feRig);
+                if (wgId.isPresent()) {
+                    return wgId.get();
+                }
+            }
+        } catch (Exception e) {
+            // In test environments or during startup, GlobalStateMgr may not be fully initialized
+            LOG.debug("Failed to get FE worker group ID, falling back to default", e);
+        }
+        return DEFAULT_WORKER_GROUP_ID;
     }
 
     public String getRawServiceId() {
@@ -639,7 +672,7 @@ public class StarOSAgent {
 
         List<List<ShardInfo>> shardInfo;
         try {
-            shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
+            shardInfo = client.listShard(serviceId, Arrays.asList(groupId), getCurrentFeWorkerGroupId(),
                                          true /* withoutReplicaInfo */);
         } catch (StarClientException e) {
             throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
