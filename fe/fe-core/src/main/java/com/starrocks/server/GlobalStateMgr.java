@@ -837,6 +837,7 @@ public class GlobalStateMgr {
         if (Config.access_control.equals("ranger")) {
             accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
         } else if (Config.access_control.equals("cauthz")) {
+            LOG.info("Initializing cauthz access control with class: {}", Config.cauthz_authorization_class_name);
             accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(),
                     new CauthzStarRocksAccessController());
         } else {
