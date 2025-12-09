@@ -53,6 +53,7 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogManager;
@@ -829,6 +830,10 @@ public class GlobalStateMgr {
         AccessControlProvider accessControlProvider;
         if (Config.access_control.equals("ranger")) {
             accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+        } else if (Config.access_control.equals("cauthz")) {
+            LOG.info("Initializing cauthz access control with class: {}", Config.cauthz_authorization_class_name);
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(),
+                    new CauthzStarRocksAccessController());
         } else {
             accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
         }
