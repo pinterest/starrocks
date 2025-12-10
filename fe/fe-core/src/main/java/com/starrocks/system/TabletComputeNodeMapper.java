@@ -202,6 +202,22 @@ public class TabletComputeNodeMapper {
     }
 
     public List<Long> backupComputeNodesForTablet(Long tabletId, Long cnToExclude, int count, String resourceIsolationGroup) {
+        List<Long> computeNodes = lookupBackupComputeNodesForTablet(tabletId, cnToExclude, count, resourceIsolationGroup);
+        if (!computeNodes.isEmpty()) {
+            // Update tracking information only for actual backup selections (not metric calculations)
+            tabletMappingCount.computeIfAbsent(tabletId, k -> new AtomicLong()).incrementAndGet();
+            computeNodes.forEach(
+                    nodeId -> computeNodeReturnCount.computeIfAbsent(nodeId, k -> new AtomicLong()).incrementAndGet());
+        }
+        return computeNodes;
+    }
+
+    /**
+     * Performs hash ring lookup to find backup CNs for a tablet without updating tracking counters.
+     * Use this for metric calculations or other read-only operations.
+     */
+    private List<Long> lookupBackupComputeNodesForTablet(Long tabletId, Long cnToExclude, int count,
+                                                         String resourceIsolationGroup) {
         readLock.lock();
         try {
             if (!this.resourceIsolationGroupToTabletMapping.containsKey(resourceIsolationGroup)) {
@@ -216,12 +232,7 @@ public class TabletComputeNodeMapper {
             if (computeNodes.size() < count) {
                 LOG.warn("Requesting more CN from resource isolation group {} than are available: available={}, requesting={}",
                         resourceIsolationGroup, computeNodes.size(), count);
-
             }
-            // Update tracking information
-            tabletMappingCount.computeIfAbsent(tabletId, k -> new AtomicLong()).incrementAndGet();
-            computeNodes.forEach(
-                    nodeId -> computeNodeReturnCount.computeIfAbsent(nodeId, k -> new AtomicLong()).incrementAndGet());
             return computeNodes;
         } finally {
             readLock.unlock();
@@ -246,10 +257,12 @@ public class TabletComputeNodeMapper {
     // (when this FE came up).
     // Note: this function is kind of expensive (~1 ms for largish databases), don't call it often.
     public Map<Long, Long> computeNodeToActingAsBackupForTabletCount() throws IllegalStateException {
+        String thisResourceIsolationGroup = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getResourceIsolationGroup();
         long startTime = System.currentTimeMillis();
         HashMap<Long, Long> computeNodeToOwnedTabletCount = new HashMap<>();
         for (Long tabletId : tabletMappingCount.keySet()) {
-            List<Long> primaryCnForTablet = backupComputeNodesForTablet(tabletId, -1L, 1);
+            // Use lookup method to avoid incrementing tracking counters during metric calculation
+            List<Long> primaryCnForTablet = lookupBackupComputeNodesForTablet(tabletId, -1L, 1, thisResourceIsolationGroup);
             if (primaryCnForTablet.isEmpty()) {
                 throw new IllegalStateException("No owner for tablet, seemingly no cn for resource isolation group");
             }
