@@ -92,7 +92,11 @@ public class LoadAction extends RestBaseAction {
 
         // A 'Load' request must have 100-continue header
         if (!request.getRequest().headers().contains(HttpHeaders.Names.EXPECT)) {
-            throw new DdlException("There is no 100-continue header");
+            // throw new DdlException("There is no 100-continue header");
+            LOG.warn("Stream load request missing Expect: 100-continue header. " +
+                    "Client should be upgraded. DB: {}, Table: {}",
+                    request.getSingleParameter(DB_KEY),
+                    request.getSingleParameter(TABLE_KEY));
         }
 
         String dbName = request.getSingleParameter(DB_KEY);
