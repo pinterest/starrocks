@@ -18,6 +18,8 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.BackendSelector;
+import com.starrocks.qe.CacheSelectBackendSelector;
+import com.starrocks.qe.CacheSelectComputeNodeSelectionProperties;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.FragmentScanRangeAssignment;
@@ -58,12 +60,29 @@ public class BackendSelectorFactory {
             return new NoopBackendSelector();
         }
 
+        int desiredDatacacheReplicas = sessionVariable.getNumDesiredDatacacheReplicas();
+        int desiredDatacacheBackupReplicas = sessionVariable.getNumDesiredDatacacheBackupReplicas();
+        List<String> datacacheSelectResourceGroups = sessionVariable.getDatacacheSelectResourceGroups();
+
         if (scanNode instanceof SchemaScanNode) {
             return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false);
         } else if (scanNode.isConnectorScanNode()) {
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),
                     sessionVariable.getHDFSBackendSelectorScanRangeShuffle(), useIncrementalScanRanges, connectContext);
+        } else if (desiredDatacacheReplicas > 1 ||
+                desiredDatacacheBackupReplicas > 0 ||
+                !datacacheSelectResourceGroups.isEmpty()) {
+            // Note that a cacheSelect should never be hasReplicated (because currently shared-data mode otherwise
+            // doesn't support multiple replicas in cache), and it should never be hasColocate (because a cache select
+            // statement is for a single table).
+            return new CacheSelectBackendSelector(
+                    scanNode, locations, assignment, workerProvider,
+                    new CacheSelectComputeNodeSelectionProperties(
+                            datacacheSelectResourceGroups,
+                            desiredDatacacheReplicas,
+                            desiredDatacacheBackupReplicas
+                    ), connectContext.getCurrentWarehouseId());
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();

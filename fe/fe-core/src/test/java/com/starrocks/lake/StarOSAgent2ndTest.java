@@ -25,25 +25,31 @@ import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -52,15 +58,15 @@ import java.util.Set;
 public class StarOSAgent2ndTest {
     private StarOSAgent starosAgent;
 
-    @BeforeEach
+    @Before
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
         starosAgent.init(null);
     }
 
     @Test
-    public void testGetBackendIdsByShardMissingStarletPort(@Mocked StarClient client) throws StarClientException,
-            StarRocksException {
+    public void testGetBackendIdsByShardMissingStarletPort(@Mocked StarClient client)
+            throws StarClientException, DdlException, StarRocksException {
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         long beId = 123L;
@@ -109,7 +115,7 @@ public class StarOSAgent2ndTest {
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort + 1);
             backend.setStarletPort(workerStarletPort);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
-            Assertions.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
+            Assert.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
             workerToNode.clear();
         }
@@ -118,7 +124,7 @@ public class StarOSAgent2ndTest {
             backend.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
             // empty result
-            Assertions.assertTrue(getBackendIdsByShard(shardId, 0).isEmpty());
+            Assert.assertTrue(getBackendIdsByShard(shardId, 0).isEmpty());
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
             workerToNode.clear();
         }
@@ -126,7 +132,7 @@ public class StarOSAgent2ndTest {
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort);
             backend.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
-            Assertions.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
+            Assert.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
             workerToNode.clear();
         }
@@ -134,7 +140,7 @@ public class StarOSAgent2ndTest {
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort);
             backend.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
-            Assertions.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
+            Assert.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
             workerToNode.clear();
         }
@@ -144,7 +150,7 @@ public class StarOSAgent2ndTest {
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort + 1);
             cn.setStarletPort(workerStarletPort);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
-            Assertions.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
+            Assert.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
             workerToNode.clear();
         }
@@ -153,7 +159,7 @@ public class StarOSAgent2ndTest {
             cn.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
             // empty result
-            Assertions.assertTrue(getBackendIdsByShard(shardId, 0).isEmpty());
+            Assert.assertTrue(getBackendIdsByShard(shardId, 0).isEmpty());
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
             workerToNode.clear();
         }
@@ -161,7 +167,7 @@ public class StarOSAgent2ndTest {
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort);
             cn.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
-            Assertions.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
+            Assert.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
             workerToNode.clear();
         }
@@ -169,21 +175,31 @@ public class StarOSAgent2ndTest {
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort);
             cn.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
-            Assertions.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
+            Assert.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
             workerToNode.clear();
         }
     }
 
     @Test
-    public void testGetPrimaryComputeNodeIdByShard(@Mocked StarClient client) throws StarClientException,
-            StarRocksException {
+    public void testGetPrimaryComputeNodeIdByShard(@Mocked StarClient client)
+            throws StarClientException, DdlException, StarRocksException {
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         int workerHeartbeatPort = 9050;
         long shardId = 10L;
 
-        UtFrameUtils.mockInitWarehouseEnv();
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
 
         WorkerInfo workerInfo = WorkerInfo.newBuilder()
                 .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))
@@ -218,11 +234,13 @@ public class StarOSAgent2ndTest {
         workerToNode.put(1L, 2L);
         Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
-        Assertions.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-        StarRocksException exception =
-                Assertions.assertThrows(StarRocksException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId,
+        Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId,
                 StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-        Assertions.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getInternalErrorCode());
+        StarRocksException exception =
+                Assert.assertThrows(StarRocksException.class,
+                        () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId,
+                        StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+        Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getInternalErrorCode());
     }
 
     @Test
@@ -246,9 +264,9 @@ public class StarOSAgent2ndTest {
         {
             FilePathInfo info = StarOSAgent.allocatePartitionFilePathInfo(fsPathBuilder.build(), partitionId);
             String expectedFullPath = String.format("%s/%d", fsPathBuilder.getFullPath(), partitionId);
-            Assertions.assertEquals(expectedFullPath, info.getFullPath());
+            Assert.assertEquals(expectedFullPath, info.getFullPath());
             // Compare the info without the fullpath info, should be identical
-            Assertions.assertEquals(info.toBuilder().clearFullPath().toString(),
+            Assert.assertEquals(info.toBuilder().clearFullPath().toString(),
                     fsPathBuilder.build().toBuilder().clearFullPath().toString());
         }
 
@@ -262,14 +280,43 @@ public class StarOSAgent2ndTest {
             // prefix: 10086 % 1024 = 870 (0x366) -> reverse order: 663
             String expectedFullPath =
                     String.format("s3://bucket/663/service_id_balabala/db111/table222/%d", partitionId);
-            Assertions.assertEquals(expectedFullPath, info.getFullPath());
+            Assert.assertEquals(expectedFullPath, info.getFullPath());
             // Compare the info without the fullpath info, should be identical
-            Assertions.assertEquals(info.toBuilder().clearFullPath().toString(),
+            Assert.assertEquals(info.toBuilder().clearFullPath().toString(),
                     fsPathBuilder.build().toBuilder().clearFullPath().toString());
         }
     }
 
-    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
-        return new HashSet<Long>(starosAgent.getAllNodeIdsByShard(shardId, workerGroupId));
+    @Test
+    public void testWorkerGroupMgmt(@Mocked StarClient client) throws StarClientException, DdlException {
+        String owner1 = "some_owner";
+        long workerGroup1 = 101L;
+        WorkerGroupDetailInfo defaultWorkerGroupDetailInfo =
+                WorkerGroupDetailInfo.newBuilder().setGroupId(0).setOwner("OwnByStarManager").build();
+        WorkerGroupDetailInfo workerGroupDetailInfo =
+                WorkerGroupDetailInfo.newBuilder().setGroupId(workerGroup1).setOwner(owner1).build();
+        new Expectations() {
+            {
+                client.listWorkerGroup("1", Collections.emptyMap());
+                times = 3; // tryGet the first time, getOrCreate twice
+                result = Lists.newArrayList(defaultWorkerGroupDetailInfo);
+                result = Lists.newArrayList(defaultWorkerGroupDetailInfo);
+                result = Lists.newArrayList(defaultWorkerGroupDetailInfo, workerGroupDetailInfo);
+
+                client.createWorkerGroup("1", owner1, WorkerGroupSpec.getDefaultInstance(), Collections.emptyMap(),
+                        Collections.emptyMap());
+                times = 1;
+                result = workerGroupDetailInfo;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals(Optional.empty(), starosAgent.tryGetWorkerGroupForOwner(owner1));
+        Assert.assertEquals(workerGroup1, starosAgent.getOrCreateWorkerGroupForOwner(owner1));
+        Assert.assertEquals(workerGroup1, starosAgent.getOrCreateWorkerGroupForOwner(owner1));
+
+    }
+
+    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws DdlException, StarRocksException {
+        return Sets.newHashSet(starosAgent.getAllNodeIdsByShard(shardId, workerGroupId));
     }
 }

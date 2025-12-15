@@ -15,19 +15,28 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
+import com.google.common.collect.Lists;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.UpdateHistoricalNodeLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.sql.ast.ModifyComputeNodeClause;
+import com.starrocks.sql.parser.NodePosition;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -128,7 +137,7 @@ public class SystemInfoServiceTest {
      * Test method for {@link SystemInfoService#modifyBackendProperty(ModifyBackendClause)}.
      */
     @Test
-    public void testModifyBackendProperty() throws DdlException {
+    public void testModifyBackendLocationProperty() throws DdlException {
         Backend be = new Backend(100, "originalHost", 1000);
         service.addBackend(be);
         Map<String, String> properties = Maps.newHashMap();
@@ -139,6 +148,40 @@ public class SystemInfoServiceTest {
         Backend backend = service.getBackendWithHeartbeatPort("originalHost", 1000);
         Assertions.assertNotNull(backend);
         Assertions.assertEquals("{rack=rack1}", backend.getLocation().toString());
+    }
+
+    @Test
+    public void testModifyBackendGroupPropertyThrowsException() throws DdlException {
+        Backend be = new Backend(100, "originalHost", 1000);
+        service.addBackend(be);
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
+        ModifyBackendClause clause = new ModifyBackendClause("originalHost:1000", properties);
+        assertThrows(UnsupportedOperationException.class, () -> service.modifyBackendProperty(clause));
+    }
+
+    @Test
+    public void testModifyComputeNodeGroupProperty() throws DdlException {
+        ComputeNode cn = new ComputeNode(100, "originalHost", 1000);
+        service.addComputeNode(cn);
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:writegroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("originalHost:1000", properties);
+        service.modifyComputeNodeProperty(clause);
+        ComputeNode computeNode = service.getComputeNodeWithHeartbeatPort("originalHost", 1000);
+        Assertions.assertNotNull(computeNode);
+        Assertions.assertEquals("writegroup", computeNode.getResourceIsolationGroup());
+    }
+
+    @Test
+    public void testModifyComputeNodeBadGroupProperty1ThrowsException() throws DdlException {
+        ComputeNode cn = new ComputeNode(100, "originalHost", 1000);
+        service.addComputeNode(cn);
+        Map<String, String> properties = Maps.newHashMap();
+        // missing the "group:" prefix
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "writegroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("originalHost:1000", properties);
+        assertThrows(UnsupportedOperationException.class, () -> service.modifyComputeNodeProperty(clause));
     }
 
     @Test
@@ -480,6 +523,105 @@ public class SystemInfoServiceTest {
             // throw not support exception
             service.modifyBackendHost(clause);
         });
+    }
+
+    @Test
+    public void addComputeNodeTest() throws AnalysisException {
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropAllBackend();
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+
+        com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
+                com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+        com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
+
+        try {
+            List<String> hostPorts = stmt.getHostPortPairs().stream()
+                    .map(pair -> pair.first + ":" + pair.second)
+                    .collect(java.util.stream.Collectors.toList());
+            AddComputeNodeClause addComputeNodeClause = new AddComputeNodeClause(hostPorts,
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, NodePosition.ZERO);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(addComputeNodeClause);
+        } catch (DdlException e) {
+            Assertions.fail();
+        }
+
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+                getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
+
+        try {
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
+        } catch (DdlException e) {
+            Assertions.assertTrue(e.getMessage().contains("Compute node already exists with same host"));
+        }
+    }
+
+    @Test
+    public void resourceIsolationGroupTest() throws DdlException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+        };
+        
+        Frontend thisFe = new Frontend();
+        thisFe.setResourceIsolationGroup(ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+        
+        NodeMgr nodeMgr = new NodeMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+                globalStateMgr.getEditLog();
+                result = editLog;
+                minTimes = 0;
+            }
+        };
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
+                minTimes = 0;
+            }
+        };
+        // Use the test helper method to add compute nodes directly (avoids needing to parse host:port strings)
+        ComputeNode cn1 = new ComputeNode(1L, "host1", 1000);
+        ComputeNode cn2 = new ComputeNode(2L, "host2", 1000);
+        ComputeNode cn3 = new ComputeNode(3L, "host3", 1000);
+        service.addComputeNode(cn1);
+        service.addComputeNode(cn2);
+        service.addComputeNode(cn3);
+        
+        List<ComputeNode> allComputeNodes = service.getComputeNodes(); 
+        // Set all compute nodes as alive for sake of testing
+        for (ComputeNode cn : allComputeNodes) {
+            cn.setAlive(true);
+        }
+        Assertions.assertEquals(3, allComputeNodes.size());
+        Assertions.assertEquals(3, service.getAvailableComputeNodeIds().size());
+        Assertions.assertEquals(allComputeNodes, service.getAvailableComputeNodes());
+
+        // Modify host3 to belong to another non-default group and check on consequences
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_GROUP, "group:othergroup");
+        ModifyComputeNodeClause clause = new ModifyComputeNodeClause("host3:1000", properties);
+        service.modifyComputeNodeProperty(clause);
+        // shouldUseInternalTabletToCnMapper() method removed
+        Assertions.assertEquals(List.of(1L, 2L), service.getAvailableComputeNodeIds());
+
+        // Reassign this FE and ensure it knows which compute node is available
+        thisFe.setResourceIsolationGroup("othergroup");
+        Assertions.assertEquals(List.of(3L), service.getAvailableComputeNodeIds());
+
+        service.dropComputeNode("host3", 1000, null);
     }
 
 }

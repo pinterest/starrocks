@@ -28,6 +28,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Supplier;
@@ -334,7 +336,7 @@ public class DefaultWorkerProviderTest {
                 Assertions.assertTrue(isContained);
             }
             // chooseBackupNode always returns -1
-            Assertions.assertEquals(-1, workerProvider.selectBackupWorker(id));
+            Assert.assertEquals(-1, workerProvider.selectBackupWorker(id, Optional.empty()));
         }
     }
 

@@ -20,6 +20,7 @@ import com.starrocks.system.SystemInfoService;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * WorkerProvider provides available workers to a job scheduler, and records the selected workers.
@@ -71,6 +72,11 @@ public interface WorkerProvider {
 
     Collection<ComputeNode> getAllWorkers();
 
+    // Makes it so getWorkerById is not restricted by which nodes are "available"/of the same resource isolation group.
+    default void setAllowGetAnyWorker(boolean allowGetAnyWorker) throws UnsupportedOperationException {
+        throw new UnsupportedOperationException("setAllowGetAnyWorker is not supported.");
+    }
+
     ComputeNode getWorkerById(long workerId);
 
     boolean isDataNodeAvailable(long dataNodeId);
@@ -100,7 +106,7 @@ public interface WorkerProvider {
      *
      * @return -1, no available backup worker
      */
-    long selectBackupWorker(long workerId);
+    long selectBackupWorker(long workerId, Optional<Long> tabletId);
 
     long getWarehouseId();
 }

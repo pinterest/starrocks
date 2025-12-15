@@ -103,16 +103,18 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-    public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
-        return computeNodeId;
+    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        return Lists.newArrayList(computeNodeIdSetAssignedToTablet);
     }
 
     @Override
-    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-        return computeNodeIdSetAssignedToTablet;
+    public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
+        // Return the first alive compute node for tests
+        return computeNodeIdSetAssignedToTablet.isEmpty() ? null : computeNodeIdSetAssignedToTablet.get(0);
     }
 
-    public void setComputeNodeIdsAssignToTablet(Set<Long> computeNodeIds) {
+    public void setComputeNodeIdsAssignToTablet(List<Long> computeNodeIds) {
+        computeNodeIdSetAssignedToTablet.clear();
         computeNodeIdSetAssignedToTablet.addAll(computeNodeIds);
     }
 
@@ -158,5 +160,11 @@ public class MockedWarehouseManager extends WarehouseManager {
         if (computeNodes != null) {
             aliveComputeNodes.addAll(computeNodes);
         }
+    }
+
+    @Override
+    public java.util.Optional<Long> selectWorkerGroupByWarehouseId(long warehouseId) {
+        // Return default worker group ID (0) for tests to avoid NPE from getMySelf() in RIG code path
+        return java.util.Optional.of(0L);
     }
 }

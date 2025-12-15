@@ -53,8 +53,9 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -62,6 +63,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,6 +74,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -131,11 +134,13 @@ public class GlobalStateMgrTest {
         List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
         fe.updateHostAndEditLogPort("testHost", 1000);
+        fe.setResourceIsolationGroup("somegroup");
         globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
         List<Frontend> updatedFrontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
-        Assertions.assertEquals("testHost", updatedfFe.getHost());
-        Assertions.assertTrue(updatedfFe.getEditLogPort() == 1000);
+        Assert.assertEquals("testHost", updatedfFe.getHost());
+        Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
+        Assert.assertEquals("somegroup", updatedfFe.getResourceIsolationGroup());
     }
 
     @Mocked
@@ -180,17 +185,24 @@ public class GlobalStateMgrTest {
         globalStateMgr.setEditLog(editLog);
         List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(fe.getHost(), "sandbox-fqdn");
-        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+
+        ModifyFrontendClause clause1 = new ModifyFrontendClause(fe.getHost() + ":" + fe.getEditLogPort(),
+                Map.of("labels.resource_isolation_group", "group:somegroup"), NodePosition.ZERO);
+        globalStateMgr.getNodeMgr().modifyFrontend(clause1);
+        Assert.assertEquals("somegroup", fe.getResourceIsolationGroup());
+
+        ModifyFrontendClause clause2 = new ModifyFrontendClause(fe.getHost(), "sandbox-fqdn");
+        globalStateMgr.getNodeMgr().modifyFrontend(clause2);
+        Assert.assertEquals("sandbox-fqdn", fe.getHost());
     }
 
     @Test
     public void testUpdateFeNotFoundException() {
         assertThrows(DdlException.class, () -> {
             GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
+            ModifyFrontendClause clause = new ModifyFrontendClause("test", "sandbox-fqdn");
             // this case will occur [frontend does not exist] exception
-            globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+            globalStateMgr.getNodeMgr().modifyFrontend(clause);
         });
     }
 
@@ -198,9 +210,9 @@ public class GlobalStateMgrTest {
     public void testUpdateModifyCurrentMasterException() {
         assertThrows(DdlException.class, () -> {
             GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
+            ModifyFrontendClause clause = new ModifyFrontendClause("test-address", "sandbox-fqdn");
             // this case will occur [can not modify current master node] exception
-            globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+            globalStateMgr.getNodeMgr().modifyFrontend(clause);
         });
     }
 

@@ -49,6 +49,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+import static java.util.Objects.requireNonNullElse;
+
 /**
  * This class extends the primary identifier of a compute node with computing capabilities
  * and no storage capacity。
@@ -126,6 +129,11 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     // Tracking the heartbeat status, CONNECTING/ALIVE/SHUTDOWN/DISCONNECTED
     @SerializedName("status")
     private Status status;
+
+    // This field is the rare piece of state associated with ComputeNodes and not backends
+    // (it should not be used in shared-nothing mode).
+    @SerializedName("res_iso_group")
+    private String resourceIsolationGroup;
 
     private volatile DataCacheMetrics dataCacheMetrics = null;
 
@@ -294,6 +302,13 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    public String getResourceIsolationGroup() {
+        return requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+    }
+    public void setResourceIsolationGroup(String group) {
+        this.resourceIsolationGroup = group;
     }
 
     // For TEST ONLY

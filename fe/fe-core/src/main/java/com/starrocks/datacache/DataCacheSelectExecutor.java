@@ -52,6 +52,11 @@ public class DataCacheSelectExecutor {
         tmpSessionVariable.setDataCachePriority(statement.getPriority());
         tmpSessionVariable.setDatacacheTTLSeconds(statement.getTTLSeconds());
         tmpSessionVariable.setEnableCacheSelect(true);
+        // Note that although setting these values in the SessionVariable is not ideal, it's way more disruptive to pipe
+        // this information to where it needs to be through the insertStmt.
+        tmpSessionVariable.setNumDesiredDatacacheReplicas(statement.getNumReplicasDesired());
+        tmpSessionVariable.setNumDesiredDatacacheBackupReplicas(statement.getNumBackupReplicasDesired());
+        tmpSessionVariable.setDatacacheSelectResourceGroups(statement.getResourceIsolationGroups());
         connectContext.setSessionVariable(tmpSessionVariable);
 
         InsertStmt insertStmt = statement.getInsertStmt();

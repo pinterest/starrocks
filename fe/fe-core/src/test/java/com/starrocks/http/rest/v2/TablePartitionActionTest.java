@@ -221,7 +221,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
                 result = Sets.newHashSet(testBackendId1);
 
                 GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNodeId(anyLong, (LakeTablet) any);
+                        .getAliveComputeNodeId(anyLong, (LakeTablet) any);
                 minTimes = 0;
                 result = testBackendId1;
 

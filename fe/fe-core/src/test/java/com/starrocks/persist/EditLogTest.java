@@ -14,30 +14,26 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
-import com.starrocks.encryption.KeyMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.proto.EncryptionAlgorithmPB;
-import com.starrocks.proto.EncryptionKeyPB;
-import com.starrocks.proto.EncryptionKeyTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.system.ResourceIsolationGroupUtils;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
 
-    @BeforeEach
+    @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
     }
@@ -91,7 +87,7 @@ public class EditLogTest {
             producer.join();
         }
         consumer.join();
-        Assertions.assertEquals(0, logQueue.size());
+        Assert.assertEquals(0, logQueue.size());
     }
 
     @Test
@@ -111,7 +107,7 @@ public class EditLogTest {
             Thread.sleep(50);
         }
         // t1 is blocked in task.get() now
-        Assertions.assertEquals(1, journalQueue.size());
+        Assert.assertEquals(1, journalQueue.size());
 
         // t2 will be blocked in queue.put() because queue is full
         Thread t2 = new Thread(new Runnable() {
@@ -135,7 +131,7 @@ public class EditLogTest {
             Thread.sleep(100);
         }
 
-        Assertions.assertEquals(1, journalQueue.size());
+        Assert.assertEquals(1, journalQueue.size());
         JournalTask task = journalQueue.take();
 
         task.markSucceed();
@@ -162,41 +158,57 @@ public class EditLogTest {
         field2.setAccessible(true);
         field2.set(globalStateMgr, nodeMgr);
 
+        Field systemInfoField = nodeMgr.getClass().getDeclaredField("systemInfo");
+        systemInfoField.setAccessible(true);
+
+        SystemInfoService clusterInfo = new SystemInfoService();
+        clusterInfo.addComputeNode(new ComputeNode());
+        systemInfoField.set(nodeMgr, clusterInfo);
+
         return globalStateMgr;
     }
 
     @Test
-    public void testOpAddKeyJournalEntity() throws Exception {
-        EncryptionKeyPB pb = new EncryptionKeyPB();
-        pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);
-        pb.algorithm = EncryptionAlgorithmPB.AES_128;
-        pb.plainKey = new byte[16];
-        pb.type = EncryptionKeyTypePB.NORMAL_KEY;
-        pb.createTime = 3L;
-        DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        JournalEntity entity = new JournalEntity(OperationType.OP_ADD_KEY, new Text(GsonUtils.GSON.toJson(pb)));
-        buffer.writeShort(entity.opCode());
-        entity.data().write(buffer);
-
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        short opCode = in.readShort();
-        JournalEntity replayEntry = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, in));
-        Assertions.assertEquals(OperationType.OP_ADD_KEY, replayEntry.opCode());
+    public void testOpUpdateFrontend() throws Exception {
+        GlobalStateMgr mgr = mockGlobalStateMgr();
+        List<Frontend> frontends = mgr.getNodeMgr().getFrontends(null);
+        Frontend feInMemory = frontends.get(0);
+        Frontend feToWrite = new Frontend(feInMemory.getRole(), feInMemory.getNodeName(), feInMemory.getHost(),
+                feInMemory.getEditLogPort());
+        feToWrite.updateHostAndEditLogPort("testHost", 1000);
+        feToWrite.setResourceIsolationGroup("somegroup2");
+        JournalEntity journal = new JournalEntity(OperationType.OP_UPDATE_FRONTEND_V2, feToWrite);
+        EditLog editLog = new EditLog(null);
+        editLog.loadJournal(mgr, journal);
+        List<Frontend> updatedFrontends = mgr.getNodeMgr().getFrontends(null);
+        Frontend updatedfFe = updatedFrontends.get(0);
+        Assert.assertEquals("testHost", updatedfFe.getHost());
+        Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
+        Assert.assertEquals("somegroup2", updatedfFe.getResourceIsolationGroup());
     }
 
     @Test
-    public void testOpAddKey() throws Exception {
+    public void testOpModifyComputeNode() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
-        EncryptionKeyPB pb = new EncryptionKeyPB();
-        pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);
-        pb.algorithm = EncryptionAlgorithmPB.AES_128;
-        pb.plainKey = new byte[16];
-        pb.type = EncryptionKeyTypePB.NORMAL_KEY;
-        pb.createTime = 3L;
-        JournalEntity journal = new JournalEntity(OperationType.OP_ADD_KEY, new Text(GsonUtils.GSON.toJson(pb)));
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        ComputeNode cnInMemory =  systemInfoService.getComputeNodes().get(0);
+        ComputeNode cnToWrite = new ComputeNode(cnInMemory.getId(), cnInMemory.getHost(), cnInMemory.getHeartbeatPort());
+        cnToWrite.setResourceIsolationGroup("somegroup");
+        JournalEntity journal = new JournalEntity(OperationType.OP_COMPUTE_NODE_STATE_CHANGE, cnToWrite);
         EditLog editLog = new EditLog(null);
+
+        TabletComputeNodeMapper tabletComputeNodeMapper = systemInfoService.internalTabletMapper();
+        new Expectations(tabletComputeNodeMapper) {
+            {
+                tabletComputeNodeMapper.modifyComputeNode(cnToWrite.getId(),
+                        ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID, "somegroup");
+                minTimes = 1;
+            }
+        };
         editLog.loadJournal(mgr, journal);
-        Assertions.assertEquals(1, mgr.getKeyMgr().numKeys());
+        List<ComputeNode> updatedComputeNodes = systemInfoService.getComputeNodes();
+        ComputeNode updatedCn = updatedComputeNodes.get(0);
+        Assert.assertEquals("somegroup", updatedCn.getResourceIsolationGroup());
     }
 
     @Test
@@ -215,7 +227,7 @@ public class EditLogTest {
         try {
             GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journal);
         } catch (JournalInconsistentException e) {
-            Assertions.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
+            Assert.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
         }
     }
 }

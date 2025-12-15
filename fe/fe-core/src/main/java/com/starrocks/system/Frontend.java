@@ -47,10 +47,13 @@ import com.starrocks.system.HeartbeatResponse.HbStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Objects;
+
+import static com.starrocks.system.ResourceIsolationGroupUtils.DEFAULT_RESOURCE_ISOLATION_GROUP_ID;
+
 public class Frontend extends JsonWriter {
     public static final Logger LOG = LogManager.getLogger(Frontend.class);
     public static final String HEARTBEAT_MSG_SHUTTING_DOWN = "shutting down";
-    
     @SerializedName(value = "r")
     private FrontendNodeType role;
     @SerializedName(value = "n")
@@ -61,6 +64,9 @@ public class Frontend extends JsonWriter {
     private int editLogPort;
     @SerializedName(value = "fid")
     private int fid = 0;
+
+    @SerializedName("res_iso_group")
+    private String resourceIsolationGroup;
 
     private int queryPort;
     private int rpcPort;
@@ -145,6 +151,13 @@ public class Frontend extends JsonWriter {
 
     public float getHeapUsedPercent() {
         return heapUsedPercent;
+    }
+
+    public String getResourceIsolationGroup() {
+        return Objects.requireNonNullElse(resourceIsolationGroup, DEFAULT_RESOURCE_ISOLATION_GROUP_ID);
+    }
+    public void setResourceIsolationGroup(String group) {
+        this.resourceIsolationGroup = group;
     }
 
     public void updateHostAndEditLogPort(String host, int editLogPort) {
@@ -285,6 +298,7 @@ public class Frontend extends JsonWriter {
         StringBuilder sb = new StringBuilder();
         sb.append("name: ").append(nodeName).append(", role: ").append(role.name());
         sb.append(", ").append(host).append(":").append(editLogPort);
+        sb.append(", rig: ").append(resourceIsolationGroup);
         return sb.toString();
     }
 }

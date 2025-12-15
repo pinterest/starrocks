@@ -34,6 +34,7 @@ import com.staros.proto.PlacementPreference;
 import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
@@ -51,6 +52,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,6 +60,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -144,6 +147,38 @@ public class StarOSAgent {
             return;
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
+    }
+
+    /**
+     * Get the current FE's worker group ID based on its Resource Isolation Group.
+     * Falls back to DEFAULT_WORKER_GROUP_ID if:
+     * - FE is not assigned to a RIG
+     * - Worker group for the RIG doesn't exist yet
+     * - GlobalStateMgr/NodeMgr not initialized (e.g., in tests)
+     * - Any error occurs during lookup
+     *
+     * This method should be used instead of hardcoding DEFAULT_WORKER_GROUP_ID
+     * to ensure RIG-aware scheduling works correctly.
+     */
+    public long getCurrentFeWorkerGroupId() {
+        try {
+            GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+            if (gsm == null || gsm.getNodeMgr() == null) {
+                return DEFAULT_WORKER_GROUP_ID;
+            }
+            Frontend myself = gsm.getNodeMgr().getMySelf();
+            if (myself != null) {
+                String feRig = myself.getResourceIsolationGroup();
+                Optional<Long> wgId = tryGetWorkerGroupForOwner(feRig);
+                if (wgId.isPresent()) {
+                    return wgId.get();
+                }
+            }
+        } catch (Exception e) {
+            // In test environments or during startup, GlobalStateMgr may not be fully initialized
+            LOG.debug("Failed to get FE worker group ID, falling back to default", e);
+        }
+        return DEFAULT_WORKER_GROUP_ID;
     }
 
     public String getRawServiceId() {
@@ -333,6 +368,71 @@ public class StarOSAgent {
         return 0;
     }
 
+    private long getWorkerGroupOfWorker(long workerId) {
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.listWorkerGroup(serviceId, Collections.emptyList(), true);
+            for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
+                for (WorkerInfo workerInfo : detailInfo.getWorkersInfoList()) {
+                    if (workerInfo.getWorkerId() == workerId) {
+                        return workerInfo.getGroupId();
+                    }
+                }
+            }
+            LOG.warn("Could not find worker {} in any worker group", workerId);
+            return -1;
+        } catch (StarClientException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Returns new worker group id
+    private long createWorkerGroupForOwner(String ownerId) {
+        WorkerGroupSpec workerGroupSpec = WorkerGroupSpec.getDefaultInstance();
+        try {
+            WorkerGroupDetailInfo workerGroupDetailInfo =
+                    client.createWorkerGroup(serviceId, ownerId, workerGroupSpec, new HashMap<>(), new HashMap<>());
+            LOG.info("For owner {}, created worker group: {}", ownerId, workerGroupDetailInfo);
+            return workerGroupDetailInfo.getGroupId();
+        } catch (StarClientException e) {
+            LOG.error("For owner {}, failed to create worker group", ownerId);
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Tries to find worker group for owner.
+    public Optional<Long> tryGetWorkerGroupForOwner(String ownerId) {
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.listWorkerGroup(serviceId, new HashMap<>());
+            LOG.info("All existing worker groups: {}", workerGroupDetailInfos);
+            long workerGroupId = -1;
+            for (WorkerGroupDetailInfo info : workerGroupDetailInfos) {
+                if (!info.getOwner().equals(ownerId)) {
+                    continue;
+                }
+                if (workerGroupId != -1) {
+                    LOG.error("Found multiple worker groups for same owner {}, skipping latter group: {}", ownerId,
+                            info.getGroupId());
+                    continue;
+                }
+                workerGroupId = info.getGroupId();
+                LOG.info("Found worker group for owner {}: {}", ownerId, info.getGroupId());
+            }
+            if (workerGroupId != -1) {
+                return Optional.of(workerGroupId);
+            }
+            return Optional.empty();
+        } catch (StarClientException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Gets worker group for owner. Creates a new worker group if one doesn't already exist for owner.
+    public long getOrCreateWorkerGroupForOwner(String ownerId) {
+        Optional<Long> existingWorkerGroupId = tryGetWorkerGroupForOwner(ownerId);
+        return existingWorkerGroupId.orElseGet(() -> createWorkerGroupForOwner(ownerId));
+    }
+
     /**
      * create a worker to represent the node in StarMgr
      *
@@ -374,7 +474,7 @@ public class StarOSAgent {
             tryRemovePreviousWorker(nodeId);
             workerToId.put(workerIpPort, workerId);
             workerToNode.put(workerId, nodeId);
-            LOG.info("add worker {} success, nodeId is {}", workerId, nodeId);
+            LOG.info("add worker {} success, nodeId is {}, workerGroupId is {}", workerId, nodeId, workerGroupId);
         }
     }
 
@@ -402,10 +502,25 @@ public class StarOSAgent {
         try {
             client.removeWorker(serviceId, workerId, workerGroupId);
         } catch (StarClientException e) {
-            // when multi threads remove this worker, maybe we would get "NOT_EXIST"
-            // but it is right, so only need to throw exception
-            // if code is not StarClientException.ExceptionCode.NOT_EXIST
-            if (e.getCode() != StatusCode.NOT_EXIST) {
+            LOG.error("Failed to remove worker {} from group {}", workerId, workerGroupId);
+            if (e.getCode() == StatusCode.INVALID_ARGUMENT) {
+                long actualGroupId = getWorkerGroupOfWorker(workerId);
+                if (actualGroupId != workerGroupId) {
+                    LOG.error(
+                            "Failed to remove worker {} from group {} because the worker actually belongs to {}, trying again " +
+                                    "with correct group",
+                            workerId, workerGroupId, actualGroupId);
+                    try {
+                        client.removeWorker(serviceId, workerId, actualGroupId);
+                    } catch (StarClientException e2) {
+                        LOG.error("Removing from actual group also didn't work");
+                        throw new DdlException("Failed to remove worker. error: " + e2.getMessage());
+                    }
+                }
+            } else if (e.getCode() != StatusCode.NOT_EXIST) {
+                // when multi threads remove this worker, maybe we would get "NOT_EXIST"
+                // but it is right, so only need to throw exception
+                // if code is not StarClientException.ExceptionCode.NOT_EXIST
                 throw new DdlException("Failed to remove worker. error: " + e.getMessage());
             }
         }
@@ -557,7 +672,7 @@ public class StarOSAgent {
 
         List<List<ShardInfo>> shardInfo;
         try {
-            shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
+            shardInfo = client.listShard(serviceId, Arrays.asList(groupId), getCurrentFeWorkerGroupId(),
                                          true /* withoutReplicaInfo */);
         } catch (StarClientException e) {
             throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
@@ -679,13 +794,34 @@ public class StarOSAgent {
         }
     }
 
-    private List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {
+    /**
+     * Get all node IDs assigned to a shard, including all replicas (not just primary).
+     * This is the multi-replica compatible version that returns a List to preserve ordering.
+     */
+    public List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {
         List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
         List<Long> nodeIds = new ArrayList<>();
         replicas.stream()
                 .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))
                 .forEach(x -> x.ifPresent(nodeIds::add));
+        return nodeIds;
+    }
 
+    /**
+     * Get node IDs assigned to a shard, optionally filtering to primary replicas only.
+     * When onlyPrimary=true, returns only the primary replica (for RIG use cases).
+     * When onlyPrimary=false, returns all replicas (for multi-replica failover).
+     */
+    public List<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
+        List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
+        if (onlyPrimary) {
+            replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
+                    .collect(Collectors.toList());
+        }
+        List<Long> nodeIds = new ArrayList<>();
+        replicas.stream()
+                .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))
+                .forEach(x -> x.ifPresent(nodeIds::add));
         return nodeIds;
     }
 

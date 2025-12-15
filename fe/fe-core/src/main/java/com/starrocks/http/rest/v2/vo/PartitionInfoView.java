@@ -196,8 +196,10 @@ public class PartitionInfoView {
                     if (lakeTabletOptional.isPresent()) {
                         LakeTablet lakeTablet = lakeTabletOptional.get();
                         try {
-                            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                                    .getShardInfo(lakeTablet.getShardId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                            StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                            long workerGroupId = (agent != null)
+                                    ? agent.getCurrentFeWorkerGroupId() : StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+                            ShardInfo shardInfo = agent.getShardInfo(lakeTablet.getShardId(), workerGroupId);
                             pvo.setStoragePath(shardInfo.getFilePath().getFullPath());
                         } catch (StarClientException e) {
                             throw new IllegalStateException(e.getMessage(), e);

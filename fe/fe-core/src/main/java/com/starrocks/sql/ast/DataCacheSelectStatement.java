@@ -20,6 +20,8 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 public class DataCacheSelectStatement extends DdlStmt {
@@ -31,6 +33,9 @@ public class DataCacheSelectStatement extends DdlStmt {
     // =================================================================================
     // Below properties will set after DataCacheAnalyzer analyze properties
     private boolean isVerbose = false;
+    private List<String> resourceIsolationGroups = Collections.emptyList();
+    private int numReplicasDesired = 0;
+    private int numBackupReplicasDesired = 0;
     // real catalog of cache select table
     private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     private long ttlSeconds = 0;
@@ -59,6 +64,30 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     public boolean isVerbose() {
         return isVerbose;
+    }
+
+    public void setResourceIsolationGroups(List<String> resourceIsolationGroups) {
+        this.resourceIsolationGroups = resourceIsolationGroups;
+    }
+
+    public void setNumReplicasDesired(int numReplicasDesired) {
+        this.numReplicasDesired = numReplicasDesired;
+    }
+
+    public void setNumBackupReplicasDesired(int numBackupReplicasDesired) {
+        this.numBackupReplicasDesired = numBackupReplicasDesired;
+    }
+
+    public List<String> getResourceIsolationGroups() {
+        return resourceIsolationGroups;
+    }
+
+    public int getNumReplicasDesired() {
+        return numReplicasDesired;
+    }
+
+    public int getNumBackupReplicasDesired() {
+        return numBackupReplicasDesired;
     }
 
     public void setCatalog(String catalog) {

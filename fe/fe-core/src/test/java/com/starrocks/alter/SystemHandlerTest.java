@@ -30,10 +30,10 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendClause;
 import com.starrocks.system.Backend;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +50,7 @@ public class SystemHandlerTest {
     private static FakeEditLog fakeEditLog;
     private static FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    @BeforeEach
+    @Before
     public void setUp() throws Exception {
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
@@ -72,7 +72,7 @@ public class SystemHandlerTest {
     @Test
     public void testModifyFrontendAddressLogic() {
         assertThrows(NullPointerException.class, () -> {
-            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
+            ModifyFrontendClause clause = new ModifyFrontendClause("127.0.0.1", "sandbox-fqdn", null);
             List<AlterClause> clauses = new ArrayList<>();
             clauses.add(clause);
             systemHandler.process(clauses, null, null);

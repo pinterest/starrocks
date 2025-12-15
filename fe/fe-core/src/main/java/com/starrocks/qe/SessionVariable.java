@@ -86,6 +86,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1246,6 +1247,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
 
+
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
 
@@ -2049,6 +2051,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long datacacheTTLSeconds = 0L;
 
     private boolean enableCacheSelect = false;
+
+    private List<String> datacacheSelectResourceGroups = Collections.emptyList();
+    private int numDesiredDatacacheReplicas = 0;
+    private int numDesiredDatacacheBackupReplicas = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
@@ -2948,7 +2954,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
         SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
                 Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                        StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+                                   StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
         if (result == null) {
             String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
             throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
@@ -2958,7 +2964,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
         return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                        StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                StringUtils.upperCase(computationFragmentSchedulingPolicy))
                 .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
@@ -5062,6 +5068,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableDropTableCheckMvDependency(boolean enableDropTableCheckMvDependency) {
         this.enableDropTableCheckMvDependency = enableDropTableCheckMvDependency;
+    }
+
+    public List<String> getDatacacheSelectResourceGroups() {
+        return datacacheSelectResourceGroups;
+    }
+
+    public void setDatacacheSelectResourceGroups(List<String> datacacheSelectResourceGroups) {
+        this.datacacheSelectResourceGroups = datacacheSelectResourceGroups;
+    }
+
+    public int getNumDesiredDatacacheReplicas() {
+        return numDesiredDatacacheReplicas;
+    }
+
+    public int getNumDesiredDatacacheBackupReplicas() {
+        return numDesiredDatacacheBackupReplicas;
+    }
+
+    public void setNumDesiredDatacacheReplicas(int numDesiredDatacacheReplicas) {
+        this.numDesiredDatacacheReplicas = numDesiredDatacacheReplicas;
+    }
+
+    public void setNumDesiredDatacacheBackupReplicas(int numDesiredDatacacheBackupReplicas) {
+        this.numDesiredDatacacheBackupReplicas = numDesiredDatacacheBackupReplicas;
     }
 
     // Serialize to thrift object

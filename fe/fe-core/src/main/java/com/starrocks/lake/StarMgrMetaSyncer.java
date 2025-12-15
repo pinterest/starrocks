@@ -137,8 +137,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             try {
                 WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 Warehouse warehouse = manager.getBackgroundWarehouse();
+                // Fall back to FE's worker group instead of hardcoded 0
                 long workerGroupId = manager.selectWorkerGroupByWarehouseId(warehouse.getId())
-                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                        .orElseGet(starOSAgent::getCurrentFeWorkerGroupId);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (StarRocksException ignored1) {
@@ -326,8 +327,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         String rootDirectory = null;
         long shardId = shardIds.get(0);
         try {
+            // Use the current FE's worker group ID instead of hardcoded DEFAULT_WORKER_GROUP_ID.
+            long workerGroupId = starOSAgent.getCurrentFeWorkerGroupId();
             // all shards have the same root directory
-            ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, workerGroupId);
             if (shardInfo != null) {
                 rootDirectory = shardInfo.getFilePath().getFullPath();
             }
@@ -350,9 +353,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         try {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+            StarOSAgent starOSAgentLocal = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            // Fall back to FE's worker group instead of hardcoded 0
             long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouse.getId())
-                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-            List<String> workerAddresses = GlobalStateMgr.getCurrentState().getStarOSAgent().listWorkerGroupIpPort(workerGroupId);
+                    .orElseGet(starOSAgentLocal::getCurrentFeWorkerGroupId);
+            List<String> workerAddresses = starOSAgentLocal.listWorkerGroupIpPort(workerGroupId);
 
             // filter backend
             List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();

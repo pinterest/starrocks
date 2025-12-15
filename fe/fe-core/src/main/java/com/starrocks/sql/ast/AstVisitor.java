@@ -464,6 +464,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowResourceIsolationGroups(ShowResourceIsolationGroupStatement statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
     default R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
@@ -1131,7 +1135,11 @@ public interface AstVisitor<R, C> {
         return visitFrontendClause(clause, context);
     }
 
-    default R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
+    default R visitModifyFrontendClause(ModifyFrontendClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
+    default R visitModifyComputeNodeClause(ModifyComputeNodeClause clause, C context) {
         return visitNode(clause, context);
     }
 

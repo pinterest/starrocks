@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
@@ -137,6 +138,16 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    /**
+     * Get fallback worker group ID when warehouse doesn't have one configured.
+     * Falls back to the current FE's worker group instead of hardcoded 0,
+     * to support deployments where all CNs are in custom RIGs.
+     */
+    private long getFallbackWorkerGroupId() {
+        StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        return (agent != null) ? agent.getCurrentFeWorkerGroupId() : StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+    }
+
     public List<Long> getAllComputeNodeIds(String warehouseName) {
         Warehouse warehouse = getWarehouse(warehouseName);
 
@@ -145,12 +156,15 @@ public class WarehouseManager implements Writable {
 
     public List<Long> getAllComputeNodeIds(long warehouseId) {
         long workerGroupId = selectWorkerGroupInternal(warehouseId)
-                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                .orElseGet(this::getFallbackWorkerGroupId);
         return getAllComputeNodeIds(warehouseId, workerGroupId);
     }
 
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
-        Warehouse warehouse = getWarehouse(warehouseId);
+        Warehouse warehouse = idToWh.get(warehouseId);
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
+        }
 
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
@@ -180,7 +194,7 @@ public class WarehouseManager implements Writable {
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId)
-                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                    .orElseGet(this::getFallbackWorkerGroupId);
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getPrimaryComputeNodeIdByShard(tablet.getShardId(), workerGroupId);
         } catch (StarRocksException e) {
@@ -188,9 +202,29 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    /**
+     * Get compute node ID by tablet ID (shard ID). This is used by RIG-specific code paths
+     * that need to look up tablet ownership by ID without having the full LakeTablet object.
+     */
+    public Long getComputeNodeId(Long warehouseId, Long tabletId) {
+        try {
+            long workerGroupId = selectWorkerGroupInternal(warehouseId)
+                    .orElseGet(this::getFallbackWorkerGroupId);
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getPrimaryComputeNodeIdByShard(tabletId, workerGroupId);
+        } catch (StarRocksException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Get an alive compute node for the tablet. This method iterates through ALL replicas
+     * (not just primary) to find one that is alive, supporting multi-replica failover.
+     * Use this for operations that need resilience to CN failures.
+     */
     public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
         try {
-            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElseGet(this::getFallbackWorkerGroupId);
             List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
             Long nodeId = nodeIds.stream().filter(id ->
@@ -206,9 +240,13 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    /**
+     * Get all compute node IDs assigned to a tablet (all replicas, not just primary).
+     * Returns List to preserve ordering and support multi-replica scenarios.
+     */
     public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         try {
-            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElseGet(this::getFallbackWorkerGroupId);
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
         } catch (StarRocksException e) {
@@ -263,19 +301,27 @@ public class WarehouseManager implements Writable {
         return workerGroupId;
     }
 
-    public long getWarehouseResumeTime(long warehouseId) {
-        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            Warehouse warehouse = idToWh.get(warehouseId);
-            if (warehouse == null) {
-                return -1;
-            } else {
-                return warehouse.getResumeTime();
-            }
-        }
-    }
-
+    // Warehouse id is unused in pinterest. In this version of starrocks we use resource isolation group instead of warehouse id.
     private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
+        if (warehouseId == DEFAULT_WAREHOUSE_ID) {
+            Frontend mySelf = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+            if (mySelf != null) {
+                String thisRig = mySelf.getResourceIsolationGroup();
+                Optional<Long> workerGroup = GlobalStateMgr.getCurrentState().getWorkerGroupMgr().getWorkerGroup(thisRig);
+                if (workerGroup.isPresent()) {
+                    return workerGroup;
+                }
+                LOG.warn("Could not get worker group using WorkerGroupManager, falling back on earlier implementation");
+            }
+        } else {
+            LOG.warn("Violating expectations that we don't use warehouse feature: {}", warehouseId);
+        }
         Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null) {
+            LOG.warn("failed to get warehouse by id {}", warehouseId);
+            return Optional.empty();
+        }
+
         List<Long> ids = warehouse.getWorkerGroupIds();
         if (CollectionUtils.isEmpty(ids)) {
             LOG.warn("failed to get worker group id from warehouse {}", warehouse);
@@ -303,6 +349,11 @@ public class WarehouseManager implements Writable {
 
     public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
         throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public long getWarehouseResumeTime(long warehouseId) {
+        Warehouse warehouse = getWarehouse(warehouseId);
+        return warehouse.getResumeTime();
     }
 
     public Set<String> getAllWarehouseNames() {

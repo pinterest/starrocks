@@ -21,9 +21,9 @@ import org.junit.jupiter.api.Test;
 public class AstVisitorTest {
     
     @Test
-    public void testVisitModifyFrontendHostClause() {
+    public void testVisitModifyFrontendClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
-        Object ret = visitor.visitModifyFrontendHostClause(null, null);
+        Object ret = visitor.visitModifyFrontendClause(null, null);
         Assertions.assertNull(ret);
     }
 
@@ -31,6 +31,13 @@ public class AstVisitorTest {
     public void testVisitModifyBackendClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
         Object ret = visitor.visitModifyBackendClause(null, null);
+        Assertions.assertNull(ret);
+    }
+
+    @Test
+    public void testVisitModifyComputeNodeClause() {
+        AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
+        Object ret = visitor.visitModifyComputeNodeClause(null, null);
         Assertions.assertNull(ret);
     }
 }

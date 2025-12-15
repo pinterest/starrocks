@@ -84,10 +84,10 @@ public class LakeTabletsProcNodeTest {
                 result = agent;
 
                 agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet1);
-                result = Lists.newArrayList(10000, 10001);
+                result = Lists.newArrayList(10000L, 10001L);
 
                 agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet2);
-                result = Lists.newArrayList(10001, 10002);
+                result = Lists.newArrayList(10001L, 10002L);
             }
         };
 

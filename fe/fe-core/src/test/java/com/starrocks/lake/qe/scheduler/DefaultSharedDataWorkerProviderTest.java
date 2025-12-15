@@ -37,10 +37,13 @@ import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.TabletComputeNodeMapper;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
@@ -48,6 +51,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.assertj.core.util.Sets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -74,6 +78,7 @@ public class DefaultSharedDataWorkerProviderTest {
     private Map<Long, ComputeNode> id2ComputeNode;
     private Map<Long, ComputeNode> id2AllNodes;
     private DefaultSharedDataWorkerProvider.Factory factory;
+    private Frontend thisFe;
 
     private static <C extends ComputeNode> Map<Long, C> genWorkers(long startId, long endId,
                                                                    Supplier<C> factory) {
@@ -115,6 +120,16 @@ public class DefaultSharedDataWorkerProviderTest {
             {
                 warehouseManager.getAllComputeNodeIds(anyLong);
                 result = Lists.newArrayList(id2AllNodes.keySet());
+                minTimes = 0;
+            }
+        };
+
+        thisFe = new Frontend();
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getMySelf();
+                result = thisFe;
                 minTimes = 0;
             }
         };
@@ -268,7 +283,7 @@ public class DefaultSharedDataWorkerProviderTest {
             }
             ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2Backend), availableId2ComputeNode, 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2Backend), availableId2ComputeNode, 0L, null);
             testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
         }
 
@@ -281,7 +296,7 @@ public class DefaultSharedDataWorkerProviderTest {
             }
             ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2ComputeNode), availableId2ComputeNode, 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2ComputeNode), availableId2ComputeNode, 0L, null);
             testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
         }
 
@@ -294,13 +309,13 @@ public class DefaultSharedDataWorkerProviderTest {
             }
             ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), availableId2ComputeNode, 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), availableId2ComputeNode, 0L, null);
             testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
         }
 
         { // test no available worker to select
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of(), 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of(), 0L, null);
 
             Exception e = Assertions.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
             Assertions.assertEquals(
@@ -328,14 +343,14 @@ public class DefaultSharedDataWorkerProviderTest {
     public void testChooseAllComputedNodes() {
         { // empty compute nodes
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.of(), ImmutableMap.of(), 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.of(), ImmutableMap.of(), 0L, null);
             Assertions.assertTrue(workerProvider.selectAllComputeNodes().isEmpty());
         }
 
         { // both compute nodes and backend are treated as compute nodes
             WorkerProvider workerProvider =
                     new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                            ImmutableMap.copyOf(id2AllNodes), 0);
+                            ImmutableMap.copyOf(id2AllNodes), 0L, null);
 
             List<Long> computeNodeIds = workerProvider.selectAllComputeNodes();
             Assertions.assertEquals(id2AllNodes.size(), computeNodeIds.size());
@@ -382,7 +397,7 @@ public class DefaultSharedDataWorkerProviderTest {
         for (long id : id2AllNodes.keySet()) {
             long backupId = -1;
             for (int j = 0; j < 100; ++j) {
-                long selectedId = workerProvider.selectBackupWorker(id);
+                long selectedId = workerProvider.selectBackupWorker(id, Optional.empty());
                 Assertions.assertTrue(selectedId > 0);
                 // cannot choose itself
                 Assertions.assertNotEquals(id, selectedId);
@@ -424,7 +439,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         while (selectCount < availList.size() * 2 + 1) { // make sure the while loop will stop
             Assertions.assertFalse(provider.isDataNodeAvailable(unavailWorkerId));
-            long alterNodeId = provider.selectBackupWorker(unavailWorkerId);
+            long alterNodeId = provider.selectBackupWorker(unavailWorkerId, Optional.empty());
             if (alterNodeId == -1) {
                 break;
             }
@@ -434,7 +449,7 @@ public class DefaultSharedDataWorkerProviderTest {
             Assertions.assertFalse(selectedNodeId.contains(alterNodeId));
 
             for (int j = 0; j < 10; ++j) {
-                long selectAgainId = provider.selectBackupWorker(unavailWorkerId);
+                long selectAgainId = provider.selectBackupWorker(unavailWorkerId, Optional.empty());
                 Assertions.assertEquals(alterNodeId, selectAgainId);
             }
             ++selectCount;
@@ -443,12 +458,81 @@ public class DefaultSharedDataWorkerProviderTest {
             selectedNodeId.add(alterNodeId);
         }
         // all nodes are in block list, no nodes can be selected anymore
-        Assertions.assertEquals(-1, provider.selectBackupWorker(unavailWorkerId));
+        Assertions.assertEquals(-1, provider.selectBackupWorker(unavailWorkerId, Optional.empty()));
         // all the nodes are selected ever
         Assertions.assertEquals(selectedNodeId.size(), availList.size());
 
         // a random workerId that doesn't exist in workerProvider
-        Assertions.assertEquals(-1, provider.selectBackupWorker(15678));
+        Assertions.assertEquals(-1, provider.selectBackupWorker(15678, Optional.empty()));
+    }
+
+    @Test
+    public void testSelectBackupWorkerStableGivenTabletAndResourceIsolationGroups() {
+        id2ComputeNode.clear();
+        id2AllNodes.clear();
+        TabletComputeNodeMapper tabletComputeNodeMapper = new TabletComputeNodeMapper();
+        int totalNumComputeNodes = 100;
+        for (long computeNodeId = 0; computeNodeId < totalNumComputeNodes; computeNodeId++) {
+            ComputeNode cn = new ComputeNode(computeNodeId, "whatever", 100);
+            cn.setAlive(true);
+            if (computeNodeId % 3 == 0) {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group1");
+                cn.setResourceIsolationGroup("group1");
+            } else if (computeNodeId % 3 == 1) {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group2");
+                cn.setResourceIsolationGroup("group2");
+            } else {
+                tabletComputeNodeMapper.addComputeNode(computeNodeId, "group3");
+                cn.setResourceIsolationGroup("group3");
+            }
+            id2ComputeNode.put(computeNodeId, cn);
+            id2AllNodes.put(computeNodeId, cn);
+        }
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        new Expectations(warehouseManager) {
+            {
+                warehouseManager.getAllComputeNodeIds(anyLong);
+                result = Lists.newArrayList(id2AllNodes.keySet());
+                minTimes = 0;
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                ComputeNode node = id2ComputeNode.get(nodeId);
+                return node;
+            }
+
+            @Mock
+            public TabletComputeNodeMapper internalTabletMapper() {
+                return tabletComputeNodeMapper;
+            }
+        };
+
+        Frontend thisFe = new Frontend();
+        thisFe.setResourceIsolationGroup("group2");
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return thisFe;
+            }
+        };
+
+        long cnToBlock = 1;
+        // Block some CN and check that the right backup is chosen for each tablet
+        SimpleScheduler.getHostBlacklist().add(cnToBlock);
+        DefaultSharedDataWorkerProvider provider =
+                factory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, -1,
+                        ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Set<Long> chosenBackups = new HashSet<>();
+        for (long tabletId = 1L; tabletId < 1000; tabletId++) {
+            List<Long> cnsInOrder = tabletComputeNodeMapper.backupComputeNodesForTablet(tabletId, cnToBlock, 2);
+            Assertions.assertEquals((long) cnsInOrder.get(0), provider.selectBackupWorker(cnToBlock, Optional.of(tabletId)));
+            Assertions.assertNotEquals(cnToBlock, (long) cnsInOrder.get(0));
+            chosenBackups.add(cnsInOrder.get(0));
+        }
+        // check that we're not using the same backup for every tablet
+        Assertions.assertTrue(chosenBackups.size() > 1);
     }
 
     private OlapScanNode newOlapScanNode(int id, int numBuckets) {
@@ -560,7 +644,7 @@ public class DefaultSharedDataWorkerProviderTest {
         { // make only one node available, the final assignment will be all on the single available node
             ComputeNode availNode = id2AllNodes.get(availList.get(0));
             WorkerProvider provider1 = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                    ImmutableMap.of(availNode.getId(), availNode), 0);
+                    ImmutableMap.of(availNode.getId(), availNode), 0L, null);
 
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
             NormalBackendSelector selector =
@@ -577,7 +661,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         { // make no node available. Exception throws
             WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                    ImmutableMap.of(), 0);
+                    ImmutableMap.of(), 0L, null);
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
             NormalBackendSelector selector =
                     new NormalBackendSelector(scanNode, scanLocations, assignment, providerNoAvailNode, false);
@@ -634,7 +718,7 @@ public class DefaultSharedDataWorkerProviderTest {
         { // make only one node available, the final assignment will be all on the single available node
             ComputeNode availNode = id2AllNodes.get(availList.get(0));
             WorkerProvider provider1 = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                    ImmutableMap.of(availNode.getId(), availNode), 0);
+                    ImmutableMap.of(availNode.getId(), availNode), 0L, null);
 
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
             ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
@@ -652,7 +736,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         { // make no node available. Exception throws
             WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                    ImmutableMap.of(), 0);
+                    ImmutableMap.of(), 0L, null);
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
             ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
@@ -664,7 +748,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testNextWorkerOverflow() throws NonRecoverableException {
         WorkerProvider provider =
-                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes), 0);
+                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes), 0L, null);
         for (int i = 0; i < 100; i++) {
             Long workerId = provider.selectNextWorker();
             assertThat(workerId).isNotNegative();
@@ -674,5 +758,31 @@ public class DefaultSharedDataWorkerProviderTest {
             Long workerId = provider.selectNextWorker();
             assertThat(workerId).isNotNegative();
         }
+    }
+
+    @Test
+    public void testGetAnyWorker(@Mocked SystemInfoService systemInfoService) {
+        long nodeId1 = 1L;
+        long nodeId2 = 2L;
+        ComputeNode availNode = id2AllNodes.get(nodeId1);
+        WorkerProvider provider = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
+                ImmutableMap.of(availNode.getId(), availNode), 0L, null);
+
+        assertThat(provider.getWorkerById(nodeId1)).isNotNull();
+        Assertions.assertNull(provider.getWorkerById(nodeId2));
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(nodeId2);
+                times = 1;
+                result = new ComputeNode(nodeId2, "whatever", 100);
+            }
+        };
+
+        provider.setAllowGetAnyWorker(true);
+        Assertions.assertNotNull(provider.getWorkerById(nodeId2));
+
+        provider.setAllowGetAnyWorker(false);
+        Assertions.assertNull(provider.getWorkerById(nodeId2));
     }
 }

@@ -115,10 +115,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                                           long groupId, List<Long> matchShardIds, Map<String, String> properties,
                                           long warehouseId)
             throws DdlException {
-        WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties,
-                        warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
-                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        // Try warehouse's worker group first, then fall back to FE's worker group
+        StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
+                .orElseGet(() -> agent != null ? agent.getCurrentFeWorkerGroupId() : StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        return agent.createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties, workerGroupId);
     }
 }
