@@ -76,6 +76,14 @@ void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
 Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     // Does not support range evaluatation.
     DCHECK(from == 0);
+    
+    if (_inverted_index_bitmap.has_value() && _evaluate_rowids != nullptr) {
+        roaring::BulkContext ctx;
+        for (size_t i = 0; i < _evaluate_rowids->size(); i++) { // fallback evaluate
+            selection[i] = _inverted_index_bitmap->containsBulk(ctx, (*_evaluate_rowids)[i]);
+        }
+        return Status::OK();
+    }
 
     Chunk chunk;
     // `column` is owned by storage layer
@@ -150,6 +158,17 @@ Status ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint
     }
 
     return Status::OK();
+}
+
+bool ColumnExprPredicate::is_index_match_expr() const {
+    if (_expr_ctxs.empty()) {
+        return false;
+    }
+    Expr* root = _expr_ctxs[0]->root();
+    if (root->node_type() == TExprNodeType::COMPOUND_PRED && root->op() == TExprOpcode::COMPOUND_NOT) {
+        root = root->get_child(0);
+    }
+    return root->node_type() == TExprNodeType::MATCH_EXPR;
 }
 
 bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
@@ -371,6 +390,18 @@ Status ColumnTruePredicate::convert_to(const ColumnPredicate** output, const Typ
 
 std::string ColumnTruePredicate::debug_string() const {
     return "(ColumnTruePredicate)";
+}
+
+Status ColumnExprPredicate::init_inverted_index_fallback(InvertedIndexIterator* iterator,
+                                                          const roaring::Roaring* scan_bitmap) const {
+    const std::string& column_name = _slot_desc->col_name();
+    _inverted_index_bitmap.emplace(*scan_bitmap); // intentional copy (don't use move)
+    Status st = seek_inverted_index(column_name, iterator, &(*_inverted_index_bitmap));
+    if (!st.ok()) {
+        _inverted_index_bitmap.reset();
+        return st;
+    }
+    return st;
 }
 
 } // namespace starrocks
