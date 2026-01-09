@@ -2304,7 +2304,6 @@ Status SegmentIterator::_apply_inverted_index() {
     RETURN_IF_ERROR(_init_inverted_index_iterators());
     RETURN_IF(!_has_inverted_index, Status::OK());
     SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
-    roaring::Roaring row_bitmap = range2roaring(_scan_range);
 
     // For OR queries: initialize fallback predicates for MATCH expressions
     const bool gin_fallback_enabled = _opts.pred_tree.has_or_node();
@@ -2320,10 +2319,10 @@ Status SegmentIterator::_apply_inverted_index() {
                     continue;
                 }
                 const auto* expr_pred = static_cast<const ColumnExprPredicate*>(pred);
-                if (!expr_pred->is_index_match_expr()) {
+                if (!expr_pred->is_match_expr() && !expr_pred->is_negated_expr()) {
                     continue;
                 }
-                Status st = expr_pred->init_inverted_index_fallback(inverted_iter, &row_bitmap);
+                Status st = expr_pred->init_inverted_index_fallback(inverted_iter);
                 if (st.ok()) {
                     _inverted_index_fallback_predicates.push_back(expr_pred);
                 }
@@ -2331,6 +2330,7 @@ Status SegmentIterator::_apply_inverted_index() {
         }
     }
 
+    roaring::Roaring row_bitmap = range2roaring(_scan_range);
     size_t input_rows = row_bitmap.cardinality();
     std::unordered_set<const ColumnPredicate*> erased_preds;
     std::unordered_set<ColumnId> erased_pred_col_ids;

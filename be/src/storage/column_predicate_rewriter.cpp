@@ -413,7 +413,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     const auto& inverted_index_fallback = pred->get_inverted_index_fallback();
     if (inverted_index_fallback.has_value()) {
         if (inverted_index_fallback->isEmpty()) {
-            return RewriteStatus::ALWAYS_FALSE;
+            return pred->is_negated_expr() ? RewriteStatus::ALWAYS_TRUE : RewriteStatus::ALWAYS_FALSE;
         }
         return RewriteStatus::UNCHANGED;
     }

@@ -78,9 +78,12 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     DCHECK(from == 0);
     
     if (_inverted_index_bitmap.has_value() && _evaluate_rowids != nullptr) {
+        const bool is_negated = is_negated_expr();
+        const uint8_t hit_value = is_negated ? 0 : 1;
+        const uint8_t miss_value = is_negated ? 1 : 0;
         roaring::BulkContext ctx;
         for (size_t i = 0; i < _evaluate_rowids->size(); i++) { // fallback evaluate
-            selection[i] = _inverted_index_bitmap->containsBulk(ctx, (*_evaluate_rowids)[i]);
+            selection[i] = _inverted_index_bitmap->containsBulk(ctx, (*_evaluate_rowids)[i]) ? hit_value : miss_value;
         }
         return Status::OK();
     }
@@ -160,15 +163,20 @@ Status ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint
     return Status::OK();
 }
 
-bool ColumnExprPredicate::is_index_match_expr() const {
+bool ColumnExprPredicate::is_match_expr() const {
     if (_expr_ctxs.empty()) {
         return false;
     }
     Expr* root = _expr_ctxs[0]->root();
-    if (root->node_type() == TExprNodeType::COMPOUND_PRED && root->op() == TExprOpcode::COMPOUND_NOT) {
-        root = root->get_child(0);
-    }
     return root->node_type() == TExprNodeType::MATCH_EXPR;
+}
+
+bool ColumnExprPredicate::is_negated_expr() const {
+    if (_expr_ctxs.empty()) {
+        return false;
+    }
+    Expr* root = _expr_ctxs[0]->root();
+    return root->node_type() == TExprNodeType::COMPOUND_PRED && root->op() == TExprOpcode::COMPOUND_NOT;
 }
 
 bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
@@ -302,8 +310,8 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
 
     return Status::OK();
 }
-Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                roaring::Roaring* row_bitmap) const {
+StatusOr<std::optional<roaring::Roaring>> ColumnExprPredicate::read_inverted_index(const std::string& column_name,
+                                                                                    InvertedIndexIterator* iterator) const {
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
     // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
@@ -350,8 +358,7 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     Slice padded_value(literal_col->get(0).get_slice());
     // MATCH a empty string should always return empty set.
     if (padded_value.empty()) {
-        *row_bitmap -= *row_bitmap;
-        return Status::OK();
+        return std::nullopt;
     }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
@@ -362,10 +369,26 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     }
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    return roaring;
+}
+
+Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                                roaring::Roaring* row_bitmap) const {
+    bool with_not = _expr_ctxs[0]->root()->node_type() == TExprNodeType::COMPOUND_PRED &&
+                    _expr_ctxs[0]->root()->op() == TExprOpcode::COMPOUND_NOT;
+
+    ASSIGN_OR_RETURN(auto roaring_opt, read_inverted_index(column_name, iterator));
+
+    // nullopt means empty match string - clear bitmap
+    if (!roaring_opt.has_value()) {
+        *row_bitmap -= *row_bitmap;
+        return Status::OK();
+    }
+
     if (with_not) {
-        *row_bitmap -= roaring;
+        *row_bitmap -= roaring_opt.value();
     } else {
-        *row_bitmap &= roaring;
+        *row_bitmap &= roaring_opt.value();
     }
     return Status::OK();
 }
@@ -392,16 +415,16 @@ std::string ColumnTruePredicate::debug_string() const {
     return "(ColumnTruePredicate)";
 }
 
-Status ColumnExprPredicate::init_inverted_index_fallback(InvertedIndexIterator* iterator,
-                                                          const roaring::Roaring* scan_bitmap) const {
+Status ColumnExprPredicate::init_inverted_index_fallback(InvertedIndexIterator* iterator) const {
     const std::string& column_name = _slot_desc->col_name();
-    _inverted_index_bitmap.emplace(*scan_bitmap); // intentional copy (don't use move)
-    Status st = seek_inverted_index(column_name, iterator, &(*_inverted_index_bitmap));
-    if (!st.ok()) {
-        _inverted_index_bitmap.reset();
-        return st;
+    ASSIGN_OR_RETURN(auto roaring_opt, read_inverted_index(column_name, iterator));
+    if (roaring_opt.has_value()) {
+        _inverted_index_bitmap.emplace(std::move(roaring_opt.value()));
+    } else {
+        // nullopt means empty match string - store empty roaring
+        _inverted_index_bitmap.emplace(roaring::Roaring());
     }
-    return st;
+    return Status::OK();
 }
 
 } // namespace starrocks
