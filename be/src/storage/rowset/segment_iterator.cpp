@@ -2319,7 +2319,7 @@ Status SegmentIterator::_apply_inverted_index() {
                     continue;
                 }
                 const auto* expr_pred = static_cast<const ColumnExprPredicate*>(pred);
-                if (!expr_pred->is_match_expr() && !expr_pred->is_negated_expr()) {
+                if (!expr_pred->is_match_expr()) {
                     continue;
                 }
                 Status st = expr_pred->init_inverted_index_fallback(inverted_iter);

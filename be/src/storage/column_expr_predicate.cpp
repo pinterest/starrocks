@@ -168,6 +168,9 @@ bool ColumnExprPredicate::is_match_expr() const {
         return false;
     }
     Expr* root = _expr_ctxs[0]->root();
+    if (root->node_type() == TExprNodeType::COMPOUND_PRED && root->op() == TExprOpcode::COMPOUND_NOT) {
+        root = root->get_child(0);
+    }
     return root->node_type() == TExprNodeType::MATCH_EXPR;
 }
 
