@@ -37,6 +37,8 @@
 DECLARE_int32(cachemgr_threadpool_size);
 // cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
 DECLARE_int32(cachemgr_check_interval);
+// directory listing cache TTL (time to live) in seconds for cache entries
+DECLARE_int32(list_dir_cache_ttl_seconds);
 // cache backend cache evictor interval (in seconds)
 DECLARE_int32(cachemgr_evict_interval);
 // cache will start evict cache files if free space belows this value(percentage)
@@ -364,6 +366,8 @@ void init_staros_worker() {
             "fs_buffer_prefetch_threadpool_size", std::to_string(config::starlet_fs_read_prefetch_threadpool_size));
     staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval",
                                                           std::to_string(config::starlet_cache_evict_interval));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue("list_dir_cache_ttl_seconds",
+                                                          std::to_string(config::starlet_dir_listing_cache_ttl_sec));
 
     FLAGS_cachemgr_check_interval = config::starlet_cache_check_interval;
     FLAGS_cachemgr_dir_allocate_policy = config::starlet_cache_dir_allocate_policy;
@@ -418,6 +422,12 @@ void update_staros_starcache() {
     if (fslib::FLAGS_star_cache_mem_size_bytes != config::starlet_star_cache_mem_size_bytes) {
         fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
         (void)fslib::star_cache_update_memory_quota_bytes(fslib::FLAGS_star_cache_mem_size_bytes);
+    }
+
+    if (FLAGS_list_dir_cache_ttl_seconds != config::starlet_dir_listing_cache_ttl_sec) {
+        staros::starlet::common::GFlagsUtils::UpdateFlagValue("list_dir_cache_ttl_seconds",
+                                                              std::to_string(config::starlet_dir_listing_cache_ttl_sec));
+        FLAGS_list_dir_cache_ttl_seconds = config::starlet_dir_listing_cache_ttl_sec;
     }
 }
 
