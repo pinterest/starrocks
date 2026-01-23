@@ -33,6 +33,7 @@
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
+#include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
@@ -66,6 +67,7 @@
 #include "storage/update_manager.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
+#include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -517,6 +519,9 @@ private:
 
     // Vector index context - only created when needed
     std::unique_ptr<VectorIndexContext> _vector_index_ctx;
+
+    // Fallback predicates for inverted index + match OR
+    std::vector<const ColumnExprPredicate*> _inverted_index_fallback_predicates;
 
     // Inverted index context - only created when needed
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
@@ -1937,8 +1942,9 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
 
     Status st;
     std::vector<uint32_t> rowids;
-    std::vector<uint32_t>* p_rowids =
-            (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) ? &rowids : nullptr;
+    const bool need_rowids =
+            (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) || !_inverted_index_fallback_predicates.empty();
+    std::vector<uint32_t>* p_rowids = need_rowids ? &rowids : nullptr;
     do {
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
@@ -2496,6 +2502,14 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
     size_t chunk_size = chunk->num_rows();
     if (chunk_size > 0 && !_expr_pred_tree.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
+        for (auto* pred : _inverted_index_fallback_predicates) {
+            pred->set_evaluate_rowids(rowid);
+        }
+        SCOPED_CLEANUP({
+            for (auto* pred : _inverted_index_fallback_predicates) {
+                pred->set_evaluate_rowids(nullptr);
+            }
+        });
         RETURN_IF_ERROR(_expr_pred_tree.evaluate(chunk, _selection.data(), 0, chunk_size));
 
         size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
@@ -3262,7 +3276,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
     for (auto& field : _schema.fields()) {
         cid_2_ucid[field->id()] = field->uid();
     }
-    for (const auto& pair : _opts.pred_tree.get_immediate_column_predicate_map()) {
+    for (const auto& pair : _opts.pred_tree.get_all_column_predicate_map()) {
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
@@ -3292,6 +3306,32 @@ Status SegmentIterator::_apply_inverted_index() {
         return Status::OK();
     }
     SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
+
+    // For OR queries: initialize fallback predicates for MATCH expressions
+    _inverted_index_fallback_predicates.clear();
+    const bool gin_fallback_enabled = _opts.pred_tree.has_or_predicate();
+    if (gin_fallback_enabled) {
+        _inverted_index_fallback_predicates.reserve(_opts.pred_tree.size());
+        for (const auto& [cid, pred_list] : _opts.pred_tree.get_non_immediate_column_predicate_map()) {
+            InvertedIndexIterator* inverted_iter = _inverted_index_ctx->inverted_index_iterators[cid];
+            if (inverted_iter == nullptr) {
+                continue;
+            }
+            for (const ColumnPredicate* pred : pred_list) {
+                if (pred->type() != PredicateType::kExpr) {
+                    continue;
+                }
+                const auto* expr_pred = static_cast<const ColumnExprPredicate*>(pred);
+                if (!expr_pred->is_match_expr()) {
+                    continue;
+                }
+                Status st = expr_pred->init_inverted_index_fallback(inverted_iter);
+                if (st.ok()) {
+                    _inverted_index_fallback_predicates.push_back(expr_pred);
+                }
+            }
+        }
+    }
 
     roaring::Roaring row_bitmap = range2roaring(_scan_range);
     size_t input_rows = row_bitmap.cardinality();
