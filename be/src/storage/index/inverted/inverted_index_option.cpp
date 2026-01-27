@@ -42,6 +42,8 @@ std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_
         return INVERTED_INDEX_PARSER_ENGLISH;
     case InvertedIndexParserType::PARSER_CHINESE:
         return INVERTED_INDEX_PARSER_CHINESE;
+    case InvertedIndexParserType::PARSER_CSV:
+        return INVERTED_INDEX_PARSER_CSV;
     default:
         return INVERTED_INDEX_PARSER_UNKNOWN;
     }
@@ -57,6 +59,8 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
         return InvertedIndexParserType::PARSER_ENGLISH;
     } else if (lower_value == INVERTED_INDEX_PARSER_CHINESE) {
         return InvertedIndexParserType::PARSER_CHINESE;
+    } else if (lower_value == INVERTED_INDEX_PARSER_CSV) {
+        return InvertedIndexParserType::PARSER_CSV;
     }
 
     return InvertedIndexParserType::PARSER_UNKNOWN;
