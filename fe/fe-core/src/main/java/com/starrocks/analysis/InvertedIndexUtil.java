@@ -61,6 +61,11 @@ public class InvertedIndexUtil {
      */
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
 
+    /**
+     * Parse value with the CSV parser, which splits text into tokens using comma as delimiter
+     */
+    public static String INVERTED_INDEX_PARSER_CSV = "csv";
+
     public static String getInvertedIndexParser(Map<String, String> properties) {
         String parser = properties == null ? null : properties.get(INVERTED_INDEX_PARSER_KEY);
         // default is "none" if not set
@@ -120,7 +125,8 @@ public class InvertedIndexUtil {
             if (!(parser.equals(INVERTED_INDEX_PARSER_NONE)
                     || parser.equals(INVERTED_INDEX_PARSER_STANDARD)
                     || parser.equals(INVERTED_INDEX_PARSER_ENGLISH)
-                    || parser.equals(INVERTED_INDEX_PARSER_CHINESE))) {
+                    || parser.equals(INVERTED_INDEX_PARSER_CHINESE)
+                    || parser.equals(INVERTED_INDEX_PARSER_CSV))) {
                 throw new SemanticException("INVERTED index parser: " + parser
                         + " is invalid for column: " + indexColName + " of type " + colType);
             }

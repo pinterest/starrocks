@@ -969,3 +969,37 @@ ALTER TABLE t_vertical_compaction BASE COMPACT;
 SELECT sleep(10);
 
 DROP TABLE t_vertical_compaction;
+
+-- name: test_gin_index_csv
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+CREATE TABLE `t_gin_index_csv` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `csv_column` varchar(255) NULL COMMENT "",
+  INDEX gin_csv (`csv_column`) USING GIN ("parser" = "csv") COMMENT 'csv index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_gin_index_csv VALUES
+(1, "apple"),
+(2, "banana,cherry"),
+(3, "orange with ""quotes"""),
+(4, "\"token,with,comma\"");
+
+SELECT * FROM t_gin_index_csv WHERE csv_column match "apple";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "banana";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "cherry";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "orange";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "quotes";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "token,with,comma";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "token";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "with";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "comma";
+
+DROP TABLE t_gin_index_csv;
