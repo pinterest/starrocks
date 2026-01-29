@@ -30,9 +30,10 @@ constexpr int32_t READ_BUFFER_SIZE = 4096;
 // CSV Tokenizer that splits text on commas using RFC 4180 CSV parsing
 class CsvTokenizer : public lucene::analysis::Tokenizer {
 private:
-    std::vector<std::wstring> _tokens;
-    std::vector<std::wstring>::const_iterator _current_token;
+    std::vector<std::string> _tokens;  // UTF-8 tokens (converted to wstring on-demand)
+    std::vector<std::string>::const_iterator _current_token;
     int32_t _current_offset;
+    std::wstring _current_token_wstr;
 
     void initialize(lucene::util::Reader* reader);
 
@@ -57,15 +58,8 @@ void CsvTokenizer::initialize(lucene::util::Reader* reader) {
     std::string text = boost::locale::conv::utf_to_utf<char>(wide_text);
 
     // Parse CSV with proper escaping (RFC 4180: quoted fields and "" for quotes)
-    std::vector<std::string> temp_tokens;
-    SplitCSVLineWithDelimiterForStrings(text, ',', &temp_tokens);
-
-    // Pre-convert all tokens to wide strings once (more efficient than converting on each next() call)
     _tokens.clear();
-    _tokens.reserve(temp_tokens.size());
-    for (const auto& token : temp_tokens) {
-        _tokens.emplace_back(boost::locale::conv::utf_to_utf<wchar_t>(token));
-    }
+    SplitCSVLineWithDelimiterForStrings(text, ',', &_tokens);
 
     _current_token = _tokens.begin();
     _current_offset = 0;
@@ -80,10 +74,11 @@ lucene::analysis::Token* CsvTokenizer::next(lucene::analysis::Token* token) {
         return nullptr;
     }
 
-    // Token is already a wide string - no conversion needed
-    const std::wstring& token_str = *_current_token++;
-    token->set(token_str.c_str(), _current_offset, _current_offset + token_str.length());
-    _current_offset += token_str.length() + 1; // +1 for the comma separator
+    // Convert UTF-8 token to wide string on-demand (lazy conversion)
+    const std::string& token_utf8 = *_current_token++;
+    _current_token_wstr = boost::locale::conv::utf_to_utf<wchar_t>(token_utf8);
+    token->set(_current_token_wstr.c_str(), _current_offset, _current_offset + _current_token_wstr.length());
+    _current_offset += _current_token_wstr.length() + 1; // +1 for the comma separator
     return token;
 }
 
