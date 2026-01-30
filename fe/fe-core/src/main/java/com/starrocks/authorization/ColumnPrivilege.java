@@ -134,20 +134,32 @@ public class ColumnPrivilege {
                 // For Views and MVs, use object-level privileges even with external access controllers.
                 // Column-level checks only apply to regular tables.
                 if (table instanceof View) {
-                    try {
-                        Authorizer.checkViewAction(context, tableName, PrivilegeType.SELECT);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
+                    // For connector views (external catalog views), treat as table (mirrors native path)
+                    if (table.isConnectorView()) {
+                        try {
+                            Authorizer.checkTableAction(context, tableName, PrivilegeType.SELECT);
+                        } catch (AccessDeniedException e) {
+                            AccessDeniedException.reportAccessDenied(
+                                    tableName.getCatalog(),
+                                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+                        }
+                    } else {
+                        try {
+                            Authorizer.checkViewAction(context, tableName, PrivilegeType.SELECT);
+                        } catch (AccessDeniedException e) {
+                            AccessDeniedException.reportAccessDenied(
+                                    tableName.getCatalog(),
+                                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
+                        }
                     }
                 } else if (table.isMaterializedView()) {
                     try {
                         Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                tableName.getCatalog(),
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                 PrivilegeType.SELECT.name(), ObjectType.MATERIALIZED_VIEW.name(), tableName.getTbl());
                     }
