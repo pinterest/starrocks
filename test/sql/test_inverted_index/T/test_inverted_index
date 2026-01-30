@@ -969,3 +969,81 @@ ALTER TABLE t_vertical_compaction BASE COMPACT;
 SELECT sleep(10);
 
 DROP TABLE t_vertical_compaction;
+
+-- name: test_gin_index_csv
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+CREATE TABLE `t_gin_index_csv` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `csv_column` varchar(255) NULL COMMENT "",
+  INDEX gin_csv (`csv_column`) USING GIN ("parser" = "csv") COMMENT 'csv index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_gin_index_csv VALUES
+(1, "apple"),
+(2, "banana,cherry"),
+(3, "token with ""quotes"",raspberry"),
+(4, "\"token,with,comma\""),
+(5, "");
+
+SELECT * FROM t_gin_index_csv WHERE csv_column match "apple";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "banana";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "cherry";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "raspberry";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "token with ""quotes""";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "quotes";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "token,with,comma";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "token";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "with";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "comma";
+SELECT * FROM t_gin_index_csv WHERE csv_column match "";
+
+DROP TABLE t_gin_index_csv;
+
+-- name: test_gin_index_csv_malformed
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+CREATE TABLE `t_gin_csv_malformed` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `csv_column` varchar(255) NULL COMMENT "",
+  INDEX gin_csv (`csv_column`) USING GIN ("parser" = "csv") COMMENT 'csv index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+-- Test malformed CSV inputs - should not crash, best-effort parsing
+INSERT INTO t_gin_csv_malformed VALUES
+(1, "normal,values,here"),
+(2, "unmatched\"quote"),
+(3, "missing\"closing"),
+(4, "\"partial\"quote\"mix"),
+(5, "trailing,comma,"),
+(6, ",,multiple,empty,,"),
+(7, "spaces , around , commas"),
+(8, "\"quoted,with,commas\""),
+(9, "");
+
+-- These queries should execute without crashing
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "normal";
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "values";
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "unmatched";
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "quote";
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "trailing";
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "comma";
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "spaces";
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "quoted,with,commas";
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "";
+
+DROP TABLE t_gin_csv_malformed;

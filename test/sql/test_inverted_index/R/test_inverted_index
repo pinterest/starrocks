@@ -1837,3 +1837,139 @@ SELECT sleep(10);
 DROP TABLE t_vertical_compaction;
 -- result:
 -- !result
+-- name: test_gin_index_csv
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_gin_index_csv` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `csv_column` varchar(255) NULL COMMENT "",
+  INDEX gin_csv (`csv_column`) USING GIN ("parser" = "csv") COMMENT 'csv index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_csv VALUES
+(1, "apple"),
+(2, "banana,cherry"),
+(3, "token with ""quotes"",raspberry"),
+(4, "\"token,with,comma\""),
+(5, "");
+-- result:
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "apple";
+-- result:
+1	apple
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "banana";
+-- result:
+2	banana,cherry
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "cherry";
+-- result:
+2	banana,cherry
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "raspberry";
+-- result:
+3	token with "quotes",raspberry
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "token with ""quotes""";
+-- result:
+3	token with "quotes",raspberry
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "quotes";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "token,with,comma";
+-- result:
+4	"token,with,comma"
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "token";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "with";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "comma";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_csv WHERE csv_column match "";
+-- result:
+-- !result
+DROP TABLE t_gin_index_csv;
+-- result:
+-- !result
+-- name: test_gin_index_csv_malformed
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_gin_csv_malformed` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `csv_column` varchar(255) NULL COMMENT "",
+  INDEX gin_csv (`csv_column`) USING GIN ("parser" = "csv") COMMENT 'csv index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_csv_malformed VALUES
+(1, "normal,values,here"),
+(2, "unmatched\"quote"),
+(3, "missing\"closing"),
+(4, "\"partial\"quote\"mix"),
+(5, "trailing,comma,"),
+(6, ",,multiple,empty,,"),
+(7, "spaces , around , commas"),
+(8, "\"quoted,with,commas\""),
+(9, "");
+-- result:
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "normal";
+-- result:
+1	normal,values,here
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "values";
+-- result:
+1	normal,values,here
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "unmatched";
+-- result:
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "quote";
+-- result:
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "trailing";
+-- result:
+5	trailing,comma,
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "comma";
+-- result:
+5	trailing,comma,
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "spaces";
+-- result:
+7	spaces , around , commas
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "quoted,with,commas";
+-- result:
+8	"quoted,with,commas"
+-- !result
+SELECT * FROM t_gin_csv_malformed WHERE csv_column match "";
+-- result:
+-- !result
+DROP TABLE t_gin_csv_malformed;
+-- result:
+-- !result
