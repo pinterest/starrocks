@@ -131,16 +131,38 @@ public class ColumnPrivilege {
             }
 
             if (tableUsedExternalAccessController.contains(tableName)) {
-                Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
-                for (String column : columns) {
+                // For Views and MVs, use object-level privileges even with external access controllers.
+                // Column-level checks only apply to regular tables.
+                if (table instanceof View) {
                     try {
-                        Authorizer.checkColumnAction(context,
-                                tableName, column, PrivilegeType.SELECT);
+                        Authorizer.checkViewAction(context, tableName, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
-                                tableName.getCatalog(),
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(), column);
+                                PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
+                    }
+                } else if (table.isMaterializedView()) {
+                    try {
+                        Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.SELECT);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.MATERIALIZED_VIEW.name(), tableName.getTbl());
+                    }
+                } else {
+                    Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
+                    for (String column : columns) {
+                        try {
+                            Authorizer.checkColumnAction(context,
+                                    tableName, column, PrivilegeType.SELECT);
+                        } catch (AccessDeniedException e) {
+                            AccessDeniedException.reportAccessDenied(
+                                    tableName.getCatalog(),
+                                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(), column);
+                        }
                     }
                 }
             } else {
