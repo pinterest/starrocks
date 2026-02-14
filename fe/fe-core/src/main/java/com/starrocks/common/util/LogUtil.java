@@ -25,14 +25,54 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import org.apache.logging.log4j.Logger;
 
 import java.lang.management.ThreadInfo;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class LogUtil {
+    // Rate limiting utility - tracks last log time per key to prevent log spam
+    private static final ConcurrentHashMap<String, Long> LAST_LOG_TIME_MAP = new ConcurrentHashMap<>();
+    private static final long DEFAULT_LOG_EVERY_MS = 3000L; // 3 seconds, same as slow_lock_log_every_ms
+    
+    /**
+     * Rate-limited logging utility that limits log frequency per key.
+     * Uses the same 3-second interval as other rate-limited logs in the codebase.
+     * 
+     * @param logger The logger to use
+     * @param key Unique key for rate limiting (e.g., worker ID, error type)
+     * @param message Log message
+     * @param args Optional message arguments for formatting
+     * @return true if the message was logged, false if it was rate-limited
+     */
+    public static boolean logWithRateLimit(Logger logger, String key, String message, Object... args) {
+        return logWithRateLimit(logger, key, DEFAULT_LOG_EVERY_MS, message, args);
+    }
+    
+    /**
+     * Rate-limited logging utility with custom interval.
+     * 
+     * @param logger The logger to use
+     * @param key Unique key for rate limiting
+     * @param intervalMs Minimum interval between logs for this key in milliseconds
+     * @param message Log message 
+     * @param args Optional message arguments for formatting
+     * @return true if the message was logged, false if it was rate-limited
+     */
+    public static boolean logWithRateLimit(Logger logger, String key, long intervalMs, String message, Object... args) {
+        long currentTimeMs = System.currentTimeMillis();
+        Long lastLogTime = LAST_LOG_TIME_MAP.getOrDefault(key, 0L);
+        if (currentTimeMs > lastLogTime + intervalMs) {
+            LAST_LOG_TIME_MAP.put(key, currentTimeMs);
+            logger.warn(message, args);
+            return true;
+        }
+        return false;
+    }
     public static void logConnectionInfoToAuditLogAndQueryQueue(ConnectContext ctx, MysqlAuthPacket authPacket) {
         boolean enableConnectionLog = false;
         if (Config.audit_log_modules != null) {

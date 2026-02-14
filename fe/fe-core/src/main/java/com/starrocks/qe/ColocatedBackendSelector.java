@@ -19,6 +19,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -126,6 +127,11 @@ public class ColocatedBackendSelector implements BackendSelector {
         Optional<Long> optTabletId = getOptionalTabletId(seqLocation.scan_range);
         for (TScanRangeLocation location : seqLocation.locations) {
             if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
+                // Rate-limited warning for unavailable workers (max once every 3 seconds per worker)
+                long workerId = location.getBackend_id();
+                LogUtil.logWithRateLimit(LOG, "unavailable_worker_" + workerId,
+                        "Worker {} is unavailable for colocated scan range selection, selecting backup worker", workerId);
+                
                 if (workerProvider.allowUsingBackupNode()) {
                     long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id(), optTabletId);
                     LOG.debug("Select a backup node:{} for node:{}", backupNodeId, location.getBackend_id());
