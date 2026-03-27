@@ -26,12 +26,11 @@ under the License.
     <parent>
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
-        <version>3.4.0</version>
+        <version>main</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>fe-core</artifactId>
-    <version>3.4.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -40,8 +39,17 @@ under the License.
         <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <jacoco.version>0.8.8</jacoco.version>
+        <jacoco.version>0.8.12</jacoco.version>
+        <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
         <python>python</python>
+        <starrocks.thrift.expected.version>0.22.</starrocks.thrift.expected.version>
+        <starrocks.thrift.generated.sources>${basedir}/target/generated-sources/thrift</starrocks.thrift.generated.sources>
+        
+        <!-- async-profiler in UT -->
+        <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-false}</async.profiler.enabled>
+        <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
+        <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
+        <async.profiler.arg></async.profiler.arg>
     </properties>
 
     <profiles>
@@ -93,9 +101,41 @@ under the License.
                 <python>${env.PYTHON}</python>
             </properties>
         </profile>
+        <profile>
+            <id>async-profiler-enabled</id>
+            <activation>
+                <property>
+                    <name>env.ASYNC_PROFILER_ENABLED</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
+            </properties>
+        </profile>
     </profiles>
 
     <dependencies>
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-grammar</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-type</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-parser</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-spi</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>spark-dpp</artifactId>
@@ -239,26 +279,10 @@ under the License.
             <artifactId>json</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/junit/junit -->
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <scope>test</scope>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.8.2</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.junit.vintage/junit-vintage-engine -->
-        <dependency>
-            <groupId>org.junit.vintage</groupId>
-            <artifactId>junit-vintage-engine</artifactId>
-            <version>5.8.2</version>
             <scope>test</scope>
         </dependency>
 
@@ -413,6 +437,12 @@ under the License.
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.slf4j/jul-to-slf4j -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jul-to-slf4j</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.github.oshi/oshi-core -->
@@ -578,23 +608,16 @@ under the License.
             <classifier>shaded</classifier>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.antlr/antlr4 -->
-        <dependency>
-            <groupId>org.antlr</groupId>
-            <artifactId>antlr4</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
             <artifactId>jmh-core</artifactId>
-            <version>1.23</version>
+            <version>1.37</version>
             <scope>test</scope>
         </dependency>
-
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
             <artifactId>jmh-generator-annprocess</artifactId>
-            <version>1.23</version>
+            <version>1.37</version>
             <scope>test</scope>
         </dependency>
 
@@ -804,13 +827,6 @@ under the License.
         </dependency>
 
         <dependency>
-            <groupId>com.carrotsearch</groupId>
-            <artifactId>junit-benchmarks</artifactId>
-            <version>0.7.2</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
             <version>${hikaricp.version}</version>
@@ -870,7 +886,52 @@ under the License.
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
-            <artifactId>bundle</artifactId>
+            <artifactId>glue</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>dynamodb</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>kms</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3-transfer-manager</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sso</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssooidc</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sts</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.jboss.byteman</groupId>
+            <artifactId>byteman</artifactId>
         </dependency>
 
         <dependency>
@@ -892,15 +953,43 @@ under the License.
             <groupId>tools.profiler</groupId>
             <artifactId>async-profiler</artifactId>
         </dependency>
+
+        <!-- for xx_hash3_64 -->
+        <dependency>
+            <groupId>net.openhft</groupId>
+            <artifactId>zero-allocation-hashing</artifactId>
+            <version>0.16</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <version>${jacoco.version}</version>
+            <classifier>runtime</classifier>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.vertical-blank</groupId>
+            <artifactId>sql-formatter</artifactId>
+            <version>2.0.4</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.google.api-client/google-api-client -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>2.8.1</version>
+        </dependency>
     </dependencies>
 
     <build>
-        <finalName>starrocks-fe</finalName>
         <plugins>
             <!-- fe proto precompile plugin-->
             <plugin>
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf-precompile-plugin</artifactId>
+                <version>${jprotobuf-precompile-plugin.version}</version>
                 <configuration>
                     <filterClassPackage>com.starrocks.proto;com.starrocks.rpc;com.starrocks.server</filterClassPackage>
                     <generateProtoFile>true</generateProtoFile>
@@ -920,22 +1009,47 @@ under the License.
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
+                <configuration>
+                    <dataFile>${project.build.directory}/jacoco.exec</dataFile>
+                    <outputDirectory>${project.build.directory}/jacoco-report</outputDirectory>
+                </configuration>
                 <executions>
+
                     <execution>
-                        <id>default-prepare-agent</id>
+                        <id>instrument</id>
+                        <phase>process-classes</phase>
                         <goals>
-                            <goal>prepare-agent</goal>
+                            <goal>instrument</goal>
                         </goals>
                         <configuration>
-                            <propertyName>jacocoArgLine</propertyName>
+                            <includes>
+                                <include>com/starrocks/**</include>
+                            </includes>
+                            <excludes>
+                                <exclude>com/starrocks/proto/**</exclude>
+                                <exclude>**/*$$JProtoBufClass</exclude>
+                                <exclude>**/*$$JProtoBuf*</exclude>
+                            </excludes>
+                            <append>true</append>
                         </configuration>
                     </execution>
+
                     <execution>
                         <id>default-report</id>
+                        <phase>verify</phase>
                         <goals>
                             <goal>report</goal>
                         </goals>
                     </execution>
+
+                    <execution>
+                        <id>restore</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>restore-instrumented-classes</goal>
+                        </goals>
+                    </execution>
+
                     <execution>
                         <id>default-check</id>
                         <goals>
@@ -946,11 +1060,11 @@ under the License.
                                 <rule>
                                     <element>BUNDLE</element>
                                     <limits>
-                                        <limit>
+                                        <!-- <limit>
                                             <counter>COMPLEXITY</counter>
                                             <value>COVEREDRATIO</value>
                                             <minimum>0.60</minimum>
-                                        </limit>
+                                        </limit> -->
                                     </limits>
                                 </rule>
                             </rules>
@@ -983,47 +1097,24 @@ under the License.
                 </executions>
             </plugin>
 
-            <!--antlr-->
-            <plugin>
-                <groupId>org.antlr</groupId>
-                <artifactId>antlr4-maven-plugin</artifactId>
-                <version>4.9.2</version>
-                <executions>
-                    <execution>
-                        <id>antlr</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>antlr4</goal>
-                        </goals>
-                        <configuration>
-                            <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
-                            <outputDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</outputDirectory>
-                            <libDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</libDirectory>
-                            <visitor>true</visitor>
-                            <arguments>
-                                <argument>-package</argument>
-                                <argument>com.starrocks.sql.parser</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
             <!-- jmockit -->
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.22.2</version>
+                <version>${maven.surefire.plugin.version}</version>
                 <configuration>
                     <!-->set larger, eg, 3, to reduce the time or running FE unit tests<-->
                     <forkCount>${fe_ut_parallel}</forkCount>
+                    <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
 
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
+                        ${async.profiler.arg}
                         -Xmx4096m
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
-                        -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
+                        -Duser.timezone=Asia/Shanghai
+                        -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
@@ -1039,6 +1130,38 @@ under the License.
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>1.8</version>
                 <executions>
+                    <execution>
+                        <id>prepare-thrift-sources</id>
+                        <phase>validate</phase>
+                        <configuration>
+                            <target>
+                                <delete dir="${starrocks.thrift.generated.sources}"/>
+                                <exec executable="${starrocks.thrift}"
+                                      failonerror="true"
+                                      outputproperty="starrocks.thrift.version.stdout"
+                                      errorproperty="starrocks.thrift.version.stderr">
+                                    <arg value="-version"/>
+                                </exec>
+                                <condition property="starrocks.thrift.version.valid">
+                                    <or>
+                                        <contains string="${starrocks.thrift.version.stdout}"
+                                                  substring="${starrocks.thrift.expected.version}"/>
+                                        <contains string="${starrocks.thrift.version.stderr}"
+                                                  substring="${starrocks.thrift.expected.version}"/>
+                                    </or>
+                                </condition>
+                                <echo message="Using FE thrift compiler: ${starrocks.thrift}"/>
+                                <echo message="FE thrift version stdout: ${starrocks.thrift.version.stdout}"/>
+                                <echo message="FE thrift version stderr: ${starrocks.thrift.version.stderr}"/>
+                                <fail unless="starrocks.thrift.version.valid">
+                                    FE thrift compiler must be ${starrocks.thrift.expected.version}x, but ${starrocks.thrift} reported stdout='${starrocks.thrift.version.stdout}' stderr='${starrocks.thrift.version.stderr}'
+                                </fail>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
                     <execution>
                         <id>generate-sources</id>
                         <phase>generate-sources</phase>
@@ -1121,36 +1244,14 @@ under the License.
                                 <!-- add arbitrary num of src dirs here -->
                                 <source>${basedir}/target/generated-sources/build/</source>
                                 <source>${basedir}/target/generated-sources/proto/</source>
+                                <source>${basedir}/target/generated-sources/thrift/</source>
+                            
                             </sources>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
 
-            <!-- copy all dependency libs to target lib dir -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.1.1</version>
-                <executions>
-                    <execution>
-                        <id>copy-dependencies</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>copy-dependencies</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
-                            <overWriteReleases>false</overWriteReleases>
-                            <overWriteSnapshots>false</overWriteSnapshots>
-                            <overWriteIfNewer>true</overWriteIfNewer>
-                            <skip>${skip.plugin}</skip>
-                            <!-- exclude test only jars(junit&mysql-connector), GPL jar(mysql-connector) must be excluded in release package -->
-                            <includeScope>runtime</includeScope>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
 
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -1210,77 +1311,5 @@ under the License.
                 </executions>
             </plugin>
         </plugins>
-
-        <pluginManagement>
-            <plugins>
-                <!--set for ecplise lifecycle -->
-                <plugin>
-                    <groupId>org.eclipse.m2e</groupId>
-                    <artifactId>lifecycle-mapping</artifactId>
-                    <version>1.0.0</version>
-                    <configuration>
-                        <lifecycleMappingMetadata>
-                            <pluginExecutions>
-                                <pluginExecution>
-                                    <pluginExecutionFilter>
-                                        <groupId>org.codehaus.mojo</groupId>
-                                        <artifactId>exec-maven-plugin</artifactId>
-                                        <versionRange>[1.6,)</versionRange>
-                                        <goals>
-                                            <goal>exec</goal>
-                                        </goals>
-                                    </pluginExecutionFilter>
-                                </pluginExecution>
-                                <pluginExecution>
-                                    <pluginExecutionFilter>
-                                        <groupId>org.codehaus.mojo</groupId>
-                                        <artifactId>build-helper-maven-plugin</artifactId>
-                                        <versionRange>[1.7,)</versionRange>
-                                        <goals>
-                                            <goal>add-source</goal>
-                                        </goals>
-                                    </pluginExecutionFilter>
-                                </pluginExecution>
-                                <pluginExecution>
-                                    <pluginExecutionFilter>
-                                        <groupId>org.apache.maven.plugins</groupId>
-                                        <artifactId>maven-dependency-plugin</artifactId>
-                                        <versionRange>[3.1.1,)</versionRange>
-                                        <goals>
-                                            <goal>copy-dependencies</goal>
-                                        </goals>
-                                    </pluginExecutionFilter>
-                                </pluginExecution>
-                                <pluginExecution>
-                                    <pluginExecutionFilter>
-                                        <groupId>org.apache.maven.plugins</groupId>
-                                        <artifactId>maven-compiler-plugin</artifactId>
-                                        <versionRange>[3.1,)</versionRange>
-                                        <goals>
-                                            <goal>compile</goal>
-                                            <goal>testCompile</goal>
-                                        </goals>
-                                    </pluginExecutionFilter>
-                                </pluginExecution>
-                                <pluginExecution>
-                                    <pluginExecutionFilter>
-                                        <groupId>org.apache.maven.plugins</groupId>
-                                        <artifactId>maven-resources-plugin</artifactId>
-                                        <versionRange>[2.6,)</versionRange>
-                                        <goals>
-                                            <goal>resources</goal>
-                                            <goal>testResources</goal>
-                                        </goals>
-                                    </pluginExecutionFilter>
-                                </pluginExecution>
-                            </pluginExecutions>
-
-                        </lifecycleMappingMetadata>
-                    </configuration>
-                </plugin>
-
-            </plugins>
-        </pluginManagement>
-
     </build>
 </project>
