@@ -35,6 +35,7 @@ enum class InvertedIndexParserType {
 
 const std::string INVERTED_IMP_KEY = "imp_lib";
 const std::string TYPE_CLUCENE = "clucene";
+const std::string TYPE_BUILTIN = "builtin";
 const std::string INVERTED_INDEX_PARSER_KEY = "parser";
 const std::string INVERTED_INDEX_PARSER_UNKNOWN = "unknown";
 const std::string INVERTED_INDEX_PARSER_NONE = "none";
