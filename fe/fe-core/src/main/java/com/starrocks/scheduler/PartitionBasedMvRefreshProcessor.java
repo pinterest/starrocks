@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -72,6 +73,7 @@ import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -249,7 +251,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 try (Timer ignored = Tracers.watchScope("MVRefreshSyncPartitions")) {
                     // sync partitions between mv and base tables out of lock
                     // do it outside lock because it is a time-cost operation
-                    if (!syncPartitions()) {
+                    if (!syncPartitions(context, false)) {
                         logger.warn("Sync partitions failed.");
                         return false;
                     }
@@ -431,7 +433,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions = Maps.newHashMap();
         if (Config.enable_materialized_view_external_table_precise_refresh) {
             try (Timer ignored = Tracers.watchScope("MVRefreshComputeCandidatePartitions")) {
-                if (!syncPartitions()) {
+                if (!syncPartitions(context, false)) {
                     throw new DmlException(String.format("materialized view %s refresh task failed: sync partition failed",
                             mv.getName()));
                 }
@@ -539,6 +541,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // 5. generate insert stmt's exec plan, make thread local ctx existed
             try (ConnectContext.ScopeGuard guard = ctx.bindScope(); Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
+                ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 execPlan = StatementPlanner.planInsertStmt(locker, insertStmt, ctx);
             }
         } finally {
@@ -875,7 +878,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     @VisibleForTesting
     @Override
-    public void prepare(TaskRunContext context) throws Exception {
+    public TaskRunContext prepare(TaskRunContext context) throws Exception {
         Map<String, String> properties = context.getProperties();
         // NOTE: mvId is set in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
@@ -889,6 +892,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     mvId, context.ctx.getDatabase()));
         }
         this.mv = (MaterializedView) table;
+        // refresh mv until mv is reloaded.
+        this.mv.waitForReloaded();
         // reinit the logger
         this.logger = MVTraceUtils.getLogger(mv, PartitionBasedMvRefreshProcessor.class);
 
@@ -929,6 +934,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         this.mvRefreshPartitioner = buildMvRefreshPartitioner(mv, context);
 
         logger.info("finish prepare refresh mv:{}, jobId: {}", mvId, jobId);
+        return context;
     }
 
     /**
@@ -951,10 +957,58 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     /**
      * Sync base table's partition infos to be used later.
      */
-    private boolean syncPartitions() throws AnalysisException, LockTimeoutException {
+    private boolean syncPartitions(TaskRunContext taskRunContext,
+                                   boolean tentative) throws AnalysisException, LockTimeoutException {
         Stopwatch stopwatch = Stopwatch.createStarted();
         // collect base table snapshot infos
         snapshotBaseTables = collectBaseTableSnapshotInfos(mv);
+
+        final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(),
+                taskRunContext.getProperties(), tentative);
+        if (mvRefreshParams.isForce() && !tentative) {
+            // drop existing partitions for force refresh
+            Set<String> toRefreshPartitions = mvRefreshPartitioner.getMVPartitionsToRefreshByParams(mvRefreshParams);
+            if (toRefreshPartitions != null && !toRefreshPartitions.isEmpty()) {
+                logger.info("force refresh, drop partitions: [{}]",
+                        Joiner.on(",").join(toRefreshPartitions));
+
+                // first lock and drop partitions from a visible map
+                Locker locker = new Locker();
+                if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
+                    logger.warn("failed to lock database: {} in syncPartitions for force refresh", db.getFullName());
+                    throw new DmlException("Force refresh failed, database:" + db.getFullName() + " not exist");
+                }
+                try {
+                    PartitionInfo partitionInfo = mv.getPartitionInfo();
+                    DataProperty dataProperty = null;
+                    if (!mv.isPartitionedTable()) {
+                        String partitionName = toRefreshPartitions.iterator().next();
+                        Partition partition = mv.getPartition(partitionName);
+                        dataProperty = partitionInfo.getDataProperty(partition.getId());
+                        mv.dropPartition(db.getId(), partitionName, false);
+                    } else {
+                        for (String partName : toRefreshPartitions) {
+                            mvRefreshPartitioner.dropPartition(db, mv, partName);
+                        }
+                    }
+
+                    // for non-partitioned table, we need to build the partition here
+                    if (!mv.isPartitionedTable()) {
+                        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+                        ConnectContext connectContext = mvContext.getCtx();
+                        localMetastore.buildNonPartitionOlapTable(db, mv, partitionInfo, dataProperty,
+                                connectContext.getCurrentWarehouseId());
+                    }
+                } catch (Exception e) {
+                    logger.warn("failed to drop partitions {} for force refresh",
+                            Joiner.on(",").join(toRefreshPartitions),
+                            DebugUtil.getRootStackTrace(e));
+                    throw new AnalysisException("failed to drop partitions for force refresh: " + e.getMessage());
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), this.mv.getId(), LockType.WRITE);
+                }
+            }
+        }
 
         // do sync partitions (add or drop partitions) for materialized view
         boolean result = mvRefreshPartitioner.syncAddOrDropPartitions();
@@ -983,9 +1037,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                                                   MVRefreshParams mvRefreshParams,
                                                                   Set<String> mvPotentialPartitionNames)
             throws AnalysisException {
-        if (mvRefreshParams.isForceCompleteRefresh()) {
+        if (mvRefreshParams.isForce()) {
             // Force refresh
-            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce();
+            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce(mvRefreshParams);
         } else {
             return mvRefreshPartitioner.getMVPartitionsToRefresh(mvPartitionInfo, snapshotBaseTables,
                     mvRefreshParams, mvPotentialPartitionNames);
@@ -1144,6 +1198,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         logger.info("[QueryId:{}] start to refresh mv in DML", ctx.getQueryId());
         try {
+            executor.addRunningQueryDetail(insertStmt);
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
             logger.warn("[QueryId:{}] refresh mv {} failed in DML", ctx.getQueryId(), e);
@@ -1151,6 +1206,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         } finally {
             logger.info("[QueryId:{}] finished to refresh mv in DML", ctx.getQueryId());
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            executor.addFinishedQueryDetail();
         }
     }
 
