@@ -16,7 +16,9 @@ package com.starrocks.scheduler.history;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
@@ -54,6 +56,7 @@ public class TaskRunHistoryTest {
     @BeforeAll
     public static void beforeAll() {
         UtFrameUtils.createMinStarRocksCluster();
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -333,7 +336,7 @@ public class TaskRunHistoryTest {
             List<TaskRunStatus> ans = TaskRunStatus.TaskRunStatusJSONRecord.fromJson(jsonString).data;
             Preconditions.checkArgument(ans == null);
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("Expected a string but was BEGIN_OBJECT at line 1 column 568"));
+            Assertions.assertInstanceOf(JsonSyntaxException.class, e);
         }
     }
 

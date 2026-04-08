@@ -306,6 +306,14 @@ public class UtFrameUtils {
         if (CREATED_MIN_CLUSTER.get()) {
             return;
         }
+
+        // set some parameters to speedup test
+        FeConstants.runningUnitTest = true;
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
         try {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
@@ -582,11 +590,13 @@ public class UtFrameUtils {
             } catch (Exception e) {
                 throw e;
             } finally {
-                String pr = Tracers.printLogs();
-                if (!Strings.isNullOrEmpty(pr)) {
-                    System.out.println(pr);
+                // only output trace log in specific case
+                if (StarRocksTestBase.isOutputTraceLog) {
+                    String pr = Tracers.printLogs();
+                    if (!Strings.isNullOrEmpty(pr)) {
+                        System.out.println(pr);
+                    }
                 }
-                Tracers.close();
             }
         }
     }
@@ -1322,10 +1332,8 @@ public class UtFrameUtils {
         FeConstants.runningUnitTest = true;
 
         if (connectContext != null) {
-            // 300s: 5min
-            connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
-            // 300s: 5min
-            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(120 * 1000);
+            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(120 * 1000);
 
             connectContext.getSessionVariable().setEnableShortCircuit(false);
             connectContext.getSessionVariable().setEnableQueryCache(false);
@@ -1337,6 +1345,7 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
             // disable mv analyze stats in FE UTs
             connectContext.getSessionVariable().setAnalyzeForMv("");
+            connectContext.getSessionVariable().setTraceLogLevel(10);
         }
 
         new MockUp<PlanTestBase>() {

@@ -403,6 +403,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "task run ttl")
     public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
 
+    @ConfField(mutable = true, comment = "task run execute timeout, default 4 hours")
+    public static int task_runs_timeout_second = 4 * 3600;     // 4 hour
+
     @ConfField(mutable = true, comment = "max number of task run history. ")
     public static int task_runs_max_history_number = 10000;
 
@@ -1094,6 +1097,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int prepared_transaction_default_timeout_second = 86400; // 1day
 
+    @ConfField(mutable = true)
+    public static int finish_transaction_default_lock_timeout_ms = 1000; // 1000ms
     /**
      * Max load timeout applicable to all type of load except for stream load and lake compaction
      */
@@ -1465,6 +1470,12 @@ public class Config extends ConfigBase {
     public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
 
     /**
+     * Maximum Java stack depth for proc profile collection
+     */
+    @ConfField(mutable = true, comment = "Maximum Java stack depth for proc profile collection, default is 128")
+    public static int proc_profile_jstack_depth = 128;
+
+    /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
      * By default, this is not enabled. If it is turned on, the partitions built by batch creation syntax will
      * not allow partial creation.
@@ -1781,6 +1792,10 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
+
+    @ConfField(mutable = true, comment = "Whether to enable the collection of tablet numbers"
+            + " for each disk in the 'SHOW PROC /BACKENDS/{id}' command")
+    public static boolean enable_collect_tablet_num_in_show_proc_backend_disk_path = true;
 
     /**
      * If set to true, metric collector will be run as a daemon timer to collect metrics at fix interval
@@ -2131,6 +2146,12 @@ public class Config extends ConfigBase {
     public static long statistic_cache_columns = 100000;
 
     /**
+     * The max number of io tasks for each connector operator in collect statistic
+     */
+    @ConfField(mutable = true)
+    public static int collect_stats_io_tasks_per_connector_operator = 4;
+
+    /**
      * The size of the thread-pool which will be used to refresh statistic caches
      */
     @ConfField
@@ -2236,10 +2257,10 @@ public class Config extends ConfigBase {
             NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
 
     /**
-     * The partition size of sample collect, default 1k partitions
+     * The partition size of sample collect, default 300 partitions
      */
     @ConfField(mutable = true)
-    public static int statistic_sample_collect_partition_size = 1000;
+    public static int statistic_sample_collect_partition_size = 300;
 
     @ConfField(mutable = true, comment = "If changed ratio of a table/partition is larger than this threshold, " +
             "we would use sample statistics instead of full statistics")
@@ -2838,6 +2859,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 
+    @ConfField(mutable = true, comment = "Number of threads for handling gRPC server I/O")
+    public static int starmgr_grpc_server_max_worker_threads = 1024;
+
     @ConfField(mutable = true)
     public static int star_client_read_timeout_seconds = 15;
 
@@ -3400,6 +3424,9 @@ public class Config extends ConfigBase {
             " If one base mv has done reload, no need to do it again while other mv that related to it is reloading ")
     public static boolean enable_mv_post_image_reload_cache = true;
 
+    @ConfField(mutable = true, comment = "The timeout for waiting async mv reload done, 3 min by default")
+    public static int mv_async_reload_wait_timeout_second = 3 * 60; // 3 min
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
@@ -3447,7 +3474,7 @@ public class Config extends ConfigBase {
     public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
 
     @ConfField(mutable = true, comment = "The default thread pool size of mv plan cache")
-    public static int mv_plan_cache_thread_pool_size = 3;
+    public static int mv_plan_cache_thread_pool_size = 8;
 
     /**
      * mv plan cache expire interval in seconds
@@ -3494,7 +3521,7 @@ public class Config extends ConfigBase {
      * Number of Hash of Lock Table
      */
     @ConfField
-    public static int lock_manager_lock_table_num = 32;
+    public static int lock_manager_lock_table_num = 256;
 
     /**
      * Whether to enable deadlock unlocking operation.
