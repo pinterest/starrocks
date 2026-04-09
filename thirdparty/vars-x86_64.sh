@@ -22,7 +22,7 @@
 #####################################################
 
 # HADOOP
-HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz"
+HADOOP_DOWNLOAD="https://downloads.apache.org/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz"
 HADOOP_NAME="hadoop-3.4.0.tar.gz"
 HADOOP_SOURCE="hadoop-3.4.0"
 HADOOP_MD5SUM="2f9244ab73169cf7bc0811d932067f6b"
