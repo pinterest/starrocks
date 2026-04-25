@@ -20,6 +20,7 @@
 #include <codecvt>
 
 #include "common/statusor.h"
+#include "storage/index/inverted/clucene/csv_analyzer.h"
 #include "storage/index/inverted/inverted_index_common.h"
 
 namespace starrocks {
@@ -36,6 +37,8 @@ inline StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> get_analyzer(Invert
         chinese_analyzer->setStem(false);
         return chinese_analyzer;
     }
+    case InvertedIndexParserType::PARSER_CSV:
+        return std::make_unique<CsvAnalyzer>();
     default:
         return Status::NotSupported("Not support UNKNOWN parser_type");
     }
