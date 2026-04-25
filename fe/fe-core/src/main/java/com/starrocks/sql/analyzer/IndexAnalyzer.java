@@ -75,6 +75,7 @@ public class IndexAnalyzer {
     public static String INVERTED_INDEX_PARSER_STANDARD = "standard";
     public static String INVERTED_INDEX_PARSER_ENGLISH = "english";
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
+    public static String INVERTED_INDEX_PARSER_CSV = "csv";
 
     public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
 
@@ -212,7 +213,8 @@ public class IndexAnalyzer {
             if (!(parser.equals(INVERTED_INDEX_PARSER_NONE)
                     || parser.equals(INVERTED_INDEX_PARSER_STANDARD)
                     || parser.equals(INVERTED_INDEX_PARSER_ENGLISH)
-                    || parser.equals(INVERTED_INDEX_PARSER_CHINESE))) {
+                    || parser.equals(INVERTED_INDEX_PARSER_CHINESE)
+                    || parser.equals(INVERTED_INDEX_PARSER_CSV))) {
                 throw new SemanticException("INVERTED index parser: " + parser
                         + " is invalid for column: " + indexColName + " of type " + colType);
             }
