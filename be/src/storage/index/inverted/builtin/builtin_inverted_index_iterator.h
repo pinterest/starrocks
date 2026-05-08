@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "util/slice.h"
 
 namespace starrocks {
 class FunctionContext;
@@ -34,10 +34,10 @@ public:
 
     ~BuiltinInvertedIndexIterator() override = default;
 
-    Status read_from_inverted_index(const std::string& column_name, const void* query_value,
+    Status read_from_inverted_index(const std::string_view column_name, const void* query_value,
                                     InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
 
-    Status read_null(const std::string& column_name, roaring::Roaring* bit_map) override;
+    Status read_null(const std::string_view column_name, roaring::Roaring* bit_map) override;
 
 private:
     Status _equal_query(const Slice* search_query, roaring::Roaring* bit_map);

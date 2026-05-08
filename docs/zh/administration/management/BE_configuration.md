@@ -1044,6 +1044,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否启用单个 Tablet 内部的并行 Spill Merge。启用后可以提高导入过程中 Spill Merge 的性能。
 - 引入版本：-
 
+##### enable_parallel_memtable_finalize
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在存算分离（Lake）表导入数据时启用并行 MemTable Finalize。启用后，MemTable 的 Finalize 操作（排序/聚合）将从写入线程移至 Flush 线程执行，使写入线程可以继续向新的 MemTable 插入数据，同时前一个 MemTable 正在并行进行 Finalize 和 Flush。这可以通过重叠 CPU 密集型的 Finalize 操作与 I/O 密集型的 Flush 操作来显著提高导入吞吐量。注意：当需要填充自增列时，此优化会自动禁用，因为自增 ID 的分配必须在 MemTable 提交 Flush 之前完成。
+- 引入版本：-
+
 ##### enable_stream_load_verbose_log
 
 - 默认值：false
@@ -2881,3 +2890,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述: 从 INFO 日志文件读取并在 BE 调试 Web Server 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
 - 引入版本: v3.2.0
+
+### 已移除的参数
+
+##### enable_bit_unpack_simd
+
+- 状态：已移除
+- 描述：该参数已移除。Bit-unpack 的 SIMD 路径现在在编译期根据 AVX2/BMI2 自动选择，并在不支持时回退到默认实现。
+- 移除版本：-

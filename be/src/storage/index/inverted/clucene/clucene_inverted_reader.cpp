@@ -19,13 +19,13 @@
 #include <boost/locale/encoding_utf.hpp>
 #include <memory>
 
+#include "base/string/faststring.h"
+#include "base/utility/defer_op.h"
 #include "clucene_inverted_util.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/clucene/match_operator.h"
 #include "storage/rowset/options.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 
@@ -48,7 +48,7 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
     }
 }
 
-Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const std::string& column_name,
+Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const std::string_view column_name,
                                             const void* query_value, InvertedIndexQueryType query_type,
                                             roaring::Roaring* bit_map) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
@@ -125,7 +125,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     return Status::OK();
 }
 
-Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, const std::string& column_name,
+Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, const std::string_view column_name,
                                                  roaring::Roaring* bit_map) {
     lucene::store::IndexInput* null_bitmap_in = nullptr;
     lucene::store::FSDirectory* dir = nullptr;

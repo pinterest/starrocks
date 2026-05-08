@@ -16,16 +16,17 @@
 
 #include <hs/hs.h>
 #include <re2/re2.h>
-#include <runtime/decimalv3.h>
+#include <types/decimalv3.h>
 
 #include <iomanip>
 
+#include "base/phmap/phmap.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "common/constexpr.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/current_thread.h"
-#include "util/phmap/phmap.h"
 #include "util/url_parser.h"
 
 namespace starrocks {

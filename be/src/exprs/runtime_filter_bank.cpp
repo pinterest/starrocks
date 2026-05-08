@@ -20,7 +20,11 @@
 #include <memory>
 #include <thread>
 
+#include "base/failpoint/fail_point.h"
+#include "base/simd/simd.h"
+#include "base/time/time.h"
 #include "column/column.h"
+#include "common/system/cpu_info.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/agg_in_runtime_filter.h"
 #include "exprs/dictmapping_expr.h"
@@ -35,11 +39,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/failpoint/fail_point.h"
-#include "util/time.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(global_runtime_filter_sync_B);

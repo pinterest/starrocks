@@ -395,7 +395,6 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
-    Common
     Column
     Connector
     Exec
@@ -417,9 +416,12 @@ set(STARROCKS_LINK_LIBS
     TestUtil
     Tools
     Geo
-    Simd
     Cache
+    orc
     ${WL_END_GROUP}
+    ColumnCore
+    TypesCore
+    Common
     Base
     Gutil
     StarRocksGen
@@ -488,7 +490,6 @@ set(STARROCKS_DEPENDENCIES
     gRPC::grpc
     gRPC::grpc++
     parquet
-    orc
     cctz
     fmt
     ryu
@@ -623,6 +624,7 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
 
+
 set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp)
 
 if (NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
@@ -742,7 +744,6 @@ add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
-add_subdirectory(${SRC_DIR}/simd)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
