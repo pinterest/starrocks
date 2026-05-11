@@ -1790,6 +1790,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static String cauthz_authorization_class_name = "";
 
+    @ConfField(mutable = true)
+    public static boolean cauthz_fail_open = false;
+
+    /** Pastis cAuthZ path: empty = {@code cauthz/}, {@code prod} = {@code cauthz_prod/}, {@code test} = {@code cauthz_test/}. */
+    @ConfField(mutable = true)
+    public static String cauthz_pastis_endpoint = "";
+
     /**
      * The authentication_chain configuration specifies the sequence of security integrations
      * that will be used to authenticate a user. Each security integration in the chain will be
