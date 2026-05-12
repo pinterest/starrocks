@@ -71,6 +71,29 @@ else
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
+    if [[ ! -d ${STARROCKS_THIRDPARTY}/installed/hadoop ]]; then
+        echo "Hadoop not found in thirdparty, downloading and installing ..."
+        TP_DIR=${STARROCKS_HOME}/thirdparty
+        . ${TP_DIR}/vars.sh
+        TP_SOURCE_DIR=${STARROCKS_THIRDPARTY}/src
+        TP_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed
+        mkdir -p ${TP_SOURCE_DIR}
+        if [[ ! -d ${TP_SOURCE_DIR}/${HADOOP_SOURCE} ]]; then
+            echo "Downloading ${HADOOP_NAME} ..."
+            wget --progress=dot:mega --tries=3 --no-check-certificate \
+                ${HADOOP_DOWNLOAD} -O ${TP_SOURCE_DIR}/${HADOOP_NAME}
+            mkdir -p ${TP_SOURCE_DIR}/tmp_dir
+            tar xzf ${TP_SOURCE_DIR}/${HADOOP_NAME} -C ${TP_SOURCE_DIR}/tmp_dir
+            mv ${TP_SOURCE_DIR}/tmp_dir/* ${TP_SOURCE_DIR}/${HADOOP_SOURCE}
+            rm -rf ${TP_SOURCE_DIR}/tmp_dir
+        fi
+        cp -r ${TP_SOURCE_DIR}/${HADOOP_SOURCE} ${TP_INSTALL_DIR}/hadoop
+        rm -rf ${TP_INSTALL_DIR}/hadoop/logs/* ${TP_INSTALL_DIR}/hadoop/share/doc/hadoop
+        mkdir -p ${TP_INSTALL_DIR}/include/hdfs
+        cp ${TP_SOURCE_DIR}/${HADOOP_SOURCE}/include/hdfs.h ${TP_INSTALL_DIR}/include/hdfs
+        cp ${TP_SOURCE_DIR}/${HADOOP_SOURCE}/lib/native/libhdfs.a ${TP_INSTALL_DIR}/lib
+        echo "Hadoop installed to ${TP_INSTALL_DIR}/hadoop"
+    fi
     PARALLEL=$[$(nproc)/4+1]
 fi
 
@@ -564,7 +587,6 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/

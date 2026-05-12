@@ -39,6 +39,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -79,7 +80,7 @@ public class TaskRun implements Comparable<TaskRun> {
     // to another and must be only set specifically for each run but cannot be extended from the last task run.
     // eg: `FORCE` is only allowed to set in the first task run and cannot be copied into the following task run.
     public static final Set<String> MV_UNCOPYABLE_PROPERTIES = ImmutableSet.of(
-            PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+            PARTITION_START, PARTITION_END, PARTITION_VALUES);
     // If there are many pending mv task runs, we can merge some of them by comparing the properties, those properties that are
     // used to check equality of task runs and we can ignore the other properties.
     // eg:
@@ -194,6 +195,31 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public boolean isKilled() {
         return isKilled;
+    }
+
+    /**
+     * Get the execute timeout in seconds.
+     */
+    public int getExecuteTimeoutS() {
+        // if `query_timeout`/`insert_timeout` is set in the execute option, use it
+        int defaultTimeoutS = Config.task_runs_timeout_second;
+        if (properties != null) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
+                        || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+                    try {
+                        int timeout = Integer.parseInt(entry.getValue());
+                        if (timeout > 0) {
+                            defaultTimeoutS = Math.max(timeout, defaultTimeoutS);
+                        }
+                    } catch (NumberFormatException e) {
+                        LOG.warn("invalid timeout value: {}, task run:{}", entry.getValue(), this);
+                    }
+                }
+            }
+        }
+        // The timeout of task run should not be longer than the ttl of task runs and task
+        return Math.min(Math.min(defaultTimeoutS, Config.task_runs_ttl_second), Config.task_ttl_second);
     }
 
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
@@ -317,6 +343,8 @@ public class TaskRun implements Comparable<TaskRun> {
             } catch (DdlException e) {
                 // not session variable
                 taskRunContextProperties.put(key, properties.get(key));
+                // FIXME: it's too hack, don't pollute the session when setting variables
+                runCtx.getState().resetError();
             }
         }
         // set warehouse
@@ -344,7 +372,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setTaskRun(this);
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
-        processor.prepare(taskRunContext);
+        taskRunContext = processor.prepare(taskRunContext);
 
         // process task run
         Constants.TaskRunState taskRunState;
