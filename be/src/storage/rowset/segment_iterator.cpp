@@ -68,7 +68,7 @@
 #include "storage/update_manager.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
-#include "base/utility/scoped_cleanup.h"
+#include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
