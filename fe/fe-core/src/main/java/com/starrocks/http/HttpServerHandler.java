@@ -37,6 +37,7 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
+import com.starrocks.service.ExecuteEnv;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -166,11 +167,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
-<<<<<<< HEAD
-        if (action != null) {
-            action.handleChannelInactive(ctx);
-=======
-        HttpConnectContext context = ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
+        HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
         if (context != null) {
             // Do NOT gate on isRegistered(): that flag is set AFTER
             // ConnectScheduler.registerConnection adds the context to the map, and
@@ -183,7 +180,9 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             // context because it uses an identity-aware remove — it will only drop
             // the entry if the mapping at our connectionId is actually this context.
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
->>>>>>> 4c42d3c9e3 ([BugFix] Unregister HTTP connection even when isRegistered() is false (backport #72006) (#72095))
+        }
+        if (action != null) {
+            action.handleChannelInactive(ctx);
         }
         super.channelInactive(ctx);
     }
