@@ -48,6 +48,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -194,7 +195,7 @@ public class LakeTableAlterMetaJobTest {
                 return mockedWarehouseManager;
             }
         };
-        mockedWarehouseManager.setComputeNodeId(null);
+        mockedWarehouseManager.setComputeNodeIdsAssignToTablet(new ArrayList<>());
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.run();
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
