@@ -227,12 +227,20 @@ public class ConnectScheduler {
         boolean removed;
         try {
             connStatsLock.lock();
-            removed = connectionMap.remove((long) ctx.getConnectionId()) != null;
+            // Identity-aware remove: only drop the mapping if the entry at this
+            // connectionId is this exact context. A context can hold a stale
+            // connectionId after a failed registerConnection(), and the 24-bit
+            // counter in ConnectionIdGenerator wraps after 2^24 connections, so
+            // a blind remove(key) risks evicting a different live session that
+            // happens to own the same id.
+            removed = connectionMap.remove((long) ctx.getConnectionId(), ctx);
             if (removed) {
                 numberConnection.decrementAndGet();
                 AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
                 if (conns != null) {
-                    conns.decrementAndGet();
+                    if (conns.decrementAndGet() <= 0) {
+                        connCountByUser.remove(ctx.getQualifiedUser());
+                    }
                 }
                 LOG.info("Connection closed. remote={}, connectionId={}, qualifiedUser={}, user.currConn={}",
                         ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
