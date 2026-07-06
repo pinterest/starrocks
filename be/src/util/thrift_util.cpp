@@ -35,6 +35,7 @@
 #include "util/thrift_util.h"
 
 #include <thrift/Thrift.h>
+#include <thrift/TOutput.h>
 #include <thrift/concurrency/ThreadManager.h>
 #include <thrift/server/TNonblockingServer.h>
 #include <thrift/transport/TServerSocket.h>
