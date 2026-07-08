@@ -86,12 +86,6 @@ extern "C" {
 void __lsan_do_leak_check();
 }
 
-namespace starrocks {
-static void thrift_output(const char* x) {
-    LOG(WARNING) << "thrift internal message: " << x;
-}
-} // namespace starrocks
-
 static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& s) {
     Aws::Utils::Logging::LogLevel levels[] = {
             Aws::Utils::Logging::LogLevel::Off,   Aws::Utils::Logging::LogLevel::Fatal,
@@ -251,8 +245,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Add logger for thrift internal.
-    apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);

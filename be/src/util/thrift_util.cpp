@@ -35,7 +35,6 @@
 #include "util/thrift_util.h"
 
 #include <thrift/Thrift.h>
-#include <thrift/TOutput.h>
 #include <thrift/concurrency/ThreadManager.h>
 #include <thrift/server/TNonblockingServer.h>
 #include <thrift/transport/TServerSocket.h>
@@ -98,12 +97,9 @@ bool TNetworkAddress::operator<(const TNetworkAddress& that) const {
     return false;
 };
 
-static void thrift_output_function(const char* output) {
-    VLOG_QUERY << output;
-}
-
 void init_thrift_logging() {
-    apache::thrift::GlobalOutput.setOutputFunction(thrift_output_function);
+    // `apache::thrift::GlobalOutput` was removed in newer Thrift versions.
+    // Keep this as a compatibility no-op when building against those versions.
 }
 
 Status wait_for_local_server(const ThriftServer& server, int num_retries, int retry_interval_ms) {
