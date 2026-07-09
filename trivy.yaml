@@ -6,7 +6,7 @@ scan:
     # ignore broker's cve
     - apache_hdfs_broker/
   skip-files:
-    # SHOULD ONLY skip jar in bundle format that can't be excluded via maven dependency management
+    # SHOULD ONLY skip jars that can't be excluded via dependency management (typically bundled/shaded jars)
     # hdfs required
     - "**/hadoop-client-runtime-3.4.3.jar"
     # kudu required
