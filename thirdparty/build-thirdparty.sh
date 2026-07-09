@@ -734,7 +734,7 @@ build_arrow() {
     -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ \
-    -Dthrift_SOURCE=SYSTEM ..
+    -DThrift_SOURCE=SYSTEM ..
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
