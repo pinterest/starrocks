@@ -44,7 +44,7 @@ under the License.
         <python>python</python>
         
         <!-- async-profiler in UT -->
-        <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-false}</async.profiler.enabled>
+        <async.profiler.enabled>false</async.profiler.enabled>
         <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
         <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
         <async.profiler.arg></async.profiler.arg>
