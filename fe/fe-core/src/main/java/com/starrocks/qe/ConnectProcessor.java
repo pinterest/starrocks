@@ -459,7 +459,9 @@ public class ConnectProcessor {
             parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
             Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
 
-            if (ctx.getTxnId() != 0 && ExplicitTxnStatementValidator.validate(parsedStmt, ctx)) {
+            if (ctx.getTxnId() != 0 &&
+                    ExplicitTxnStatementValidator.validate(parsedStmt, ctx)) {
+                ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                 return new QueryAttemptResult(allStatementsAreSet, true);
             }

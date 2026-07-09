@@ -73,7 +73,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
     }
 
-    private AlterJobV2 getAlterJob(Table table, boolean expectFastSchemaEvolution) {
+    private AlterJobV2 getAlterJob(Table table) {
         AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
         List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
         Assertions.assertEquals(1, jobs.size());

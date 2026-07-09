@@ -26,7 +26,6 @@ shell: ossutil64 cp --force ./sql/test_files/parquet_format/list_legacy_encoding
 Succeed: Total num: 1, size: 9,665. OK num: 1(upload 1 files).
 -- !result
 
-
 desc files(
     "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/list_legacy_encoding.parquet",
     "format" = "parquet",
