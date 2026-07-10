@@ -72,7 +72,7 @@ subprojects {
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
         set("paimon.version", "1.3.1")
-        set("parquet.version", "1.15.2")
+        set("parquet.version", "1.16.0")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
