@@ -21,7 +21,7 @@ scan:
     # tencent cos_api
     - "**/cos_api-bundle-5.6.137.2.jar"
     # gcs connector hadoop3
-    - "**/gcs-connector-hadoop3-2.2.26-shaded.jar"
+    - "**/gcs-connector-3.0.13-shaded.jar"
     # parquet hadoop bundle
     - "**/parquet-hadoop-bundle-1.15.2.jar"
     # io.grpc:grpc-netty-shaded (grpc-netty-shaded-1.63.0.jar) CVE-2025-55163
