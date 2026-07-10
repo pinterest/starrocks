@@ -16,3 +16,5 @@ scan:
     - "**/bundle-2.29.52.jar"
     # spark core
     - "**/spark-core_2.12-3.5.5.jar"
+    # CVE-2026-42577
+    - "**/netty-transport-native-epoll-4.1.133.Final*.jar"

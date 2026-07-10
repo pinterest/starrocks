@@ -88,8 +88,11 @@ public:
     CoreDataAllocator* allocator(int i) const { return _allocators[i]; }
 
     static CoreLocalValueController<T>* instance() {
-        static CoreLocalValueController<T> _s_instance;
-        return &_s_instance;
+        // Intentionally leak the singleton for process lifetime.
+        // Destroying it during global shutdown can race with outstanding
+        // CoreLocalValue<T> destructors and trigger use-after-free.
+        static CoreLocalValueController<T>* _s_instance = new CoreLocalValueController<T>();
+        return _s_instance;
     }
 
 private:
