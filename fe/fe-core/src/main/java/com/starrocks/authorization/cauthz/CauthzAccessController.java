@@ -19,8 +19,8 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 import com.starrocks.authorization.cauthz.CauthzAuthorizer;
 import com.starrocks.authorization.cauthz.CauthzStarRocksAccessRequest;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import com.starrocks.sql.ast.UserIdentity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
