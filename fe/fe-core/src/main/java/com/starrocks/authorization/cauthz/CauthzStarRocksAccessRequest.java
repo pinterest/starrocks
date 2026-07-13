@@ -15,7 +15,7 @@
 package com.starrocks.authorization.cauthz;
 
 import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.catalog.UserIdentity;
 
 /**
  * CauthzStarRocksAccessRequest is an object that is used to represent a single authorization request
