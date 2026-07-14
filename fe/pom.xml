@@ -185,6 +185,12 @@ under the License.
             <!-- internal modules unified -->
             <dependency>
                 <groupId>com.starrocks</groupId>
+                <artifactId>plugin-common</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.starrocks</groupId>
                 <artifactId>fe-grammar</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -223,6 +229,13 @@ under the License.
                 <artifactId>hive-udf</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-common</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-core</artifactId>
@@ -479,6 +492,14 @@ under the License.
                 <groupId>org.json</groupId>
                 <artifactId>json</artifactId>
                 <version>20231013</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/junit/junit -->
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>4.13.1</version>
+                <scope>test</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter -->
