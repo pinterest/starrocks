@@ -624,6 +624,13 @@
                 <scope>import</scope>
             </dependency>
 
+            <!-- bundle is a special uber-jar not included in the BOM; pin explicitly -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bundle</artifactId>
+                <version>${aws-v2-sdk.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
             <dependency>
                 <groupId>at.yawk.lz4</groupId>
