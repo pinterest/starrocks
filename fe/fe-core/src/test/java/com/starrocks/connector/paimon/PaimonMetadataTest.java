@@ -151,14 +151,11 @@ public class PaimonMetadataTest {
         writer.writeInt(1, 5555);
         writer.complete();
         List<DataFileMeta> meta1 = new ArrayList<>();
-        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
-        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
+        meta1.add(newDataFileMeta("file1", 100, 200));
+        meta1.add(newDataFileMeta("file2", 100, 300));
 
         List<DataFileMeta> meta2 = new ArrayList<>();
-        meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
+        meta2.add(newDataFileMeta("file3", 100, 400));
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
                 .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)
@@ -173,6 +170,11 @@ public class PaimonMetadataTest {
     public void testRowCount() {
         long rowCount = metadata.getRowCount(splits);
         assertEquals(900, rowCount);
+    }
+
+    private static DataFileMeta newDataFileMeta(String fileName, long fileSize, long rowCount) {
+        return DataFileMeta.create(fileName, fileSize, rowCount, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS,
+                EMPTY_STATS, 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null, null, null);
     }
 
     @Test
