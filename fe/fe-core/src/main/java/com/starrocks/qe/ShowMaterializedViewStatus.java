@@ -14,11 +14,11 @@
 
 package com.starrocks.qe;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;

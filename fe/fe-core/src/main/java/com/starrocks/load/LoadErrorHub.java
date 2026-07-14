@@ -34,8 +34,8 @@
 
 package com.starrocks.load;
 
-import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
