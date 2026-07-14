@@ -704,6 +704,10 @@
                                     <sourceFile>../fe/checkstyle.xml</sourceFile>
                                     <destinationFile>./checkstyle.xml</destinationFile>
                                 </fileSet>
+                                <fileSet>
+                                    <sourceFile>../fe/checkstyle-header.txt</sourceFile>
+                                    <destinationFile>./checkstyle-header.txt</destinationFile>
+                                </fileSet>
                             </fileSets>
                         </configuration>
                     </execution>
