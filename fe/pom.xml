@@ -990,6 +990,13 @@ under the License.
                 <scope>import</scope>
             </dependency>
 
+            <!-- bundle is not covered by the AWS v2 BOM and must be pinned explicitly -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bundle</artifactId>
+                <version>${aws-v2-sdk.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
@@ -1565,6 +1572,12 @@ under the License.
             <dependency>
                 <groupId>org.antlr</groupId>
                 <artifactId>antlr4-runtime</artifactId>
+                <version>${antlr.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4</artifactId>
                 <version>${antlr.version}</version>
             </dependency>
 
