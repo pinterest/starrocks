@@ -14,8 +14,8 @@
 
 package com.starrocks.system;
 
-import com.google.api.client.util.Maps;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
