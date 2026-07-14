@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.qe;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.starrocks.analysis.TupleDescriptor;
