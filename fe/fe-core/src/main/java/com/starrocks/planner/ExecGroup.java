@@ -14,7 +14,7 @@
 
 package com.starrocks.planner;
 
-import com.google.api.client.util.Sets;
+import com.google.common.collect.Sets;
 import com.google.common.base.Preconditions;
 import com.starrocks.thrift.TExecGroup;
 

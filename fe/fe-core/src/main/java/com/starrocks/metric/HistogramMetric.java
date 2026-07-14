@@ -19,7 +19,7 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.ExponentiallyDecayingReservoir;
 import com.codahale.metrics.Histogram;
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.base.Joiner;
 
 import java.util.List;

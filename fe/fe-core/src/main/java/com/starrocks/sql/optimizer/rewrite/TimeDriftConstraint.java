@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.Expr;

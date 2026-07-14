@@ -14,8 +14,8 @@
 
 package com.starrocks.qe;
 
-import com.google.api.client.util.Lists;
-import com.google.api.client.util.Sets;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
