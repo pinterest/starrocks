@@ -963,6 +963,7 @@ under the License.
     </dependencies>
 
     <build>
+        <finalName>starrocks-fe</finalName>
         <plugins>
             <!-- fe proto precompile plugin-->
             <plugin>
@@ -1174,6 +1175,58 @@ under the License.
                 </executions>
             </plugin>
 
+            <!-- copy all dependency libs to target lib dir -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.1.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                            <overWriteReleases>false</overWriteReleases>
+                            <overWriteSnapshots>false</overWriteSnapshots>
+                            <overWriteIfNewer>true</overWriteIfNewer>
+                            <skip>${skip.plugin}</skip>
+                            <stripVersion>false</stripVersion>
+                            <!-- exclude test only jars; GPL jar(mysql-connector) must be excluded in release package -->
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- ANTLR parser generation -->
+            <plugin>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4-maven-plugin</artifactId>
+                <version>${antlr.version}</version>
+                <executions>
+                    <execution>
+                        <id>antlr4</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>antlr4</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <visitor>true</visitor>
+                    <listener>true</listener>
+                    <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
+                    <outputDirectory>target/generated-sources/antlr4</outputDirectory>
+                    <arguments>
+                        <argument>-package</argument>
+                        <argument>com.starrocks.sql.parser</argument>
+                    </arguments>
+                </configuration>
+            </plugin>
+
             <!-- add gensrc java build src dir -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -1192,7 +1245,6 @@ under the License.
                                 <source>${basedir}/target/generated-sources/build/</source>
                                 <source>${basedir}/target/generated-sources/proto/</source>
                                 <source>${basedir}/target/generated-sources/thrift/</source>
-                            
                             </sources>
                         </configuration>
                     </execution>
