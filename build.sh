@@ -581,7 +581,11 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
-        cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
+        FE_LIB_DIR="${STARROCKS_HOME}/fe/fe-core/target/lib"
+        if [ ! -d "${FE_LIB_DIR}" ] && [ -d "${STARROCKS_HOME}/fe/fe-core/target/thrift-dependencies" ]; then
+            FE_LIB_DIR="${STARROCKS_HOME}/fe/fe-core/target/thrift-dependencies"
+        fi
+        cp -r -p ${FE_LIB_DIR}/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
