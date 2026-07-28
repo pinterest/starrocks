@@ -39,6 +39,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.PointerType;
@@ -194,8 +195,14 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
     public LogicalPlan transformWithSelectLimit(Relation relation) {
         LogicalPlan plan = transform(relation);
         OptExprBuilder root = plan.getRootBuilder();
-        // Set limit if user set sql_select_limit.
-        long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
+        // Apply the smaller of the user's sql_select_limit and the platform-enforced
+        // system_select_row_cap (FE config, admin-owned). The cap only tightens the limit;
+        // it never overrides an explicit LIMIT already in the query.
+        long userLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
+        long systemCap = Config.system_select_row_cap;
+        long selectLimit = systemCap > 0
+                ? (userLimit == SessionVariable.DEFAULT_SELECT_LIMIT ? systemCap : Math.min(userLimit, systemCap))
+                : userLimit;
         if (!root.getRoot().getOp().hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
             LogicalLimitOperator limitOperator = LogicalLimitOperator.init(selectLimit);
             root = root.withNewRoot(limitOperator);
