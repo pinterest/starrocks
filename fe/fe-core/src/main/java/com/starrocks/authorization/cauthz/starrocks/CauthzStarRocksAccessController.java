@@ -425,6 +425,27 @@ public class CauthzStarRocksAccessController extends CauthzAccessController {
     }
 
     @Override
+    public void checkWarehouseAction(ConnectContext context, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        hasPermission(
+                CauthzStarRocksResource.builder()
+                        .setWarehouse(name)
+                        .build(),
+                context.getCurrentUserIdentity(),
+                privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnWarehouse(ConnectContext context, String name) throws AccessDeniedException {
+        hasPermission(
+                CauthzStarRocksResource.builder()
+                        .setWarehouse(name)
+                        .build(),
+                context.getCurrentUserIdentity(),
+                PrivilegeType.ANY);
+    }
+
+    @Override
     public String convertToAccessType(PrivilegeType privilegeType) {
         return normalizePrivilegeName(privilegeType);
     }

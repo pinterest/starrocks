@@ -14,7 +14,6 @@
 package com.starrocks.authorization.cauthz;
 
 import com.starrocks.authorization.ObjectType;
-import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 
 /**
  * CauthzAccessResourceBuilder is a builder for CauthzAccessResourceImpl
@@ -95,6 +94,11 @@ public abstract class CauthzAccessResourceBuilder implements ObjectTypeConverter
 
     public CauthzAccessResourceBuilder setStorageVolume(String storageVolume) {
         cauthzAccessResource.setValue(convertToCauthzObjectType(ObjectType.STORAGE_VOLUME), storageVolume);
+        return this;
+    }
+
+    public CauthzAccessResourceBuilder setWarehouse(String warehouse) {
+        cauthzAccessResource.setValue(convertToCauthzObjectType(ObjectType.WAREHOUSE), warehouse);
         return this;
     }
 

@@ -55,6 +55,8 @@ public class CauthzStarRocksResource extends CauthzAccessResourceImpl {
                 return "resource_group";
             } else if (objectType.equals(ObjectType.STORAGE_VOLUME)) {
                 return "storage_volume";
+            } else if (objectType.equals(ObjectType.WAREHOUSE)) {
+                return "warehouse";
             } else if (objectType.equals(ObjectType.PIPE)) {
                 return "pipe";
             } else {
