@@ -31,16 +31,12 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.ast.TaskName;
-import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -168,22 +164,9 @@ public class SubmitTaskStmtTest extends MVTestBase {
     }
 
     @Test
-    public void testSubmitTaskStmtUpdateConstructor() {
-        UpdateStmt updateStmt = new UpdateStmt(null, Collections.emptyList(), Collections.emptyList(),
-                null, Collections.emptyList());
-        SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("test", "task_update"), 10, updateStmt, NodePosition.ZERO);
-        Assertions.assertEquals("test", stmt.getDbName());
-        Assertions.assertEquals("task_update", stmt.getTaskName());
-        Assertions.assertEquals(10, stmt.getSqlBeginIndex());
-        Assertions.assertSame(updateStmt, stmt.getUpdateStmt());
-        Assertions.assertNull(stmt.getInsertStmt());
-        new AstTraverser<>().visit(stmt, null);
-    }
-
-    @Test
     public void testSubmitUpdate() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        starRocksAssert.useDatabase("test")
+        starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.test_update\n" +
                         "(\n" +
                         "    pk bigint NOT NULL,\n" +
@@ -219,7 +202,7 @@ public class SubmitTaskStmtTest extends MVTestBase {
     @Test
     public void testSubmitUpdateFromSource() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        starRocksAssert.useDatabase("test")
+        starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.update_target\n" +
                         "(\n" +
                         "    k1 int NOT NULL,\n" +

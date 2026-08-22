@@ -20,7 +20,7 @@ ETL ステートメントを非同期タスクとして送信します。
 
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (v3.0 以降)
 - [INSERT](../INSERT.md) (v3.0 以降)
-- [CACHE SELECT](../../../../data_source/block_cache_warmup.md) (v3.3 以降)
+- [CACHE SELECT](../../../../data_source/data_cache/block_cache_warmup.md) (v3.3 以降)
 - [UPDATE](../../table_bucket_part_index/UPDATE.md) (v4.2 以降)
 
 タスクの一覧は `INFORMATION_SCHEMA.tasks` をクエリすることで確認でき、タスクの実行履歴は `INFORMATION_SCHEMA.task_runs` をクエリすることで確認できます。詳細については、[使用上の注意](#使用上の注意)を参照してください。
