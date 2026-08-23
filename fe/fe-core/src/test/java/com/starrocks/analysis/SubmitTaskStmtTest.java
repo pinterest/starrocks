@@ -31,11 +31,16 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.TaskName;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -48,6 +53,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -162,6 +168,98 @@ public class SubmitTaskStmtTest extends MVTestBase {
     }
 
     @Test
+    public void testSubmitTaskStmtUpdateConstructor() {
+        UpdateStmt updateStmt = new UpdateStmt(null, Collections.emptyList(), Collections.emptyList(),
+                null, Collections.emptyList());
+        SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("test", "task_update"), 10, updateStmt, NodePosition.ZERO);
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("task_update", stmt.getTaskName());
+        Assertions.assertEquals(10, stmt.getSqlBeginIndex());
+        Assertions.assertSame(updateStmt, stmt.getUpdateStmt());
+        Assertions.assertNull(stmt.getInsertStmt());
+        new AstTraverser<>().visit(stmt, null);
+    }
+
+    @Test
+    public void testSubmitUpdate() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.test_update\n" +
+                        "(\n" +
+                        "    pk bigint NOT NULL,\n" +
+                        "    v1 int NOT NULL\n" +
+                        ")\n" +
+                        "PRIMARY KEY(pk)\n" +
+                        "DISTRIBUTED BY HASH(pk) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        String sql = "submit task task_update as update test.test_update set v1 = 1 where pk = 2";
+        SubmitTaskStmt submitStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assertions.assertNotNull(submitStmt.getUpdateStmt());
+        Assertions.assertNull(submitStmt.getInsertStmt());
+        Assertions.assertEquals("test", submitStmt.getDbName());
+        Assertions.assertEquals("update test.test_update set v1 = 1 where pk = 2", submitStmt.getSqlText());
+        Assertions.assertNotNull(submitStmt.getUpdateStmt().getQueryStatement());
+
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        DDLStmtExecutor.execute(submitStmt, ctx);
+        Task task = tm.getTask("task_update");
+        Assertions.assertNotNull(task);
+        Assertions.assertEquals(Constants.TaskSource.UPDATE, task.getSource());
+        Assertions.assertEquals("update test.test_update set v1 = 1 where pk = 2", task.getDefinition());
+        connectContext.executeSql("drop task task_update");
+
+        ctx.setThreadLocalInfo();
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
+        SubmitTaskStmt unnamedStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(
+                "submit task as update test.test_update set v1 = 1 where pk = 2", ctx);
+        Assertions.assertTrue(TaskBuilder.buildTask(unnamedStmt, ctx).getName().startsWith("update-"));
+    }
+
+    @Test
+    public void testSubmitUpdateFromSource() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.update_target\n" +
+                        "(\n" +
+                        "    k1 int NOT NULL,\n" +
+                        "    v1 int NOT NULL\n" +
+                        ")\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.update_source\n" +
+                        "(\n" +
+                        "    k1 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        String sql = "submit task task_update_join as update test.update_target set v1 = s.v1 " +
+                "from test.update_source s where test.update_target.k1 = s.k1";
+        SubmitTaskStmt submitStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assertions.assertNotNull(submitStmt.getUpdateStmt().getQueryStatement());
+
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        DDLStmtExecutor.execute(submitStmt, ctx);
+        Task task = tm.getTask("task_update_join");
+        Assertions.assertNotNull(task);
+        Assertions.assertEquals(Constants.TaskSource.UPDATE, task.getSource());
+        connectContext.executeSql("drop task task_update_join");
+    }
+
+    @Test
+    public void testSubmitUpdateNonPrimaryKey() {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Exception e = assertThrows(UnsupportedException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(
+                        "submit task as update test.tbl1 set v1 = 1 where k2 = 1", ctx));
+        Assertions.assertTrue(e.getMessage().contains("does not support update"), e.getMessage());
+    }
+
+    @Test
     public void testSubmitWithWarehouse() throws Exception {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
@@ -218,6 +316,43 @@ public class SubmitTaskStmtTest extends MVTestBase {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         Assertions.assertNull(tm.getTask(taskName));
         starRocksAssert.dropMaterializedView(name);
+    }
+
+    @Test
+    public void testDropPipeTaskProtected() throws Exception {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        String taskName = "pipe-test_pipe-task-1-0";
+
+        Task pipeTask = new Task(taskName);
+        pipeTask.setSource(Constants.TaskSource.PIPE);
+        pipeTask.setCreateTime(System.currentTimeMillis());
+        pipeTask.setDbName("test");
+        pipeTask.setDefinition("insert into tbl1 select * from tbl1");
+        tm.createTask(pipeTask);
+
+        try {
+            // regular drop is blocked
+            Exception e = assertThrows(RuntimeException.class,
+                    () -> starRocksAssert.ddl(String.format("drop task `%s`", taskName)));
+            assertEquals("Can not drop task generated by pipe. " +
+                    "Use DROP PIPE to remove the pipe, " +
+                    "or DROP TASK ... FORCE to delete this task directly.", e.getMessage());
+
+            // DROP TASK IF EXISTS still hits the source guard when the task exists
+            Exception e2 = assertThrows(RuntimeException.class,
+                    () -> starRocksAssert.ddl(String.format("drop task if exists `%s`", taskName)));
+            assertEquals("Can not drop task generated by pipe. " +
+                    "Use DROP PIPE to remove the pipe, " +
+                    "or DROP TASK ... FORCE to delete this task directly.", e2.getMessage());
+
+            // force drop succeeds
+            starRocksAssert.ddl(String.format("drop task `%s` force", taskName));
+            Assertions.assertNull(tm.getTask(taskName));
+        } finally {
+            if (tm.containTask(taskName)) {
+                tm.dropTasks(Collections.singletonList(tm.getTask(taskName).getId()));
+            }
+        }
     }
 
     @Test
