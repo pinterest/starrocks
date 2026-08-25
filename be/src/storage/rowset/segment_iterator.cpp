@@ -34,6 +34,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/column_or_predicate.h"
+#include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
@@ -3357,7 +3358,7 @@ Status SegmentIterator::_apply_inverted_index() {
     if (gin_fallback_enabled) {
         _inverted_index_fallback_predicates.reserve(_opts.pred_tree.size());
         for (const auto& [cid, pred_list] : _opts.pred_tree.get_non_immediate_column_predicate_map()) {
-            InvertedIndexIterator* inverted_iter = _inverted_index_iterators[cid];
+            InvertedIndexIterator* inverted_iter = _inverted_index_ctx->inverted_index_iterators[cid];
             if (inverted_iter == nullptr) {
                 continue;
             }
