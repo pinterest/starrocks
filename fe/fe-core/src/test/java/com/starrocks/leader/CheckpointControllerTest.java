@@ -99,6 +99,22 @@ public class CheckpointControllerTest {
     }
 
     @Test
+    public void testJournalDatabaseDeleted() {
+        assertTrue(CheckpointController.journalDatabaseDeleted(
+                List.of(1L, 101L, 201L), List.of(101L, 201L)));
+        assertTrue(!CheckpointController.journalDatabaseDeleted(
+                List.of(1L, 101L), List.of(1L, 101L, 201L)));
+        assertTrue(!CheckpointController.journalDatabaseDeleted(
+                List.of(1L), List.of(1L)));
+    }
+
+    @Test
+    public void testGetRetainedJournalCount() {
+        assertEquals(100L, CheckpointController.getRetainedJournalCount(List.of(101L), 200L));
+        assertEquals(0L, CheckpointController.getRetainedJournalCount(List.of(), 200L));
+    }
+
+    @Test
     public void testGetWorkers_sortByHeapUsedPercent() {
         boolean oldValue = Config.checkpoint_only_on_leader;
         Config.checkpoint_only_on_leader = false;

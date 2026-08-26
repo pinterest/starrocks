@@ -156,6 +156,13 @@ public class CheckpointController extends FrontendDaemon {
         if (imageJournalId < maxJournalId) {
             this.journalId = maxJournalId;
             createImageRet = createImage();
+            if (belongToGlobalStateMgr && MetricRepo.hasInit) {
+                if (createImageRet.first) {
+                    MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
+                } else {
+                    MetricRepo.COUNTER_IMAGE_WRITE_FAILED.increase(1L);
+                }
+            }
         }
         if (createImageRet.first) {
             // Push the image file to all other nodes
@@ -195,7 +202,7 @@ public class CheckpointController extends FrontendDaemon {
         result = new ArrayBlockingQueue<>(1);
         workerNodeName = selectWorker();
         if (workerNodeName == null) {
-            LOG.warn("Failed to select worker to do checkpoint, journalId: {}", journalId);
+            LOG.warn("Save image failed: no available checkpoint worker, journalId={}", journalId);
             return Pair.create(false, workerNodeName);
         }
         workerSelectedTime = System.currentTimeMillis();
@@ -203,7 +210,8 @@ public class CheckpointController extends FrontendDaemon {
         // check the worker node is available
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(workerNodeName);
         if (frontend == null || !frontend.isAlive()) {
-            LOG.warn("worker node: {} is not available", workerNodeName);
+            LOG.warn("Save image failed: worker is unavailable, journalId={}, workerNode={}",
+                    journalId, workerNodeName);
             return Pair.create(false, workerNodeName);
         }
 
@@ -215,7 +223,8 @@ public class CheckpointController extends FrontendDaemon {
                 ret = result.poll(1, TimeUnit.SECONDS);
             }
             if (ret == null) {
-                LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
+                LOG.warn("Save image failed: checkpoint timed out, journalId={}, workerNode={}",
+                        journalId, workerNodeName);
                 return Pair.create(false, workerNodeName);
             }
             if (!ret.first) {
@@ -227,7 +236,7 @@ public class CheckpointController extends FrontendDaemon {
             downloadImage();
             return Pair.create(true, workerNodeName);
         } catch (Exception e) {
-            LOG.warn("create image failed", e);
+            LOG.warn("Save image failed: journalId={}, workerNode={}", journalId, workerNodeName, e);
             return Pair.create(false, workerNodeName);
         } finally {
             workerNodeName = null;
@@ -372,10 +381,45 @@ public class CheckpointController extends FrontendDaemon {
         // deleteVersion should be the minimum value of imageVersion and replayedJournalId.
         long minReplayedJournalId = getMinReplayedJournalId();
         long deleteVersion = Math.min(imageVersion, minReplayedJournalId);
-        journal.deleteJournals(deleteVersion + 1);
-        LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
-                deleteVersion, journal.getPrefix(), imageVersion, minReplayedJournalId);
+        List<Long> databaseNamesBefore = journal.getDatabaseNames();
+        try {
+            journal.deleteJournals(deleteVersion + 1);
+        } catch (RuntimeException e) {
+            LOG.error("Delete old edit log failed: deleteVersion={}, imageVersion={}, prefix={}",
+                    deleteVersion, imageVersion, journal.getPrefix(), e);
+            throw e;
+        }
+        List<Long> databaseNamesAfter = journal.getDatabaseNames();
+        if (journalDatabaseDeleted(databaseNamesBefore, databaseNamesAfter)) {
+            if (belongToGlobalStateMgr && MetricRepo.hasInit) {
+                MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.reset();
+                MetricRepo.COUNTER_EDIT_LOG_CURRENT.update(
+                        getRetainedJournalCount(databaseNamesAfter, journal.getMaxJournalId()));
+            }
+            LOG.info("Delete old edit log succeeded: deleteVersion={}, imageVersion={}, "
+                            + "minReplayedJournalId={}, prefix={}, databasesBefore={}, databasesAfter={}",
+                    deleteVersion, imageVersion, minReplayedJournalId, journal.getPrefix(),
+                    databaseNamesBefore, databaseNamesAfter);
+        } else {
+            LOG.warn("Delete old edit log skipped: reason=no_journal_database_deleted, deleteVersion={}, "
+                            + "imageVersion={}, minReplayedJournalId={}, prefix={}, databases={}",
+                    deleteVersion, imageVersion, minReplayedJournalId, journal.getPrefix(), databaseNamesAfter);
+        }
 
+    }
+
+    static boolean journalDatabaseDeleted(List<Long> before, List<Long> after) {
+        if (before == null || before.isEmpty() || after == null) {
+            return false;
+        }
+        return after.isEmpty() || after.get(0) > before.get(0);
+    }
+
+    static long getRetainedJournalCount(List<Long> databaseNames, long maxJournalId) {
+        if (databaseNames == null || databaseNames.isEmpty() || maxJournalId < databaseNames.get(0)) {
+            return 0;
+        }
+        return maxJournalId - databaseNames.get(0) + 1;
     }
 
     private void pushImage(long imageVersion) {
@@ -408,7 +452,11 @@ public class CheckpointController extends FrontendDaemon {
                 }
             } catch (IOException e) {
                 pushSuccess = false;
-                LOG.error("Exception when pushing image file. url = {}", url, e);
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_IMAGE_PUSH_FAILED.increase(1L);
+                }
+                LOG.error("Push image failed: imageVersion={}, nodeName={}, host={}, subDir={}",
+                        imageVersion, frontend.getNodeName(), frontend.getHost(), subDir, e);
             }
             if (pushSuccess) {
                 iterator.remove();
@@ -444,8 +492,8 @@ public class CheckpointController extends FrontendDaemon {
                     minReplayedJournalId = id;
                 }
             } catch (IOException e) {
-                LOG.error("Exception when getting current replayed journal id. host={}, port={}",
-                        host, port, e);
+                LOG.error("Delete old edit log skipped: reason=replay_id_unreachable, nodeName={}, "
+                                + "host={}, port={}, prefix={}", fe.getNodeName(), host, port, journal.getPrefix(), e);
                 minReplayedJournalId = 0;
                 break;
             } finally {

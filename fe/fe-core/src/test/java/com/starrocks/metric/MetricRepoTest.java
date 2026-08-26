@@ -79,6 +79,21 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testJournalAndImageMetricsExposure() {
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("edit_log{type=\"current\""), output);
+        Assertions.assertTrue(output.contains("edit_log{type=\"current_bytes\""), output);
+        Assertions.assertTrue(output.contains("image_write{type=\"success\""), output);
+        Assertions.assertTrue(output.contains("image_write{type=\"failed\""), output);
+        Assertions.assertTrue(output.contains("image_push{type=\"success\""), output);
+        Assertions.assertTrue(output.contains("image_push{type=\"failed\""), output);
+    }
+
+    @Test
     public void testLeaderAwarenessMetric() {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
 
