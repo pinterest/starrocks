@@ -529,6 +529,7 @@ private:
     std::unique_ptr<VectorIndexContext> _vector_index_ctx;
     std::unordered_set<ColumnId> _prune_cols_candidate_by_inverted_index;
     std::vector<const ColumnExprPredicate*> _inverted_index_fallback_predicates;
+    std::vector<rowid_t> _or_match_fallback_rowid_buffer;
 
     // Inverted index context - only created when needed
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
@@ -1960,12 +1961,17 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
-    std::vector<uint32_t> rowids;
-    std::vector<uint32_t>* p_rowids =
-            ((_vector_index_ctx && _vector_index_ctx->always_build_rowid()) || !_inverted_index_fallback_predicates.empty())
-                    ? &rowids
-                    : nullptr;
+    std::vector<rowid_t> vector_rowids;
+    std::vector<rowid_t>* p_rowids = nullptr;
+    if (!_inverted_index_fallback_predicates.empty()) {
+        p_rowids = &_or_match_fallback_rowid_buffer;
+    } else if (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) {
+        p_rowids = &vector_rowids;
+    }
     do {
+        if (p_rowids != nullptr) {
+            p_rowids->clear();
+        }
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
@@ -1983,6 +1989,9 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
 
     Status st;
     do {
+        if (rowid != nullptr) {
+            rowid->clear();
+        }
         st = _do_get_next(chunk, rowid);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
@@ -1999,8 +2008,9 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
-    vector<uint32_t> rowids;
+    vector<rowid_t> rowids;
     do {
+        rowids.clear();
         st = _do_get_next(chunk, &rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     if (st.ok()) {

@@ -97,8 +97,9 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     DCHECK(from == 0);
     
     if (_inverted_index_bitmap.has_value() && _evaluate_rowids != nullptr) {
+        DCHECK_LE(to, _evaluate_rowids->size());
         roaring::BulkContext ctx;
-        for (size_t i = 0; i < _evaluate_rowids->size(); i++) { // fallback evaluate
+        for (uint16_t i = from; i < to; i++) { // fallback evaluate
             selection[i] = _inverted_index_bitmap->containsBulk(ctx, (*_evaluate_rowids)[i]);
         }
         return Status::OK();
