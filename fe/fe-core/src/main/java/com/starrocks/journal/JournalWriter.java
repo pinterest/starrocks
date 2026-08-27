@@ -57,6 +57,7 @@ public class JournalWriter {
     private long startTimeNano;
     // batch size in bytes
     private long uncommittedEstimatedBytes;
+    private long currentBatchBytes;
 
     /**
      * If this flag is set true, we will roll journal,
@@ -88,6 +89,9 @@ public class JournalWriter {
      * reset journal id & roll journal as a start
      */
     public void init(long maxJournalId) throws JournalException {
+        if (journal != null) {
+            MetricRepo.resetEditLogRetained(globalStateJournal);
+        }
         this.nextVisibleJournalId = maxJournalId + 1;
         this.journal.rollJournal(this.nextVisibleJournalId);
     }
@@ -126,6 +130,7 @@ public class JournalWriter {
 
         long nextJournalId = nextVisibleJournalId;
         initBatch();
+        boolean batchCommitted = false;
 
         try {
             this.journal.batchWriteBegin();
@@ -133,6 +138,7 @@ public class JournalWriter {
             while (true) {
                 journal.batchWriteAppend(nextJournalId, currentJournal.getBuffer());
                 currentBatchTasks.add(currentJournal);
+                currentBatchBytes += currentJournal.estimatedSizeByte();
                 nextJournalId += 1;
 
                 if (shouldCommitNow()) {
@@ -155,6 +161,7 @@ public class JournalWriter {
                 LOG.debug("batch write commit success, from {} - {}", nextVisibleJournalId, nextJournalId);
                 nextVisibleJournalId = nextJournalId;
                 markCurrentBatchSucceed();
+                batchCommitted = true;
             } catch (JournalException e) {
                 // abort
                 LOG.warn("failed to commit batch, will abort current {} journals.",
@@ -170,7 +177,7 @@ public class JournalWriter {
 
         rollJournalAfterBatch();
 
-        updateBatchMetrics();
+        updateBatchMetrics(batchCommitted);
 
         if (currentJournal instanceof DrainingJournalTask) {
             stopped.set(true);
@@ -180,6 +187,7 @@ public class JournalWriter {
     private void initBatch() {
         startTimeNano = System.nanoTime();
         uncommittedEstimatedBytes = 0;
+        currentBatchBytes = 0;
         currentBatchTasks.clear();
     }
 
@@ -245,7 +253,7 @@ public class JournalWriter {
     /**
      * update all metrics after batch write
      */
-    private void updateBatchMetrics() {
+    private void updateBatchMetrics(boolean batchCommitted) {
         // Log slow edit log write if needed.
         long currentTimeNs = System.nanoTime();
         long durationMs = (currentTimeNs - startTimeNano) / 1000000;
@@ -257,22 +265,16 @@ public class JournalWriter {
                     currentBatchTasks.size(), durationMs, journalQueue.size());
             lastSlowEditLogTimeNs = currentTimeNs;
         }
+        if (batchCommitted && journal != null) {
+            MetricRepo.recordEditLogBatch(globalStateJournal, currentBatchTasks.size(), currentBatchBytes);
+        }
         if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_EDIT_LOG_WRITE.increase((long) currentBatchTasks.size());
-            if (globalStateJournal) {
-                MetricRepo.COUNTER_EDIT_LOG_RETAINED.increase((long) currentBatchTasks.size());
-            }
             MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update(durationMs);
             MetricRepo.HISTO_JOURNAL_WRITE_BATCH.update(currentBatchTasks.size());
             MetricRepo.HISTO_JOURNAL_WRITE_BYTES.update(uncommittedEstimatedBytes);
             MetricRepo.GAUGE_STACKED_JOURNAL_NUM.setValue((long) journalQueue.size());
-
-            for (JournalTask e : currentBatchTasks) {
-                MetricRepo.COUNTER_EDIT_LOG_SIZE_BYTES.increase(e.estimatedSizeByte());
-                if (globalStateJournal) {
-                    MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.increase(e.estimatedSizeByte());
-                }
-            }
+            MetricRepo.COUNTER_EDIT_LOG_SIZE_BYTES.increase(currentBatchBytes);
         }
         if (journalQueue.size() > Config.metadata_journal_max_batch_cnt) {
             LOG.warn("journal has piled up: {} in queue after consume", journalQueue.size());
