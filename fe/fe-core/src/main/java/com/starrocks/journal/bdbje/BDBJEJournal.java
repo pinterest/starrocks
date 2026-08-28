@@ -72,6 +72,7 @@ public class BDBJEJournal implements Journal {
     protected Transaction currentTransaction = null;
     // used to distinguish different module's db in BDB, must be empty or end with '_'
     private final String prefix;
+    private volatile long minJournalId = -1L;
 
     // store uncommitted kv, used for rebuilding txn on commit fails
     private final List<Pair<DatabaseEntry, DatabaseEntry>> uncommittedEntries = new ArrayList<>();
@@ -145,8 +146,10 @@ public class BDBJEJournal implements Journal {
         }
         List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
         if (dbNames == null || dbNames.isEmpty()) {
+            minJournalId = -1L;
             return ret;
         }
+        minJournalId = dbNames.get(0);
 
         int index = dbNames.size() - 1;
         String dbName = getFullDatabaseName(dbNames.get(index));
@@ -157,6 +160,11 @@ public class BDBJEJournal implements Journal {
         }
 
         return ret;
+    }
+
+    @Override
+    public long getMinJournalId() {
+        return minJournalId;
     }
 
     @Override
