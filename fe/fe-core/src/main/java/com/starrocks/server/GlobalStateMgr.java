@@ -93,6 +93,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -135,7 +136,6 @@ import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.journal.JournalType;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
@@ -1287,10 +1287,11 @@ public class GlobalStateMgr {
             if (!haProtocol.fencing()) {
                 throw new Exception("fencing failed. will exit");
             }
-            long maxJournalId = journal.getMaxJournalId();
+            Pair<Long, Long> journalIdRange = journal.getJournalIdRange();
+            long maxJournalId = journalIdRange.second;
             replayJournal(maxJournalId);
             nodeMgr.checkCurrentNodeExist();
-            journalWriter.init(maxJournalId);
+            journalWriter.init(journalIdRange.first, maxJournalId);
         } catch (Exception e) {
             // TODO: gracefully exit
             LOG.error("failed to init journal after transfer to leader! will exit", e);
@@ -1371,8 +1372,7 @@ public class GlobalStateMgr {
         }
 
         // start checkpoint thread
-        checkpointController = new CheckpointController(
-                "global_state_checkpoint_controller", journal, "", JournalType.FE_META);
+        checkpointController = new CheckpointController("global_state_checkpoint_controller", journal, "");
         checkpointController.start();
 
         keyRotationDaemon.start();
