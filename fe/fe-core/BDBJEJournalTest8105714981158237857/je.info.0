@@ -1,0 +1,39 @@
+2026-07-02 17:12:38.300 UTC INFO [testWrieNormal] No server auth method
+2026-07-02 17:12:38.300 UTC INFO [testWrieNormal] Started ServiceDispatcher. HostPort=localhost:52704
+2026-07-02 17:12:38.300 UTC INFO [testWrieNormal] DataChannel factory: com.sleepycat.je.rep.utilint.net.SimpleChannelFactory
+2026-07-02 17:12:38.301 UTC INFO [testWrieNormal] DTVLSN at start:0
+2026-07-02 17:12:38.301 UTC INFO [testWrieNormal] node:NullNode(-1) state change from DETACHED to UNKNOWN
+2026-07-02 17:12:38.304 UTC INFO [testWrieNormal] Current group size: 0
+2026-07-02 17:12:38.304 UTC INFO [testWrieNormal] New node testWrieNormal(-1) unknown to rep group
+2026-07-02 17:12:38.305 UTC INFO [testWrieNormal] Master changed to testWrieNormal
+2026-07-02 17:12:38.305 UTC INFO [testWrieNormal] Nascent group. testWrieNormal is master by virtue of being the first node.
+2026-07-02 17:12:38.305 UTC INFO [testWrieNormal] node:testWrieNormal(1) state change from UNKNOWN to MASTER
+2026-07-02 17:12:38.402 UTC INFO [testWrieNormal] Successfully added node:testWrieNormal(1) HostPort = 127.0.0.1: 52704 [ELECTABLE]
+2026-07-02 17:12:38.424 UTC INFO [testWrieNormal] Updated minimum JE group version to 7.5.0
+2026-07-02 17:12:38.424 UTC INFO [testWrieNormal] Node testWrieNormal started
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] node:NullNode(-1) state change from MASTER to UNKNOWN
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] node:testWrieNormal(1) state change from UNKNOWN to MASTER
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] JEErasure soft shutdown initiated.
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] Feeder manager accepting requests.
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] RepairReservedFiles-testWrieNormal(-1):./BDBJEJournalTest8105714981158237857 soft shutdown initiated.
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] Shutting down node testWrieNormal(1) DTVLSN:11
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] Elections shutdown initiated
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] Acceptor Thread testWrieNormal soft shutdown initiated.
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] Learner Thread testWrieNormal soft shutdown initiated.
+2026-07-02 17:12:38.425 UTC INFO [testWrieNormal] Elections shutdown completed
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] Feeder manager soft shutdown.
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] MASTER testWrieNormal(1) soft shutdown initiated.
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] Feeder Manager shutting down feeders. Active and nascent feeders:0 Managed feeders:0
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] Feeder Manager completed shutting down feeders.
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] Feeder manager exited. CurrentTxnEnd VLSN: 11
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] node:NullNode(-1) state change from MASTER to UNKNOWN
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] RepNode main thread shutting down.
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] node:NullNode(-1) state change from UNKNOWN to DETACHED
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] RepNode main thread: DETACHED testWrieNormal(1) exited.
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] Feeder Manager node: testWrieNormal soft shutdown initiated.
+2026-07-02 17:12:38.426 UTC INFO [testWrieNormal] ServiceDispatcher shutdown starting. HostPort=localhost:52704 Registered services: []
+2026-07-02 17:12:38.427 UTC INFO [testWrieNormal] ServiceDispatcher-localhost:52704 soft shutdown initiated.
+2026-07-02 17:12:38.428 UTC INFO [testWrieNormal] ServiceDispatcher shutdown completed. HostPort=localhost:52704
+2026-07-02 17:12:38.428 UTC INFO [testWrieNormal] testWrieNormal(1) shutdown completed.
+2026-07-02 17:12:38.430 UTC INFO [testWrieNormal] JEErasure soft shutdown initiated.
+2026-07-02 17:12:38.430 UTC INFO [testWrieNormal] RepairReservedFiles-testWrieNormal(-1):./BDBJEJournalTest8105714981158237857 soft shutdown initiated.

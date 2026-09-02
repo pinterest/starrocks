@@ -1,0 +1,39 @@
+2026-07-02 17:12:35.115 UTC INFO [test] No server auth method
+2026-07-02 17:12:35.116 UTC INFO [test] Started ServiceDispatcher. HostPort=localhost:52688
+2026-07-02 17:12:35.116 UTC INFO [test] DataChannel factory: com.sleepycat.je.rep.utilint.net.SimpleChannelFactory
+2026-07-02 17:12:35.159 UTC INFO [test] DTVLSN at start:0
+2026-07-02 17:12:35.160 UTC INFO [test] node:NullNode(-1) state change from DETACHED to UNKNOWN
+2026-07-02 17:12:35.179 UTC INFO [test] Current group size: 0
+2026-07-02 17:12:35.180 UTC INFO [test] New node test(-1) unknown to rep group
+2026-07-02 17:12:35.183 UTC INFO [test] Master changed to test
+2026-07-02 17:12:35.184 UTC INFO [test] Nascent group. test is master by virtue of being the first node.
+2026-07-02 17:12:35.184 UTC INFO [test] node:test(1) state change from UNKNOWN to MASTER
+2026-07-02 17:12:35.274 UTC INFO [test] Successfully added node:test(1) HostPort = 127.0.0.1: 52688 [ELECTABLE]
+2026-07-02 17:12:35.298 UTC INFO [test] Updated minimum JE group version to 7.5.0
+2026-07-02 17:12:35.299 UTC INFO [test] Node test started
+2026-07-02 17:12:35.304 UTC INFO [test] JEErasure soft shutdown initiated.
+2026-07-02 17:12:35.317 UTC INFO [test] node:NullNode(-1) state change from MASTER to UNKNOWN
+2026-07-02 17:12:35.318 UTC INFO [test] node:test(1) state change from UNKNOWN to MASTER
+2026-07-02 17:12:35.318 UTC INFO [test] Feeder manager accepting requests.
+2026-07-02 17:12:35.318 UTC INFO [test] RepairReservedFiles-test(-1):./BDBJEJournalCursorTest2093436749117237767 soft shutdown initiated.
+2026-07-02 17:12:35.319 UTC INFO [test] Shutting down node test(1) DTVLSN:11
+2026-07-02 17:12:35.320 UTC INFO [test] Elections shutdown initiated
+2026-07-02 17:12:35.320 UTC INFO [test] Acceptor Thread test soft shutdown initiated.
+2026-07-02 17:12:35.320 UTC INFO [test] Learner Thread test soft shutdown initiated.
+2026-07-02 17:12:35.321 UTC INFO [test] Elections shutdown completed
+2026-07-02 17:12:35.321 UTC INFO [test] Feeder manager soft shutdown.
+2026-07-02 17:12:35.321 UTC INFO [test] MASTER test(1) soft shutdown initiated.
+2026-07-02 17:12:35.322 UTC INFO [test] Feeder Manager shutting down feeders. Active and nascent feeders:0 Managed feeders:0
+2026-07-02 17:12:35.323 UTC INFO [test] Feeder Manager completed shutting down feeders.
+2026-07-02 17:12:35.323 UTC INFO [test] Feeder manager exited. CurrentTxnEnd VLSN: 11
+2026-07-02 17:12:35.323 UTC INFO [test] node:NullNode(-1) state change from MASTER to UNKNOWN
+2026-07-02 17:12:35.323 UTC INFO [test] RepNode main thread shutting down.
+2026-07-02 17:12:35.343 UTC INFO [test] node:NullNode(-1) state change from UNKNOWN to DETACHED
+2026-07-02 17:12:35.362 UTC INFO [test] RepNode main thread: DETACHED test(1) exited.
+2026-07-02 17:12:35.362 UTC INFO [test] Feeder Manager node: test soft shutdown initiated.
+2026-07-02 17:12:35.363 UTC INFO [test] ServiceDispatcher shutdown starting. HostPort=localhost:52688 Registered services: []
+2026-07-02 17:12:35.364 UTC INFO [test] ServiceDispatcher-localhost:52688 soft shutdown initiated.
+2026-07-02 17:12:35.369 UTC INFO [test] ServiceDispatcher shutdown completed. HostPort=localhost:52688
+2026-07-02 17:12:35.369 UTC INFO [test] test(1) shutdown completed.
+2026-07-02 17:12:35.375 UTC INFO [test] JEErasure soft shutdown initiated.
+2026-07-02 17:12:35.375 UTC INFO [test] RepairReservedFiles-test(-1):./BDBJEJournalCursorTest2093436749117237767 soft shutdown initiated.
