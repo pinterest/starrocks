@@ -1,4 +1,5 @@
-// Copyright 2021-present StarRocks, Inc. All rights reserved.include "common/config_compaction_fwd.h"//
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
