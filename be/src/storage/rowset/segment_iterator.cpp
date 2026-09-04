@@ -34,6 +34,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/column_or_predicate.h"
+#include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
@@ -66,6 +67,7 @@
 #include "storage/update_manager.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
+#include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -525,6 +527,9 @@ private:
 
     // Vector index context - only created when needed
     std::unique_ptr<VectorIndexContext> _vector_index_ctx;
+    std::unordered_set<ColumnId> _prune_cols_candidate_by_inverted_index;
+    std::vector<const ColumnExprPredicate*> _inverted_index_fallback_predicates;
+    std::vector<rowid_t> _or_match_fallback_rowid_buffer;
 
     // Inverted index context - only created when needed
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
@@ -1956,10 +1961,17 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
-    std::vector<uint32_t> rowids;
-    std::vector<uint32_t>* p_rowids =
-            (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) ? &rowids : nullptr;
+    std::vector<rowid_t> vector_rowids;
+    std::vector<rowid_t>* p_rowids = nullptr;
+    if (!_inverted_index_fallback_predicates.empty()) {
+        p_rowids = &_or_match_fallback_rowid_buffer;
+    } else if (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) {
+        p_rowids = &vector_rowids;
+    }
     do {
+        if (p_rowids != nullptr) {
+            p_rowids->clear();
+        }
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
@@ -1977,6 +1989,9 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
 
     Status st;
     do {
+        if (rowid != nullptr) {
+            rowid->clear();
+        }
         st = _do_get_next(chunk, rowid);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
@@ -1993,8 +2008,9 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
-    vector<uint32_t> rowids;
+    vector<rowid_t> rowids;
     do {
+        rowids.clear();
         st = _do_get_next(chunk, &rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     if (st.ok()) {
@@ -2522,6 +2538,15 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
     size_t chunk_size = chunk->num_rows();
     if (chunk_size > 0 && !_expr_pred_tree.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
+
+        for (auto* pred : _inverted_index_fallback_predicates) {
+            pred->set_evaluate_rowids(rowid);
+        }
+        SCOPED_CLEANUP({
+            for (auto* pred : _inverted_index_fallback_predicates) {
+                pred->set_evaluate_rowids(nullptr);
+            }
+        });
         RETURN_IF_ERROR(_expr_pred_tree.evaluate(chunk, _selection.data(), 0, chunk_size));
 
         size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
@@ -3280,7 +3305,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
     for (auto& field : _schema.fields()) {
         cid_2_ucid[field->id()] = field->uid();
     }
-    for (const auto& pair : _opts.pred_tree.get_immediate_column_predicate_map()) {
+    for (const auto& pair : _opts.pred_tree.get_all_column_predicate_map()) {
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
@@ -3336,8 +3361,33 @@ Status SegmentIterator::_apply_inverted_index() {
         return Status::OK();
     }
     SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
-
     roaring::Roaring row_bitmap = range2roaring(_scan_range);
+
+    // For OR queries: initialize fallback predicates for MATCH expressions
+    const bool gin_fallback_enabled = _opts.pred_tree.has_or_node();
+    if (gin_fallback_enabled) {
+        _inverted_index_fallback_predicates.reserve(_opts.pred_tree.size());
+        for (const auto& [cid, pred_list] : _opts.pred_tree.get_non_immediate_column_predicate_map()) {
+            InvertedIndexIterator* inverted_iter = _inverted_index_ctx->inverted_index_iterators[cid];
+            if (inverted_iter == nullptr) {
+                continue;
+            }
+            for (const ColumnPredicate* pred : pred_list) {
+                if (pred->type() != PredicateType::kExpr) {
+                    continue;
+                }
+                const auto* expr_pred = static_cast<const ColumnExprPredicate*>(pred);
+                if (!expr_pred->is_index_match_expr()) {
+                    continue;
+                }
+                Status st = expr_pred->init_inverted_index_fallback(inverted_iter, &row_bitmap);
+                if (st.ok()) {
+                    _inverted_index_fallback_predicates.push_back(expr_pred);
+                }
+            }
+        }
+    }
+
     size_t input_rows = row_bitmap.cardinality();
     std::unordered_set<const ColumnPredicate*> erased_preds;
     std::unordered_set<ColumnId> erased_pred_col_ids;

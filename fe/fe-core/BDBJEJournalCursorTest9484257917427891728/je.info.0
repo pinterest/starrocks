@@ -1,0 +1,55 @@
+2026-07-02 17:49:49.293 UTC INFO [test] No server auth method
+2026-07-02 17:49:49.294 UTC INFO [test] Started ServiceDispatcher. HostPort=localhost:53547
+2026-07-02 17:49:49.294 UTC INFO [test] DataChannel factory: com.sleepycat.je.rep.utilint.net.SimpleChannelFactory
+2026-07-02 17:49:49.339 UTC INFO [test] DTVLSN at start:0
+2026-07-02 17:49:49.340 UTC INFO [test] node:NullNode(-1) state change from DETACHED to UNKNOWN
+2026-07-02 17:49:49.362 UTC INFO [test] Current group size: 0
+2026-07-02 17:49:49.362 UTC INFO [test] New node test(-1) unknown to rep group
+2026-07-02 17:49:49.366 UTC INFO [test] Master changed to test
+2026-07-02 17:49:49.366 UTC INFO [test] Nascent group. test is master by virtue of being the first node.
+2026-07-02 17:49:49.367 UTC INFO [test] node:test(1) state change from UNKNOWN to MASTER
+2026-07-02 17:49:49.489 UTC INFO [test] Successfully added node:test(1) HostPort = 127.0.0.1: 53547 [ELECTABLE]
+2026-07-02 17:49:49.514 UTC INFO [test] Updated minimum JE group version to 7.5.0
+2026-07-02 17:49:49.515 UTC INFO [test] Node test started
+2026-07-02 17:49:49.515 UTC INFO [test] node:NullNode(-1) state change from MASTER to UNKNOWN
+2026-07-02 17:49:49.517 UTC INFO [test] node:test(1) state change from UNKNOWN to MASTER
+2026-07-02 17:49:49.517 UTC INFO [test] Feeder manager accepting requests.
+2026-07-02 17:49:49.519 UTC INFO [test] JEErasure soft shutdown initiated.
+2026-07-02 17:49:49.519 UTC INFO [test] RepairReservedFiles-test(-1):./BDBJEJournalCursorTest9484257917427891728 soft shutdown initiated.
+2026-07-02 17:49:49.521 UTC INFO [test] Shutting down node test(1) DTVLSN:11
+2026-07-02 17:49:49.521 UTC INFO [test] Elections shutdown initiated
+2026-07-02 17:49:49.522 UTC INFO [test] Acceptor Thread test soft shutdown initiated.
+2026-07-02 17:49:49.522 UTC INFO [test] Learner Thread test soft shutdown initiated.
+2026-07-02 17:49:49.523 UTC INFO [test] Elections shutdown completed
+2026-07-02 17:49:49.523 UTC INFO [test] Feeder manager soft shutdown.
+2026-07-02 17:49:49.523 UTC INFO [test] MASTER test(1) soft shutdown initiated.
+2026-07-02 17:49:49.524 UTC INFO [test] Feeder Manager shutting down feeders. Active and nascent feeders:0 Managed feeders:0
+2026-07-02 17:49:49.524 UTC INFO [test] Feeder Manager completed shutting down feeders.
+2026-07-02 17:49:49.525 UTC INFO [test] Feeder manager exited. CurrentTxnEnd VLSN: 11
+2026-07-02 17:49:49.525 UTC INFO [test] node:NullNode(-1) state change from MASTER to UNKNOWN
+2026-07-02 17:49:49.525 UTC INFO [test] RepNode main thread shutting down.
+2026-07-02 17:49:49.528 UTC INFO [test] node:NullNode(-1) state change from UNKNOWN to DETACHED
+2026-07-02 17:49:49.529 UTC INFO [test] RepNode main thread: DETACHED test(1) exited.
+2026-07-02 17:49:49.529 UTC INFO [test] Feeder Manager node: test soft shutdown initiated.
+2026-07-02 17:49:49.530 UTC INFO [test] ServiceDispatcher shutdown starting. HostPort=localhost:53547 Registered services: []
+2026-07-02 17:49:49.530 UTC INFO [test] ServiceDispatcher-localhost:53547 soft shutdown initiated.
+2026-07-02 17:49:49.533 UTC INFO [test] ServiceDispatcher shutdown completed. HostPort=localhost:53547
+2026-07-02 17:49:49.534 UTC INFO [test] test(1) shutdown completed.
+2026-07-02 17:49:49.538 UTC INFO [test] JEErasure soft shutdown initiated.
+2026-07-02 17:49:49.539 UTC INFO [test] RepairReservedFiles-test(-1):./BDBJEJournalCursorTest9484257917427891728 soft shutdown initiated.
+2026-07-02 17:49:54.713 UTC INFO [test] No server auth method
+2026-07-02 17:49:54.714 UTC INFO [test] Started ServiceDispatcher. HostPort=localhost:53547
+2026-07-02 17:49:54.714 UTC INFO [test] DataChannel factory: com.sleepycat.je.rep.utilint.net.SimpleChannelFactory
+2026-07-02 17:49:54.726 UTC INFO [test] DTVLSN at start:11
+2026-07-02 17:49:54.727 UTC INFO [test] node:NullNode(-1) state change from DETACHED to UNKNOWN
+2026-07-02 17:49:54.731 UTC INFO [test] Current group size: 1
+2026-07-02 17:49:54.731 UTC INFO [test] Existing node test querying for a current master.
+2026-07-02 17:49:54.746 UTC INFO [test] Node test started
+2026-07-02 17:49:54.747 UTC INFO [test] Election initiated; election #1
+2026-07-02 17:49:54.750 UTC INFO [test] Started election thread Fri Jul 03 01:49:54 CST 2026
+2026-07-02 17:49:54.770 UTC INFO [test] Winning proposal: Proposal(0000019f23f398be:9504e1d97a31a61c01385c63a952f81c:00000003) Value: Value:127.0.0.1$$$53547$$$test$$$1
+2026-07-02 17:49:54.777 UTC INFO [test] Master changed to test
+2026-07-02 17:49:54.778 UTC INFO [test] Election thread exited. Group master: test(1)
+2026-07-02 17:49:54.778 UTC INFO [test] Election finished. Elapsed time: 31ms
+2026-07-02 17:49:54.778 UTC INFO [test] node:test(1) state change from UNKNOWN to MASTER
+2026-07-02 17:49:54.779 UTC INFO [test] Feeder manager accepting requests.

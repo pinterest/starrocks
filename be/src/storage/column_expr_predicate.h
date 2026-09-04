@@ -3,6 +3,7 @@
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "roaring/roaring.hh"
 #include "storage/column_predicate.h"
 #include "storage/index/inverted/inverted_index_common.h"
 #include "storage/olap_common.h"
@@ -44,6 +45,7 @@ public:
     Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
+    bool is_index_match_expr() const;
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_original_bloom_filter() const override { return false; }
     bool support_ngram_bloom_filter() const override { return _expr_ctxs[0]->support_ngram_bloom_filter(); }
@@ -68,6 +70,11 @@ public:
 
     const std::vector<ExprContext*>& get_expr_ctxs() const { return _expr_ctxs; }
 
+    // Inverted index fallback evaluation for MATCH predicates in OR queries
+    Status init_inverted_index_fallback(InvertedIndexIterator* iterator, const roaring::Roaring* scan_bitmap) const;
+    const std::optional<roaring::Roaring>& get_inverted_index_fallback() const { return _inverted_index_bitmap; }
+    void set_evaluate_rowids(const std::vector<rowid_t>* rowids) const { _evaluate_rowids = rowids; }
+
 private:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                         const SlotDescriptor* slot_desc);
@@ -86,6 +93,10 @@ private:
     const SlotDescriptor* _slot_desc;
     bool _monotonic;
     mutable std::vector<uint8_t> _tmp_select;
+    
+    // For inverted index fallback: stores the bitmap result and current rowids
+    mutable std::optional<roaring::Roaring> _inverted_index_bitmap;
+    mutable const std::vector<rowid_t>* _evaluate_rowids = nullptr;
 };
 
 std::optional<InvertedIndexQueryType> choose_inverted_index_query_type(bool valid_like, bool valid_match,
