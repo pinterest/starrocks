@@ -93,7 +93,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         try {
             doCheckpoint(epoch, journalId);
         } catch (Exception e) {
-            LOG.warn("create image failed, journalId={}", journalId, e);
+            LOG.warn("create image failed", e);
             finishCheckpoint(epoch, journalId, false, e.getMessage());
             return;
         }
