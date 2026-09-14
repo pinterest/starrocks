@@ -95,7 +95,7 @@ public class CheckpointController extends FrontendDaemon {
     private final boolean belongToGlobalStateMgr;
     private final JournalType journalType;
 
-    final Set<String> nodesToPushImage;
+    private final Set<String> nodesToPushImage;
     private final Map<String, Long> lastFailedTime = new HashMap<>();
 
     private volatile String workerNodeName;
