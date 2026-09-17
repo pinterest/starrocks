@@ -26,11 +26,12 @@ under the License.
     <parent>
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
-        <version>main</version>
+        <version>3.4.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>fe-core</artifactId>
+    <version>3.4.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -114,26 +115,6 @@ under the License.
     </profiles>
 
     <dependencies>
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>fe-grammar</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>fe-type</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>fe-parser</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>fe-spi</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>spark-dpp</artifactId>
@@ -277,10 +258,25 @@ under the License.
             <artifactId>json</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/junit/junit -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.junit.vintage/junit-vintage-engine -->
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>5.8.2</version>
             <scope>test</scope>
         </dependency>
 
@@ -825,6 +821,13 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>com.carrotsearch</groupId>
+            <artifactId>junit-benchmarks</artifactId>
+            <version>0.7.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
             <version>${hikaricp.version}</version>
@@ -1091,6 +1094,32 @@ under the License.
                         <goals>
                             <goal>compile</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--antlr-->
+            <plugin>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4-maven-plugin</artifactId>
+                <version>4.9.2</version>
+                <executions>
+                    <execution>
+                        <id>antlr</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>antlr4</goal>
+                        </goals>
+                        <configuration>
+                            <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
+                            <outputDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</outputDirectory>
+                            <libDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</libDirectory>
+                            <visitor>true</visitor>
+                            <arguments>
+                                <argument>-package</argument>
+                                <argument>com.starrocks.sql.parser</argument>
+                            </arguments>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
