@@ -21,6 +21,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.journal.JournalType;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -76,6 +77,27 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(StringUtils.isNotEmpty(json));
         Assertions.assertTrue(json.contains("test_metric"));
         Assertions.assertTrue(json.contains("brpc_pool_numactive"));
+    }
+
+    @Test
+    public void testRetainedJournalMetrics() {
+        MetricRepo.initializeEditLogRetained(JournalType.FE_META, 1L, 10L);
+        MetricRepo.recordEditLogBatch(JournalType.FE_META, 11L, 1L, 100L);
+        MetricRepo.initializeEditLogRetained(JournalType.STAR_MGR, 21L, 25L);
+        MetricRepo.recordEditLogBatch(JournalType.STAR_MGR, 26L, 1L, 200L);
+
+        MetricRepo.updateEditLogRetainedMinJournalId(JournalType.FE_META, 6L);
+        Assertions.assertEquals(6L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        Assertions.assertEquals(600L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
+        Assertions.assertEquals(6L, MetricRepo.getEditLogRetainedCount(JournalType.STAR_MGR));
+        Assertions.assertEquals(1200L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.STAR_MGR));
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricRepo.getMetricsByName("edit_log_retained").forEach(visitor::visit);
+        MetricRepo.getMetricsByName("edit_log_retained_bytes_estimate").forEach(visitor::visit);
+        String output = visitor.build();
+        Assertions.assertTrue(output.contains("journal=\"fe_meta\""), output);
+        Assertions.assertTrue(output.contains("journal=\"star_mgr\""), output);
     }
 
     @Test
