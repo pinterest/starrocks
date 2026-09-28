@@ -1503,6 +1503,17 @@ public class Config extends ConfigBase {
     public static int max_query_retry_time = 2;
 
     /**
+     * Platform-enforced, cluster-level ceiling on the number of rows a standalone SELECT may return.
+     * When > 0, the planner injects a LIMIT on eligible SELECTs (the same injection point as the
+     * session variable {@code sql_select_limit}) and applies the smaller of this cap and the user's
+     * {@code sql_select_limit}. Unlike the session variable, this cannot be raised or disabled by a
+     * user, since there is no session-level SET for an FE config. 0 disables the cap.
+     * INSERT ... SELECT, CTAS, UPDATE/DELETE, and MV builds are never capped.
+     */
+    @ConfField(mutable = true)
+    public static long system_select_row_cap = 0;
+
+    /**
      * In order not to wait too long for create table(index), set a max timeout.
      */
     @ConfField(mutable = true)
