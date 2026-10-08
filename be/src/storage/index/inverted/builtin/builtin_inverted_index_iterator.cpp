@@ -26,6 +26,7 @@
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/inverted/clucene/csv_analyzer.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -44,6 +45,8 @@ BuiltinInvertedIndexIterator::BuiltinInvertedIndexIterator(const std::shared_ptr
         auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
         chinese_analyzer->setLanguage(L"cjk");
         _query_analyzer.reset(chinese_analyzer);
+    } else if (_analyser_type == InvertedIndexParserType::PARSER_CSV) {
+        _query_analyzer = std::make_unique<CsvAnalyzer>();
     }
 
     if (_query_analyzer != nullptr) {
@@ -74,7 +77,8 @@ Status BuiltinInvertedIndexIterator::_tokenize_query_by_parser(const Slice& quer
         return Status::OK();
     }
     case InvertedIndexParserType::PARSER_STANDARD:
-    case InvertedIndexParserType::PARSER_CHINESE: {
+    case InvertedIndexParserType::PARSER_CHINESE:
+    case InvertedIndexParserType::PARSER_CSV: {
         try {
             std::wstring wquery = boost::locale::conv::utf_to_utf<TCHAR>(query_str);
             _query_string_reader->init(wquery.c_str(), wquery.size(), false);
