@@ -26,6 +26,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
+#include "storage/index/inverted/clucene/csv_analyzer.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/tablet_index.h"
@@ -79,6 +80,8 @@ Status BuiltinInvertedWriterImpl<field_type>::init() {
         auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
         chinese_analyzer->setLanguage(L"cjk");
         _analyzer.reset(chinese_analyzer);
+    } else if (_parser_type == InvertedIndexParserType::PARSER_CSV) {
+        _analyzer = std::make_unique<CsvAnalyzer>();
     }
     return Status::OK();
 }
