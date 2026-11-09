@@ -2194,13 +2194,14 @@ public class Config extends ConfigBase {
     public static boolean authorization_enable_column_level_privilege = false;
 
     /**
-     *  Implementation of CauthzAuthorizer class to be used for external access control 
+     * Implementation of CauthzAuthorizer to be used when access_control is cauthz.
      */
     @ConfField(mutable = false)
     public static String cauthz_authorization_class_name = "";
 
     /**
-     * Whether CauthzAuthorizer for access control should fail open
+     * Whether the configured CauthzAuthorizer should fail open.
+     * The authorizer implementation is responsible for honoring this setting.
      */
     @ConfField(mutable = true)
     public static boolean cauthz_fail_open = false;

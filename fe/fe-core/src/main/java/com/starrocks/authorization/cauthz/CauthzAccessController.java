@@ -16,21 +16,15 @@ package com.starrocks.authorization.cauthz;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
-import com.starrocks.authorization.cauthz.CauthzAuthorizer;
-import com.starrocks.authorization.cauthz.CauthzStarRocksAccessRequest;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * CauthzAccessController is an implementation of AccessController that leverages
  * an implementation of CauthzAuthorizer interface instantiated at runtime to
- * perform authorization checks. 
+ * perform authorization checks.
  */
 public abstract class CauthzAccessController extends ExternalAccessController implements AccessTypeConverter {
-    private static final Logger LOG = LoggerFactory.getLogger(CauthzAccessController.class);
     protected CauthzAuthorizer authorizer;
 
     public CauthzAccessController() {
@@ -42,16 +36,16 @@ public abstract class CauthzAccessController extends ExternalAccessController im
         String cauthzAuthorizationClassName = Config.cauthz_authorization_class_name;
         try {
             CauthzAuthorizer authorizer = Class.forName(cauthzAuthorizationClassName)
-                            .asSubclass(CauthzAuthorizer.class).newInstance();
+                    .asSubclass(CauthzAuthorizer.class).getDeclaredConstructor().newInstance();
             authorizer.init();
             return authorizer;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to instantiate CauthzAuthorizer implementation: " 
+            throw new RuntimeException("Failed to instantiate CauthzAuthorizer implementation: "
                     + cauthzAuthorizationClassName, e);
         }
     }
 
-    protected void hasPermission(CauthzAccessResourceImpl resource, UserIdentity user, 
+    protected void hasPermission(CauthzAccessResourceImpl resource, UserIdentity user,
             PrivilegeType privilegeType) throws AccessDeniedException {
         String accessType = convertToAccessType(privilegeType);
         CauthzStarRocksAccessRequest request = new CauthzStarRocksAccessRequest(resource, user, accessType);

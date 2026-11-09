@@ -17,8 +17,6 @@
 
 package com.starrocks.authorization.cauthz;
 
-import com.starrocks.authorization.cauthz.CauthzStarRocksAccessRequest;
-
 /**
  * Interface for authorizing access requests in which
  * authorization decisions are made by an external service.

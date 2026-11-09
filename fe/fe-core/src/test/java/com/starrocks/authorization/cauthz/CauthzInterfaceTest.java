@@ -15,23 +15,76 @@
 package com.starrocks.authorization.cauthz;
 
 import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksAccessController;
 import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksResource;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public class CauthzInterfaceTest {
 
-    @BeforeAll
-    public static void beforeClass() {
-        // Set the cauthz authorization class name to use our mock
+    private String previousAuthorizationClassName;
+
+    @BeforeEach
+    public void setUp() {
+        previousAuthorizationClassName = Config.cauthz_authorization_class_name;
         Config.cauthz_authorization_class_name =
                 "com.starrocks.authorization.cauthz.MockedCauthzAuthorizer";
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.cauthz_authorization_class_name = previousAuthorizationClassName;
+    }
+
+    @Test
+    public void testControllerAuthorization() throws AccessDeniedException {
+        CauthzStarRocksAccessController controller = new CauthzStarRocksAccessController();
+        MockedCauthzAuthorizer authorizer = (MockedCauthzAuthorizer) controller.authorizer;
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+
+        controller.checkSystemAction(context, PrivilegeType.OPERATE);
+        Assertions.assertEquals("root", authorizer.getLastRequest().getUser());
+        Assertions.assertEquals("operate", authorizer.getLastRequest().getAccessType());
+        Assertions.assertEquals("*", authorizer.getLastRequest().getResource().getValue("system"));
+
+        controller.checkTableAction(context, new TableName("db1", "table1"), PrivilegeType.SELECT);
+        CauthzAccessResourceImpl resource = authorizer.getLastRequest().getResource();
+        Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, resource.getValue("catalog"));
+        Assertions.assertEquals("db1", resource.getValue("database"));
+        Assertions.assertEquals("table1", resource.getValue("table"));
+
+        controller.checkTableAction(context, new TableName("external", "db1", "table1"), PrivilegeType.SELECT);
+        Assertions.assertEquals("external", authorizer.getLastRequest().getResource().getValue("catalog"));
+
+        controller.checkMaterializedViewAction(context, new TableName("db1", "mv1"), PrivilegeType.REFRESH);
+        Assertions.assertEquals("mv1", authorizer.getLastRequest().getResource().getValue("materialized_view"));
+        Assertions.assertFalse(authorizer.getLastRequest().getResource().containsKey("table"));
+
+        authorizer.setAllowAll(false);
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> controller.checkTableAction(context, new TableName("db1", "table1"), PrivilegeType.SELECT));
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> controller.checkSystemAction(context, PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testInvalidAuthorizerFailsInitialization() {
+        Config.cauthz_authorization_class_name = "com.starrocks.authorization.cauthz.MissingAuthorizer";
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                CauthzStarRocksAccessController::new);
+        Assertions.assertTrue(exception.getMessage().contains(Config.cauthz_authorization_class_name));
+        Assertions.assertInstanceOf(ClassNotFoundException.class, exception.getCause());
     }
 
     @Test

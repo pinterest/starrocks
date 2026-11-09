@@ -97,7 +97,8 @@ public class CauthzStarRocksAccessController extends CauthzAccessController {
     @Override
     public void checkTableAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        String catalog =
+                tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
 
         hasPermission(
                 CauthzStarRocksResource.builder()
@@ -112,7 +113,8 @@ public class CauthzStarRocksAccessController extends CauthzAccessController {
     @Override
     public void checkAnyActionOnTable(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        String catalog =
+                tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
 
         hasPermission(
                 CauthzStarRocksResource.builder()

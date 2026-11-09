@@ -14,7 +14,6 @@
 
 package com.starrocks.authorization.cauthz;
 
-import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 import com.starrocks.catalog.UserIdentity;
 
 /**
@@ -64,4 +63,4 @@ public class CauthzStarRocksAccessRequest {
                 ", accessType=" + accessType +
                 '}';
     }
-} 
+}

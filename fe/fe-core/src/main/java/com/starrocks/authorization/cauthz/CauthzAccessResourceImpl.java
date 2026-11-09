@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * CauthzAccessResourceImpl is the base class that is used to 
+ * CauthzAccessResourceImpl is the base class that is used to
  * represent a resource. A resource is a set of key-value pairs.
  * For example, a table resource could be represented as:
  * { "database": "db1", "table": "tbl1" }

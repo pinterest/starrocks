@@ -14,12 +14,10 @@
 package com.starrocks.authorization.cauthz;
 
 import com.starrocks.authorization.ObjectType;
-import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 
 /**
  * CauthzAccessResourceBuilder is a builder for CauthzAccessResourceImpl
- * It provices setter methods specific to each type of object that can compose a 
- * a resource.
+ * It provides setter methods specific to each type of object that can compose a resource.
  */
 
 public abstract class CauthzAccessResourceBuilder implements ObjectTypeConverter {

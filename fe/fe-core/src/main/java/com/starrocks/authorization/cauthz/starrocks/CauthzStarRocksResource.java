@@ -19,8 +19,8 @@ import com.starrocks.authorization.cauthz.CauthzAccessResourceBuilder;
 import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 
 /**
- * CauthzStarRocksResource encapsulates the information required to 
- * represent the StarRocks resource a user is trying to access. 
+ * CauthzStarRocksResource encapsulates the information required to
+ * represent the StarRocks resource a user is trying to access.
  * This information is stored in a map where the keys are object types
  * and the values are the object names.
  */

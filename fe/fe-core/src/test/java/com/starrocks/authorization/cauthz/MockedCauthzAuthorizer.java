@@ -21,6 +21,7 @@ package com.starrocks.authorization.cauthz;
  */
 public class MockedCauthzAuthorizer implements CauthzAuthorizer {
     private boolean allowAll = true;
+    private CauthzStarRocksAccessRequest lastRequest;
 
     public MockedCauthzAuthorizer() {
     }
@@ -36,15 +37,18 @@ public class MockedCauthzAuthorizer implements CauthzAuthorizer {
 
     @Override
     public boolean authorize(CauthzStarRocksAccessRequest request) {
+        lastRequest = request;
         return allowAll;
+    }
+
+    public CauthzStarRocksAccessRequest getLastRequest() {
+        return lastRequest;
     }
 
     public void setAllowAll(boolean allowAll) {
         this.allowAll = allowAll;
     }
-
     public boolean isAllowAll() {
         return allowAll;
     }
 }
-

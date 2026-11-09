@@ -100,7 +100,6 @@ public class CauthzResourceTest {
         Assertions.assertEquals("d1", cauthzResource.getValue("database"));
         Assertions.assertEquals("p1", cauthzResource.getValue("pipe"));
     }
-
     @Test
     public void testResourceToString() {
         CauthzAccessResourceImpl cauthzResource = CauthzStarRocksResource.builder()
@@ -121,4 +120,3 @@ public class CauthzResourceTest {
         Assertions.assertFalse(cauthzResource.containsKey("nonexistent"));
     }
 }
-
